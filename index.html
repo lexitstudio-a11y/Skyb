@@ -28,6 +28,11 @@
     justify-content: center;
     overflow: hidden;
   }
+  #tooltip {
+    position: fixed;
+    pointer-events: none;
+    z-index: 10;
+  }
   canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -36,8 +41,9 @@
 </head>
 <body>
 <canvas id="gui"></canvas>
+<canvas id="tooltip" hidden></canvas>
 <script>
-// Interface "SkyBlock Menu" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
+// Interface "Profil Joueur" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
 const TEX = 'assets/textures/';
 const GUI_W = 176;
 const GUI_H = 132;          // 125 lignes du haut de generic_54 + 7 lignes de bordure basse
@@ -45,29 +51,32 @@ const ROWS = 6, COLS = 9;
 const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la case
 
 // Contenu des cases (ligne, colonne) ; le reste = vitre teintée noire.
+// tooltip : lignes de l'overlay au survol (1re ligne = nom). Codes couleur Minecraft : §a vert, §7 gris, §e jaune…
+// Contenu provisoire, à remplacer par les vrais textes.
+const LORE = ['§7Description à venir.', '', '§eClique pour voir !'];
 const LAYOUT = {
-  '1,4': { head: 'profile' },
-  '2,1': { item: 'diamond_sword' },
-  '2,2': { item: 'painting' },
-  '2,3': { item: 'book' },
-  '2,4': { head: 'emerald' },
-  '2,5': { item: 'writable_book' },
-  '2,6': { item: 'clock_00' },
-  '2,7': { block: 'chest' },
-  '3,2': { head: 'box' },
-  '3,3': { item: 'bone' },
-  '3,4': { block: 'crafting_table' },
-  '3,5': { block: 'barrel' },
-  '3,6': { head: 'rune' },
-  '5,2': { head: 'globe' },
-  '5,3': { item: 'name_tag' },
-  '5,4': { item: 'barrier' },
-  '5,5': { item: 'redstone_torch' },
-  '5,6': { item: 'cookie' },
+  '1,4': { head: 'profile', tooltip: ['§aTon profil', ...LORE] },
+  '2,1': { item: 'diamond_sword', tooltip: ['§aCompétences', ...LORE] },
+  '2,2': { item: 'painting', tooltip: ['§aCollections', ...LORE] },
+  '2,3': { item: 'book', tooltip: ['§aLivre de recettes', ...LORE] },
+  '2,4': { head: 'emerald', tooltip: ['§aÉchanges', ...LORE] },
+  '2,5': { item: 'writable_book', tooltip: ['§aJournal de quêtes', ...LORE] },
+  '2,6': { item: 'clock_00', tooltip: ['§aCalendrier et événements', ...LORE] },
+  '2,7': { block: 'chest', tooltip: ['§aStockage', ...LORE] },
+  '3,2': { head: 'box', tooltip: ['§aSac d\'accessoires', ...LORE] },
+  '3,3': { item: 'bone', tooltip: ['§aFamiliers', ...LORE] },
+  '3,4': { block: 'crafting_table', tooltip: ['§aTable de craft', ...LORE] },
+  '3,5': { block: 'barrel', tooltip: ['§aGarde-robe', ...LORE] },
+  '3,6': { head: 'rune', tooltip: ['§aBanque personnelle', ...LORE] },
+  '5,2': { head: 'globe', tooltip: ['§bVoyage rapide', ...LORE] },
+  '5,3': { item: 'name_tag', tooltip: ['§aGestion du profil', ...LORE] },
+  '5,4': { item: 'barrier', tooltip: ['§cFermer'] },
+  '5,5': { item: 'redstone_torch', tooltip: ['§aParamètres', ...LORE] },
+  '5,6': { item: 'cookie', tooltip: ['§6Booster Cookie', ...LORE] },
 };
 
 const FILES = [
-  'generic_54', 'ascii', 'black_stained_glass', 'normal',
+  'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
@@ -149,36 +158,111 @@ const HEADS = {
   })(),
 };
 
-// --- Police Minecraft (ascii.png, 16x16 glyphes de 8x8) ---
-function buildFont(img) {
-  const [c, ctx] = makeCanvas(128, 128);
-  ctx.drawImage(img, 0, 0);
-  const data = ctx.getImageData(0, 0, 128, 128).data;
-  const widths = [];
-  for (let ch = 0; ch < 256; ch++) {
-    const gx = (ch % 16) * 8, gy = Math.floor(ch / 16) * 8;
-    let w = 0;
-    for (let x = 7; x >= 0 && !w; x--)
-      for (let y = 0; y < 8; y++)
-        if (data[((gy + y) * 128 + gx + x) * 4 + 3] > 0) { w = x + 1; break; }
-    widths.push(ch === 32 ? 3 : w);
-  }
-  return { img, widths };
+// --- Police Minecraft : ascii.png (glyphes 8x8) + accented.png (glyphes 9x12, accents) ---
+const MC_COLORS = {
+  0: '#000000', 1: '#0000AA', 2: '#00AA00', 3: '#00AAAA', 4: '#AA0000', 5: '#AA00AA', 6: '#FFAA00', 7: '#AAAAAA',
+  8: '#555555', 9: '#5555FF', a: '#55FF55', b: '#55FFFF', c: '#FF5555', d: '#FF55FF', e: '#FFFF55', f: '#FFFFFF',
+};
+
+// Largeur réelle d'un glyphe = dernière colonne non transparente + 1.
+function glyphWidth(data, stride, gx, gy, cw, ch) {
+  for (let x = cw - 1; x >= 0; x--)
+    for (let y = 0; y < ch; y++)
+      if (data[((gy + y) * stride + gx + x) * 4 + 3] > 0) return x + 1;
+  return 0;
 }
 
-function drawText(ctx, font, text, x, y, color, S) {
-  // Teinte le texte hors écran puis le copie (le glyphe source est blanc).
-  const [c, tctx] = makeCanvas(text.length * 9, 8);
-  let cx = 0;
-  for (const chr of text) {
-    const code = chr.charCodeAt(0);
-    tctx.drawImage(font.img, (code % 16) * 8, Math.floor(code / 16) * 8, 8, 8, cx, 0, 8, 8);
-    cx += font.widths[code] + 1;
+function buildFont(ascii, accented, accentedChars) {
+  const glyphs = new Map();
+  const read = img => {
+    const [, ctx] = makeCanvas(img.width, img.height);
+    ctx.drawImage(img, 0, 0);
+    return ctx.getImageData(0, 0, img.width, img.height).data;
+  };
+  const a = read(ascii);
+  for (let code = 32; code < 127; code++) {
+    const sx = (code % 16) * 8, sy = Math.floor(code / 16) * 8;
+    const w = code === 32 ? 3 : glyphWidth(a, ascii.width, sx, sy, 8, 8);
+    glyphs.set(String.fromCharCode(code), { img: ascii, sx, sy, sw: 8, sh: 8, dy: 0, adv: w + 1 });
   }
-  tctx.globalCompositeOperation = 'source-in';
-  tctx.fillStyle = color;
-  tctx.fillRect(0, 0, c.width, c.height);
-  ctx.drawImage(c, x * S, y * S, c.width * S, c.height * S);
+  const b = read(accented);
+  accentedChars.forEach((row, r) => [...row].forEach((chr, c) => {
+    if (chr === '\u0000' || glyphs.has(chr)) return;
+    const sx = c * 9, sy = r * 12;
+    glyphs.set(chr, { img: accented, sx, sy, sw: 9, sh: 12, dy: -3, adv: glyphWidth(b, accented.width, sx, sy, 9, 12) + 1 });
+  }));
+  return { glyphs, tinted: new Map() };
+}
+
+// Découpe un texte avec codes § en segments { text, color, bold }.
+function parseFormatted(text, defaultColor) {
+  const segs = [];
+  let color = defaultColor, bold = false, buf = '';
+  const flush = () => { if (buf) segs.push({ text: buf, color, bold }); buf = ''; };
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '§' && i + 1 < text.length) {
+      const k = text[++i].toLowerCase();
+      flush();
+      if (MC_COLORS[k]) { color = MC_COLORS[k]; bold = false; }
+      else if (k === 'l') bold = true;
+      else if (k === 'r') { color = defaultColor; bold = false; }
+    } else buf += text[i];
+  }
+  flush();
+  return segs;
+}
+
+function glyphOf(font, chr) {
+  return font.glyphs.get(chr) || font.glyphs.get('?');
+}
+
+function textWidth(font, text) {
+  let w = 0;
+  for (const seg of parseFormatted(text, '#fff'))
+    for (const chr of seg.text) w += glyphOf(font, chr).adv + (seg.bold ? 1 : 0);
+  return w;
+}
+
+// Glyphe teinté (mis en cache par caractère + couleur).
+function tintedGlyph(font, g, color) {
+  const key = `${g.img.width}:${g.sx}:${g.sy}:${color}`;
+  let c = font.tinted.get(key);
+  if (!c) {
+    let ctx;
+    [c, ctx] = makeCanvas(g.sw, g.sh);
+    ctx.drawImage(g.img, g.sx, g.sy, g.sw, g.sh, 0, 0, g.sw, g.sh);
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, g.sw, g.sh);
+    font.tinted.set(key, c);
+  }
+  return c;
+}
+
+function shadowColor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const q = v => (v >> 2).toString(16).padStart(2, '0');
+  return '#' + q((n >> 16) & 255) + q((n >> 8) & 255) + q(n & 255);
+}
+
+// Dessine un texte (coordonnées en pixels GUI) ; shadow = ombre portée comme en jeu.
+function drawText(ctx, font, text, x, y, color, S, shadow = false) {
+  const segs = parseFormatted(text, color);
+  const pass = (ox, oy, isShadow) => {
+    let cx = x;
+    for (const seg of segs) {
+      const col = isShadow ? shadowColor(seg.color) : seg.color;
+      for (const chr of seg.text) {
+        const g = glyphOf(font, chr);
+        const img = tintedGlyph(font, g, col);
+        for (let b = 0; b <= (seg.bold ? 1 : 0); b++)
+          ctx.drawImage(img, (cx + ox + b) * S, (y + oy + g.dy) * S, g.sw * S, g.sh * S);
+        cx += g.adv + (seg.bold ? 1 : 0);
+      }
+    }
+  };
+  if (shadow) pass(1, 1, true);
+  pass(0, 0, false);
 }
 
 // --- Rendu isométrique des blocs (comme les items-blocs dans l'inventaire) ---
@@ -226,21 +310,51 @@ function chestFaces(img) {
   return { top, front, side };
 }
 
-async function main() {
-  const T = Object.fromEntries(await Promise.all(FILES.map(load)));
-  const font = buildFont(T.ascii);
-  const BLOCKS = {
-    chest: chestFaces(T.normal),
-    crafting_table: { top: T.crafting_table_top, front: T.crafting_table_front, side: T.crafting_table_side },
-    barrel: { top: T.barrel_top, front: T.barrel_side, side: T.barrel_side },
-  };
+// --- Overlay (tooltip) au survol d'un item ---
+const TOOLTIP_BG = 'rgba(10, 18, 30, 0.93)';
+const TOOLTIP_BORDER_TOP = '#b9c9da', TOOLTIP_BORDER_BOTTOM = '#6d7f94';
 
-  const canvas = document.getElementById('gui');
-  const S = Math.max(2, Math.min(5, Math.floor(Math.min(innerWidth / (GUI_W + 16), innerHeight / (GUI_H + 16)))));
-  canvas.width = GUI_W * S;
-  canvas.height = GUI_H * S;
+function renderTooltip(tipCanvas, font, lines, S) {
+  const w = Math.max(...lines.map(l => textWidth(font, l)));
+  const h = 8 + (lines.length - 1) * 10 + (lines.length > 1 ? 2 : 0);
+  const x0 = 4, y0 = 4;
+  tipCanvas.width = (w + 8) * S;
+  tipCanvas.height = (h + 8) * S;
+  const ctx = tipCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const rect = (x, y, rw, rh, fill) => { ctx.fillStyle = fill; ctx.fillRect(x * S, y * S, rw * S, rh * S); };
+
+  // Fond aux coins "coupés" + bordure intérieure en dégradé, comme en jeu.
+  rect(x0 - 3, y0 - 4, w + 6, 1, TOOLTIP_BG);
+  rect(x0 - 3, y0 + h + 3, w + 6, 1, TOOLTIP_BG);
+  rect(x0 - 3, y0 - 3, w + 6, h + 6, TOOLTIP_BG);
+  rect(x0 - 4, y0 - 3, 1, h + 6, TOOLTIP_BG);
+  rect(x0 + w + 3, y0 - 3, 1, h + 6, TOOLTIP_BG);
+  const grad = ctx.createLinearGradient(0, (y0 - 3) * S, 0, (y0 + h + 3) * S);
+  grad.addColorStop(0, TOOLTIP_BORDER_TOP);
+  grad.addColorStop(1, TOOLTIP_BORDER_BOTTOM);
+  rect(x0 - 3, y0 - 2, 1, h + 4, grad);
+  rect(x0 + w + 2, y0 - 2, 1, h + 4, grad);
+  rect(x0 - 3, y0 - 3, w + 6, 1, TOOLTIP_BORDER_TOP);
+  rect(x0 - 3, y0 + h + 2, w + 6, 1, TOOLTIP_BORDER_BOTTOM);
+
+  let y = y0;
+  lines.forEach((line, i) => {
+    drawText(ctx, font, line, x0, y, '#FFFFFF', S, true);
+    y += 10 + (i === 0 ? 2 : 0);
+  });
+}
+
+const state = { S: 3, hovered: null };
+let T, font, BLOCKS;
+const canvas = document.getElementById('gui');
+const tip = document.getElementById('tooltip');
+
+function renderGui() {
+  const S = state.S;
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Fond du coffre : haut de generic_54 (titre + 6 rangées) + bordure arrondie du bas.
   ctx.drawImage(T.generic_54, 0, 0, GUI_W, 125, 0, 0, GUI_W * S, 125 * S);
@@ -251,7 +365,8 @@ async function main() {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const px = (8 + c * 18) * S, py = (18 + r * 18) * S;
-      const slot = LAYOUT[`${r},${c}`];
+      const key = `${r},${c}`;
+      const slot = LAYOUT[key];
       if (!slot) ctx.drawImage(T.black_stained_glass, px, py, 16 * S, 16 * S);
       else if (slot.item) {
         const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
@@ -259,12 +374,85 @@ async function main() {
       }
       else if (slot.block) drawCube(ctx, BLOCKS[slot.block], px, py, S, (slot.block === 'chest' ? 0.9 : 1) * ITEM_SCALE);
       else if (slot.head) drawCube(ctx, HEADS[slot.head], px, py, S, 0.85 * ITEM_SCALE);
+
+      // Surbrillance blanche de la case survolée, comme en jeu.
+      if (key === state.hovered) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fillRect(px, py, 16 * S, 16 * S);
+      }
     }
   }
 }
 
+// Case (ligne, colonne) sous la souris, ou null.
+function slotAt(ev) {
+  const r = canvas.getBoundingClientRect();
+  const gx = (ev.clientX - r.left) / state.S, gy = (ev.clientY - r.top) / state.S;
+  const c = Math.floor((gx - 7) / 18), row = Math.floor((gy - 17) / 18);
+  if (c < 0 || c >= COLS || row < 0 || row >= ROWS) return null;
+  return `${row},${c}`;
+}
+
+function placeTooltip(ev) {
+  const S = state.S, margin = 4;
+  let x = ev.clientX + 12 * S, y = ev.clientY - 12 * S;
+  if (x + tip.width > innerWidth - margin) x = ev.clientX - 12 * S - tip.width;
+  y = Math.max(margin, Math.min(y, innerHeight - tip.height - margin));
+  tip.style.left = Math.max(margin, x) + 'px';
+  tip.style.top = y + 'px';
+}
+
+function onMove(ev) {
+  const key = slotAt(ev);
+  const slot = key && LAYOUT[key];
+  const hovered = slot ? key : null;   // les vitres ne sont pas des items
+  if (hovered !== state.hovered) {
+    state.hovered = hovered;
+    renderGui();
+    if (slot && slot.tooltip) {
+      renderTooltip(tip, font, slot.tooltip, state.S);
+      tip.hidden = false;
+    } else tip.hidden = true;
+    canvas.style.cursor = hovered ? 'pointer' : '';
+  }
+  if (!tip.hidden) placeTooltip(ev);
+}
+
+function onLeave() {
+  state.hovered = null;
+  tip.hidden = true;
+  canvas.style.cursor = '';
+  renderGui();
+}
+
+function resize() {
+  state.S = Math.max(2, Math.min(5, Math.floor(Math.min(innerWidth / (GUI_W + 16), innerHeight / (GUI_H + 16)))));
+  canvas.width = GUI_W * state.S;
+  canvas.height = GUI_H * state.S;
+  state.hovered = null;
+  tip.hidden = true;
+  renderGui();
+}
+
+async function main() {
+  const [textures, accentedChars] = await Promise.all([
+    Promise.all(FILES.map(load)),
+    fetch(TEX + 'accented.json').then(r => r.json()),
+  ]);
+  T = Object.fromEntries(textures);
+  font = buildFont(T.ascii, T.accented, accentedChars);
+  BLOCKS = {
+    chest: chestFaces(T.normal),
+    crafting_table: { top: T.crafting_table_top, front: T.crafting_table_front, side: T.crafting_table_side },
+    barrel: { top: T.barrel_top, front: T.barrel_side, side: T.barrel_side },
+  };
+  resize();
+  addEventListener('resize', resize);
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('mouseleave', onLeave);
+}
+
 main();
-addEventListener('resize', () => main());
 </script>
 </body>
 </html>
