@@ -461,11 +461,13 @@ function showPageFromHash() {
   renderGui();
 }
 
-// Son du dispenser Minecraft (block.dispenser.dispense = random/click).
-const clickSound = new Audio('assets/sounds/click.mp3');
+// Son d'un bouton d'interface Minecraft (ui.button.click = random/click_stereo, volume 0.25 en jeu).
+const clickSound = new Audio('assets/sounds/button.mp3');
 clickSound.preload = 'auto';
+clickSound.volume = 0.25;
 function playClick() {
   const s = clickSound.cloneNode();   // clone : permet des clics rapprochés qui se chevauchent
+  s.volume = clickSound.volume;
   s.play().catch(() => {});
 }
 
