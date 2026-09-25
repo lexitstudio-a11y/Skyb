@@ -461,9 +461,19 @@ function showPageFromHash() {
   renderGui();
 }
 
+// Son du dispenser Minecraft (block.dispenser.dispense = random/click).
+const clickSound = new Audio('assets/sounds/click.mp3');
+clickSound.preload = 'auto';
+function playClick() {
+  const s = clickSound.cloneNode();   // clone : permet des clics rapprochés qui se chevauchent
+  s.play().catch(() => {});
+}
+
 function onClick(ev) {
   const slot = itemAt(slotAt(ev));
-  if (!slot || !slot.open) return;
+  if (!slot) return;
+  playClick();
+  if (!slot.open) return;
   if (slot.open === 'main') history.pushState(null, '', location.pathname + location.search);
   else location.hash = slot.open;
   showPageFromHash();
