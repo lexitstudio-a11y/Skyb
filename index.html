@@ -50,22 +50,50 @@ const GUI_H = 132;          // 125 lignes du haut de generic_54 + 7 lignes de bo
 const ROWS = 6, COLS = 9;
 const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la case
 
-// Contenu des cases (ligne, colonne) ; le reste = vitre teintée noire.
-// tooltip : lignes de l'overlay au survol (1re ligne = nom). Codes couleur Minecraft : §a vert, §7 gris, §e jaune…
+// Pages de l'interface. Chaque page : un titre + le contenu des cases (ligne, colonne) ;
+// les cases absentes = vitre teintée noire.
+//   item / block / head : l'item affiché ;  pane : vitre colorée décorative (pas un item, pas d'overlay)
+//   tooltip : lignes de l'overlay au survol (1re ligne = nom). Codes couleur Minecraft : §a vert, §7 gris, §e jaune…
+//   open : page ouverte au clic
 // Contenu provisoire, à remplacer par les vrais textes.
 const LORE = ['§7Description à venir.', '', '§eClique pour voir !'];
-const LAYOUT = {
-  '1,4': { head: 'profile', tooltip: ['§aTon profil', ...LORE] },
-  '2,1': { item: 'diamond_sword', tooltip: ['§aCompétences', ...LORE] },
-  '2,4': { item: 'book', tooltip: ['§aSerments S', ...LORE] },
-  '2,5': { item: 'clock_00', tooltip: ['§aAgenda de la journée', ...LORE] },
-  '2,6': { item: 'paper', tooltip: ['§aTo-Do', ...LORE] },
+const PAGES = {
+  main: {
+    title: 'Profil Joueur',
+    slots: {
+      '1,4': { head: 'profile', tooltip: ['§aTon profil', ...LORE] },
+      '2,1': { item: 'diamond_sword', tooltip: ['§aCompétences', ...LORE] },
+      '2,4': { item: 'book', tooltip: ['§aSerments S', ...LORE], open: 'serments' },
+      '2,5': { item: 'clock_00', tooltip: ['§aAgenda de la journée', ...LORE] },
+      '2,6': { item: 'paper', tooltip: ['§aTo-Do', ...LORE] },
+    },
+  },
+  serments: {
+    title: 'Serments S',
+    slots: {
+      '0,4': { item: 'painting', tooltip: ['§aSerments S', ...LORE] },
+      '1,7': { item: 'redstone_torch', tooltip: ['§aParamètres', ...LORE] },
+      '2,1': { pane: 'lime_stained_glass' },
+      '2,2': { pane: 'yellow_stained_glass' },
+      '2,3': { pane: 'red_stained_glass' },
+      '2,4': { pane: 'red_stained_glass' },
+      '2,5': { pane: 'red_stained_glass' },
+      '2,7': { head: 'emerald', tooltip: ['§aRécompenses', ...LORE] },
+      '3,3': { item: 'green_dye', tooltip: ['§aProgression', ...LORE] },
+      '3,7': { block: 'chest', tooltip: ['§aCoffre de récompenses', ...LORE] },
+      '4,7': { item: 'name_tag', tooltip: ['§aTitres', ...LORE] },
+      '5,3': { item: 'arrow', tooltip: ['§aRetour', '§7Vers Profil Joueur'], open: 'main' },
+      '5,4': { item: 'barrier', tooltip: ['§cFermer', '', '§eClique pour revenir au menu !'], open: 'main' },
+      '5,5': { item: 'lime_dye', tooltip: ['§aActivé', ...LORE] },
+    },
+  },
 };
 
 const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
+  'arrow', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -335,7 +363,10 @@ function renderTooltip(tipCanvas, font, lines, S) {
   });
 }
 
-const state = { S: 3, hovered: null };
+const state = { S: 3, hovered: null, page: 'main' };
+const currentSlots = () => PAGES[state.page].slots;
+// Une case est un item (survol, overlay, clic) sauf les vitres.
+const itemAt = key => { const slot = key && currentSlots()[key]; return slot && !slot.pane ? slot : null; };
 let T, font, BLOCKS;
 const canvas = document.getElementById('gui');
 const tip = document.getElementById('tooltip');
@@ -350,14 +381,15 @@ function renderGui() {
   ctx.drawImage(T.generic_54, 0, 0, GUI_W, 125, 0, 0, GUI_W * S, 125 * S);
   ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
 
-  drawText(ctx, font, 'Profil Joueur', 8, 6, '#404040', S);
+  drawText(ctx, font, PAGES[state.page].title, 8, 6, '#404040', S);
 
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const px = (8 + c * 18) * S, py = (18 + r * 18) * S;
       const key = `${r},${c}`;
-      const slot = LAYOUT[key];
+      const slot = currentSlots()[key];
       if (!slot) ctx.drawImage(T.black_stained_glass, px, py, 16 * S, 16 * S);
+      else if (slot.pane) ctx.drawImage(T[slot.pane], px, py, 16 * S, 16 * S);
       else if (slot.item) {
         const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
         ctx.drawImage(T[slot.item], px + off, py + off, size, size);
@@ -394,8 +426,8 @@ function placeTooltip(ev) {
 
 function onMove(ev) {
   const key = slotAt(ev);
-  const slot = key && LAYOUT[key];
-  const hovered = slot ? key : null;   // les vitres ne sont pas des items
+  const slot = itemAt(key);
+  const hovered = slot ? key : null;
   if (hovered !== state.hovered) {
     state.hovered = hovered;
     renderGui();
@@ -413,6 +445,28 @@ function onLeave() {
   tip.hidden = true;
   canvas.style.cursor = '';
   renderGui();
+}
+
+function hideTooltip() {
+  state.hovered = null;
+  tip.hidden = true;
+  canvas.style.cursor = '';
+}
+
+// Navigation entre pages via l'ancre de l'URL (#serments), pour que "Précédent" du navigateur marche.
+function showPageFromHash() {
+  const page = location.hash.slice(1);
+  state.page = PAGES[page] ? page : 'main';
+  hideTooltip();
+  renderGui();
+}
+
+function onClick(ev) {
+  const slot = itemAt(slotAt(ev));
+  if (!slot || !slot.open) return;
+  if (slot.open === 'main') history.pushState(null, '', location.pathname + location.search);
+  else location.hash = slot.open;
+  showPageFromHash();
 }
 
 function resize() {
@@ -436,8 +490,12 @@ async function main() {
     crafting_table: { top: T.crafting_table_top, front: T.crafting_table_front, side: T.crafting_table_side },
     barrel: { top: T.barrel_top, front: T.barrel_side, side: T.barrel_side },
   };
+  const page = location.hash.slice(1);
+  state.page = PAGES[page] ? page : 'main';
   resize();
   addEventListener('resize', resize);
+  addEventListener('popstate', showPageFromHash);
+  canvas.addEventListener('click', onClick);
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseleave', onLeave);
 }
