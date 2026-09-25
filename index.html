@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkyBlock Menu</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+</style>
+</head>
+<body>
+<canvas id="gui"></canvas>
+<script>
+// Interface "SkyBlock Menu" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
+const TEX = 'assets/textures/';
+const GUI_W = 176;
+const GUI_H = 132;          // 125 lignes du haut de generic_54 + 7 lignes de bordure basse
+const ROWS = 6, COLS = 9;
+
+// Contenu des cases (ligne, colonne) ; le reste = vitre teintée noire.
+const LAYOUT = {
+  '1,4': { head: 'profile' },
+  '2,1': { item: 'diamond_sword' },
+  '2,2': { item: 'painting' },
+  '2,3': { item: 'book' },
+  '2,4': { head: 'emerald' },
+  '2,5': { item: 'writable_book' },
+  '2,6': { item: 'clock_00' },
+  '2,7': { block: 'chest' },
+  '3,2': { head: 'box' },
+  '3,3': { item: 'bone' },
+  '3,4': { block: 'crafting_table' },
+  '3,5': { block: 'barrel' },
+  '3,6': { head: 'rune' },
+  '5,2': { head: 'globe' },
+  '5,3': { item: 'name_tag' },
+  '5,4': { item: 'barrier' },
+  '5,5': { item: 'redstone_torch' },
+  '5,6': { item: 'cookie' },
+};
+
+const FILES = [
+  'generic_54', 'ascii', 'black_stained_glass', 'normal',
+  'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
+  'name_tag', 'barrier', 'redstone_torch', 'cookie',
+  'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
+  'barrel_top', 'barrel_side',
+];
+
+function load(name) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res([name, img]);
+    img.onerror = rej;
+    img.src = TEX + name + '.png';
+  });
+}
+
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  return [c, ctx];
+}
+
+// Découpe une zone d'une texture (ex. le coffre) vers une nouvelle texture.
+function crop(img, x, y, w, h) {
+  const [c, ctx] = makeCanvas(w, h);
+  ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+  return c;
+}
+
+// Texture de tête 8x8 à partir d'une palette et d'une grille de caractères.
+function pixelTex(palette, rows) {
+  const [c, ctx] = makeCanvas(8, 8);
+  rows.forEach((row, y) => [...row].forEach((ch, x) => {
+    ctx.fillStyle = palette[ch];
+    ctx.fillRect(x, y, 1, 1);
+  }));
+  return c;
+}
+
+// Faces des têtes personnalisées (top / front / side).
+const HEADS = {
+  profile: (() => {
+    const p = { k: '#0d0f1c', n: '#1b2140', b: '#2a3566', g: '#3fd13f', G: '#1f8a2a', s: '#10131f' };
+    return {
+      top:   pixelTex(p, ['kknnnnkk', 'knnbbnnk', 'nnbbbbnn', 'nbbnnbbn', 'nbbnnbbn', 'nnbbbbnn', 'knnbbnnk', 'kknnnnkk']),
+      front: pixelTex(p, ['kknnnnkk', 'knbbbbnk', 'nsssssbn', 'nsgssgsn', 'nsGssGsn', 'nsssssbn', 'knsGGsnk', 'kknnnnkk']),
+      side:  pixelTex(p, ['kknnnnkk', 'knnbbnnk', 'nnbbbnnn', 'nbbnnnbn', 'nbnnnnbn', 'nnbbnnnn', 'knnnnnnk', 'kknnnnkk']),
+    };
+  })(),
+  emerald: (() => {
+    const p = { d: '#1f5a19', m: '#3f8f23', l: '#6cc43a', y: '#d7d23c', o: '#8f6a1f' };
+    const f = ['dmmlmmmd', 'mlldmylm', 'mlmmlmmm', 'lmyomldm', 'mmomlmml', 'mdlmmlom', 'mlmydmlm', 'dmmmmmmd'];
+    return { top: pixelTex(p, f), front: pixelTex(p, [...f].reverse()), side: pixelTex(p, f.map(r => [...r].reverse().join(''))) };
+  })(),
+  box: (() => {
+    const p = { e: '#6b4a2e', b: '#c8a37a', l: '#e2c6a0', r: '#c42b2b', R: '#ff5c5c', d: '#9c7650' };
+    return {
+      top:   pixelTex(p, ['eeeeeeee', 'ellllble', 'elbbbbbe', 'elbddbbe', 'ebbddbbe', 'ebbbbble', 'elbblble', 'eeeeeeee']),
+      front: pixelTex(p, ['eeeeeeee', 'ebbbbbbe', 'ebbddbbe', 'ebdrrdbe', 'ebdrRdbe', 'ebbddbbe', 'ebbbbbbe', 'eeeeeeee']),
+      side:  pixelTex(p, ['eeeeeeee', 'ebbbbbbe', 'ebdbbbbe', 'ebbbbdbe', 'ebbdbbbe', 'ebbbbbbe', 'ebbbdbbe', 'eeeeeeee']),
+    };
+  })(),
+  rune: (() => {
+    const p = { k: '#241a12', b: '#3b2b1d', m: '#56402b', w: '#d8cbb6', g: '#8c7a62' };
+    return {
+      top:   pixelTex(p, ['kbbbbbbk', 'bmbmmbmb', 'bbmbbmbb', 'bmbmmbmb', 'bmbmmbmb', 'bbmbbmbb', 'bmbmmbmb', 'kbbbbbbk']),
+      front: pixelTex(p, ['kbbbbbbk', 'bbbwwbbb', 'bbwbbwbb', 'bbbwgwbb', 'bbwgwbbb', 'bbwbbwbb', 'bbbwwbbb', 'kbbbbbbk']),
+      side:  pixelTex(p, ['kbbbbbbk', 'bbwbbbbb', 'bbbbgbbb', 'bgbbbbwb', 'bbbwbbbb', 'bbbbbgbb', 'bwbbbbbb', 'kbbbbbbk']),
+    };
+  })(),
+  globe: (() => {
+    const p = { o: '#2750b5', O: '#3d6fe0', g: '#3e9a2e', G: '#5cc043', w: '#e8f0ff', s: '#c9b56b' };
+    return {
+      top:   pixelTex(p, ['wwwOOwww', 'wwOOOOww', 'OOgOOOOO', 'OgGgOOgO', 'OOgOOgGO', 'OOOOOOgO', 'wOOOOOww', 'wwwOwwww']),
+      front: pixelTex(p, ['OOgGgOOO', 'OgGGgOOO', 'OOgGsOgO', 'OOOgOGGO', 'OoOOOgGo', 'OogOOOgo', 'oOGgOOoo', 'ooOgooOo']),
+      side:  pixelTex(p, ['OOOOgOOO', 'OgOOGGOO', 'OGgOOgOO', 'OOOOOOOO', 'OOgGOOOO', 'ooGgoOgo', 'oooooGgo', 'oOoooooo']),
+    };
+  })(),
+};
+
+// --- Police Minecraft (ascii.png, 16x16 glyphes de 8x8) ---
+function buildFont(img) {
+  const [c, ctx] = makeCanvas(128, 128);
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, 128, 128).data;
+  const widths = [];
+  for (let ch = 0; ch < 256; ch++) {
+    const gx = (ch % 16) * 8, gy = Math.floor(ch / 16) * 8;
+    let w = 0;
+    for (let x = 7; x >= 0 && !w; x--)
+      for (let y = 0; y < 8; y++)
+        if (data[((gy + y) * 128 + gx + x) * 4 + 3] > 0) { w = x + 1; break; }
+    widths.push(ch === 32 ? 3 : w);
+  }
+  return { img, widths };
+}
+
+function drawText(ctx, font, text, x, y, color, S) {
+  // Teinte le texte hors écran puis le copie (le glyphe source est blanc).
+  const [c, tctx] = makeCanvas(text.length * 9, 8);
+  let cx = 0;
+  for (const chr of text) {
+    const code = chr.charCodeAt(0);
+    tctx.drawImage(font.img, (code % 16) * 8, Math.floor(code / 16) * 8, 8, 8, cx, 0, 8, 8);
+    cx += font.widths[code] + 1;
+  }
+  tctx.globalCompositeOperation = 'source-in';
+  tctx.fillStyle = color;
+  tctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(c, x * S, y * S, c.width * S, c.height * S);
+}
+
+// --- Rendu isométrique des blocs (comme les items-blocs dans l'inventaire) ---
+function drawFace(ctx, tex, origin, u, v, shade) {
+  const tw = tex.width, th = tex.height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(origin[0], origin[1]);
+  ctx.lineTo(origin[0] + u[0], origin[1] + u[1]);
+  ctx.lineTo(origin[0] + u[0] + v[0], origin[1] + u[1] + v[1]);
+  ctx.lineTo(origin[0] + v[0], origin[1] + v[1]);
+  ctx.closePath();
+  ctx.clip();
+  ctx.setTransform(u[0] / tw, u[1] / tw, v[0] / th, v[1] / th, origin[0], origin[1]);
+  // léger débordement pour éviter les joints entre les faces
+  ctx.drawImage(tex, -0.15, -0.15, tw + 0.3, th + 0.3);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (shade < 1) {
+    ctx.fillStyle = `rgba(0,0,0,${1 - shade})`;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawCube(ctx, faces, px, py, S, scale = 1) {
+  // Géométrie dans une case de 16x16 pixels GUI, centrée.
+  const k = S * scale, cx = px + 8 * S, cy = py + 8.5 * S;
+  const P = (x, y) => [cx + x * k, cy + y * k];
+  const L = P(-7, -4), T = P(0, -7.5), R = P(7, -4), C = P(0, -0.5), D = [0, 8 * k];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+  drawFace(ctx, faces.top,   L, sub(T, L), sub(C, L), 1.0);
+  drawFace(ctx, faces.front, L, sub(C, L), D, 0.8);
+  drawFace(ctx, faces.side,  C, sub(R, C), D, 0.6);
+}
+
+function chestFaces(img) {
+  const top = crop(img, 28, 0, 14, 14);
+  const [front, fctx] = makeCanvas(14, 14);
+  fctx.drawImage(img, 42, 14, 14, 5, 0, 0, 14, 5);    // couvercle
+  fctx.drawImage(img, 42, 34, 14, 9, 0, 5, 14, 9);    // base
+  fctx.drawImage(img, 1, 1, 2, 4, 6, 2, 2, 4);        // loquet
+  const [side, sctx] = makeCanvas(14, 14);
+  sctx.drawImage(img, 28, 14, 14, 5, 0, 0, 14, 5);
+  sctx.drawImage(img, 28, 34, 14, 9, 0, 5, 14, 9);
+  return { top, front, side };
+}
+
+async function main() {
+  const T = Object.fromEntries(await Promise.all(FILES.map(load)));
+  const font = buildFont(T.ascii);
+  const BLOCKS = {
+    chest: chestFaces(T.normal),
+    crafting_table: { top: T.crafting_table_top, front: T.crafting_table_front, side: T.crafting_table_side },
+    barrel: { top: T.barrel_top, front: T.barrel_side, side: T.barrel_side },
+  };
+
+  const canvas = document.getElementById('gui');
+  const S = Math.max(2, Math.min(5, Math.floor(Math.min(innerWidth / (GUI_W + 16), innerHeight / (GUI_H + 16)))));
+  canvas.width = GUI_W * S;
+  canvas.height = GUI_H * S;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  // Fond du coffre : haut de generic_54 (titre + 6 rangées) + bordure arrondie du bas.
+  ctx.drawImage(T.generic_54, 0, 0, GUI_W, 125, 0, 0, GUI_W * S, 125 * S);
+  ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
+
+  drawText(ctx, font, 'SkyBlock Menu', 8, 6, '#404040', S);
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const px = (8 + c * 18) * S, py = (18 + r * 18) * S;
+      const slot = LAYOUT[`${r},${c}`];
+      if (!slot) ctx.drawImage(T.black_stained_glass, px, py, 16 * S, 16 * S);
+      else if (slot.item) ctx.drawImage(T[slot.item], px, py, 16 * S, 16 * S);
+      else if (slot.block) drawCube(ctx, BLOCKS[slot.block], px, py, S, slot.block === 'chest' ? 0.9 : 1);
+      else if (slot.head) drawCube(ctx, HEADS[slot.head], px, py, S, 0.85);
+    }
+  }
+}
+
+main();
+addEventListener('resize', () => main());
+</script>
+</body>
+</html>
