@@ -313,30 +313,33 @@ function chestFaces(img) {
 // --- Overlay (tooltip) au survol d'un item ---
 const TOOLTIP_BG = 'rgba(10, 18, 30, 0.93)';
 const TOOLTIP_BORDER_TOP = '#b9c9da', TOOLTIP_BORDER_BOTTOM = '#6d7f94';
+const TOOLTIP_PADDING = 4;   // marge entre la bordure et le texte (pixels GUI)
+// Échelle du texte de l'overlay : plus petite que celle de l'interface.
+const tooltipScale = S => Math.max(2, Math.round(S * 0.65));
 
 function renderTooltip(tipCanvas, font, lines, S) {
   const w = Math.max(...lines.map(l => textWidth(font, l)));
   const h = 8 + (lines.length - 1) * 10 + (lines.length > 1 ? 2 : 0);
-  const x0 = 4, y0 = 4;
-  tipCanvas.width = (w + 8) * S;
-  tipCanvas.height = (h + 8) * S;
+  const edge = 2 + TOOLTIP_PADDING;           // fond (1 px) + bordure (1 px) + marge intérieure
+  const W = w + 1 + 2 * edge, H = h + 1 + 2 * edge;   // +1 : ombre du texte
+  const x0 = edge, y0 = edge;
+  tipCanvas.width = W * S;
+  tipCanvas.height = H * S;
   const ctx = tipCanvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   const rect = (x, y, rw, rh, fill) => { ctx.fillStyle = fill; ctx.fillRect(x * S, y * S, rw * S, rh * S); };
 
   // Fond aux coins "coupés" + bordure intérieure en dégradé, comme en jeu.
-  rect(x0 - 3, y0 - 4, w + 6, 1, TOOLTIP_BG);
-  rect(x0 - 3, y0 + h + 3, w + 6, 1, TOOLTIP_BG);
-  rect(x0 - 3, y0 - 3, w + 6, h + 6, TOOLTIP_BG);
-  rect(x0 - 4, y0 - 3, 1, h + 6, TOOLTIP_BG);
-  rect(x0 + w + 3, y0 - 3, 1, h + 6, TOOLTIP_BG);
-  const grad = ctx.createLinearGradient(0, (y0 - 3) * S, 0, (y0 + h + 3) * S);
+  rect(1, 0, W - 2, H, TOOLTIP_BG);
+  rect(0, 1, 1, H - 2, TOOLTIP_BG);
+  rect(W - 1, 1, 1, H - 2, TOOLTIP_BG);
+  const grad = ctx.createLinearGradient(0, S, 0, (H - 1) * S);
   grad.addColorStop(0, TOOLTIP_BORDER_TOP);
   grad.addColorStop(1, TOOLTIP_BORDER_BOTTOM);
-  rect(x0 - 3, y0 - 2, 1, h + 4, grad);
-  rect(x0 + w + 2, y0 - 2, 1, h + 4, grad);
-  rect(x0 - 3, y0 - 3, w + 6, 1, TOOLTIP_BORDER_TOP);
-  rect(x0 - 3, y0 + h + 2, w + 6, 1, TOOLTIP_BORDER_BOTTOM);
+  rect(1, 1, W - 2, 1, TOOLTIP_BORDER_TOP);
+  rect(1, H - 2, W - 2, 1, TOOLTIP_BORDER_BOTTOM);
+  rect(1, 2, 1, H - 4, grad);
+  rect(W - 2, 2, 1, H - 4, grad);
 
   let y = y0;
   lines.forEach((line, i) => {
@@ -410,7 +413,7 @@ function onMove(ev) {
     state.hovered = hovered;
     renderGui();
     if (slot && slot.tooltip) {
-      renderTooltip(tip, font, slot.tooltip, state.S);
+      renderTooltip(tip, font, slot.tooltip, tooltipScale(state.S));
       tip.hidden = false;
     } else tip.hidden = true;
     canvas.style.cursor = hovered ? 'pointer' : '';
