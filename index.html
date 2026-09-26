@@ -446,7 +446,7 @@ const PAGES = {
     title: PAGE_TITLES.agenda,
     slots: {
       // Tête « + » bleue : son nom donne la date de demain (calculée à chaque survol).
-      '5,0': { image: 'bouton_pierre', tooltip: ['§aBouton en pierre', ...LORE] },
+      '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', ...LORE] },
       '5,8': { image: 'tete_plus_bleue', tooltip: () => ['§aAgenda ' + formatDate(new Date(Date.now() + 864e5)), ...LORE] },
       ...navSlots('main'),
     },
