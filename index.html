@@ -1216,9 +1216,12 @@ function renderBook() {
     }
   });
 
-  const btnW = 98, btnX = Math.floor(W / 2) - 49, btnY = Math.min(H - 22, top + 196);
+  // Deux boutons côte à côte : « Terminé » à gauche, « Timeblock » à droite.
+  const btnW = 64, gap = 4, btnY = Math.min(H - 22, top + 196);
+  const btnX = Math.floor(W / 2) - btnW - gap / 2, btn2X = Math.floor(W / 2) + gap / 2;
   drawButton(ctx, btnX, btnY, btnW, 'Terminé', sign.hoverDone, S);
-  sign.layout = { S, board: [left + 36, top + 30, 118, BOOK_LINES * 9], button: [btnX, btnY, btnW, 20] };
+  drawButton(ctx, btn2X, btnY, btnW, 'Timeblock', sign.hoverExtra, S);
+  sign.layout = { S, board: [left + 36, top + 30, 118, BOOK_LINES * 9], button: [btnX, btnY, btnW, 20], button2: [btn2X, btnY, btnW, 20] };
   Object.assign(signInput.style, { left: (left + 36) * S + 'px', top: (top + 30) * S + 'px', width: 118 * S + 'px', height: BOOK_LINES * 9 * S + 'px' });
 }
 
@@ -1250,6 +1253,7 @@ function openSign(cfg) {
   sign.cfg = { fixed: [], transform: t => t, validate: () => true, ...cfg };
   sign.error = false;
   sign.hoverDone = false;
+  sign.hoverExtra = false;
   signInput.inputMode = cfg.numeric ? 'numeric' : 'text';
   signInput.value = fitSignText(sign.cfg.transform(cfg.initial || '')).text;
   hideTooltip();
@@ -1309,11 +1313,16 @@ signInput.addEventListener('keydown', ev => {
 signCanvas.addEventListener('mousemove', ev => {
   if (!sign.layout) return;
   const hover = inRect(ev, sign.layout.button);
-  signCanvas.style.cursor = hover ? 'pointer' : '';
-  if (hover !== sign.hoverDone) { sign.hoverDone = hover; renderSign(); }
+  const hover2 = !!sign.layout.button2 && inRect(ev, sign.layout.button2);
+  signCanvas.style.cursor = hover || hover2 ? 'pointer' : '';
+  if (hover !== sign.hoverDone || hover2 !== !!sign.hoverExtra) { sign.hoverDone = hover; sign.hoverExtra = hover2; renderSign(); }
 });
 signCanvas.addEventListener('click', ev => {
   if (sign.layout && inRect(ev, sign.layout.button)) { playClick(); finishSign(); }
+  else if (sign.layout && sign.layout.button2 && inRect(ev, sign.layout.button2)) {
+    playClick();   // « Timeblock » : action à définir
+    signInput.focus();
+  }
   else signInput.focus();
 });
 
