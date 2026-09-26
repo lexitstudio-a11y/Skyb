@@ -374,9 +374,10 @@ function numberDuplicates(slots) {
 
 // Pages « Les 3 Frères » : une par saison et par round de chaque serment (ex. #freres-1-saison3, #freres-2-round11).
 // Objectifs numérotés 1, 2, 3 : Résultat (lingot d'or), Action (TNT, au centre), Identité (étiquette).
-function freresSlots() {
+// L'Objectif de Résultat est le serment lui-même : son overlay affiche le nom du serment n.
+function freresSlots(n) {
   return {
-    '2,2': { item: 'gold_ingot', count: 1, tooltip: ['§aObjectif de Résultat', '§7Ce que je veux atteindre', '§7émotionnellement.', '', '§eClique pour voir !'] },
+    '2,2': { item: 'gold_ingot', count: 1, tooltip: () => ['§aObjectif de Résultat', '§7Ce que je veux atteindre', '§7émotionnellement.', '', '§f' + sermentTitle(n)] },
     '2,4': { block: 'tnt', count: 2, tooltip: [
       "§aObjectif d'Action",
       "§7Les actions à faire pour réussir",
@@ -409,7 +410,7 @@ function freresSlots() {
 for (const n of [1, 2, 3]) {
   const periods = [...[1, 2, 3, 4].map(k => `saison${k}`), ...Array.from({ length: 12 }, (_, i) => `round${i + 1}`)];
   for (const period of periods)
-    PAGES[`freres-${n}-${period}`] = { title: 'Les 3 Frères', slots: { ...freresSlots(), ...navSlots(`serment${n}`) } };
+    PAGES[`freres-${n}-${period}`] = { title: 'Les 3 Frères', slots: { ...freresSlots(n), ...navSlots(`serment${n}`) } };
 }
 
 const pageTitle = id => { const t = PAGES[id].title; return typeof t === 'function' ? t() : t; };
