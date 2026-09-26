@@ -161,9 +161,15 @@ function sermentSlots(n) {
   }
   return slots;
 }
-// Une colonne de la page « Les Pilliers Temporels » : le livre du serment en haut, puis 3 vitres colorées en dessous.
+// Une colonne de la page « Les Pilliers Temporels » : le livre du serment en haut, puis 3 vitres colorées en dessous
+// (serment 1 : tout vert, serment 2 : vert / jaune / rouge, serment 3 : tout rouge).
+const SERMENT_PANES = {
+  1: ['lime_stained_glass', 'lime_stained_glass', 'lime_stained_glass'],
+  2: ['lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass'],
+  3: ['red_stained_glass', 'red_stained_glass', 'red_stained_glass'],
+};
 function sermentColumn(col, n) {
-  const panes = ['lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass'];
+  const panes = SERMENT_PANES[n];
   const slots = { [`0,${col}`]: { item: 'book', tooltip: sermentBookTooltip(n), open: `serment${n}` } };
   panes.forEach((pane, i) => { slots[`${i + 1},${col}`] = { pane }; });
   return slots;
