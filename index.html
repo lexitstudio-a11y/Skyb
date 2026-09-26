@@ -1524,27 +1524,34 @@ function renderTimeblock() {
   ctx.rect(grid.x * S, grid.y * S, grid.w * S, grid.h * S);
   ctx.clip();
   for (let m = TB_START; m <= TB_END; m += 30) fr(grid.x, yOf(m), grid.w, 1, m % 60 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.3)');
-  const drawBlock = (debut, fin, title, sub, color) => {
+  const drawBlock = (debut, fin, title, color) => {
     const y1 = yOf(debut), h = yOf(fin) - y1;
     drawColorBlock(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, color, S);
     ctx.save();
     ctx.beginPath();
     ctx.rect((grid.x + 3) * S, (y1 + 2) * S, (grid.w - 6) * S, (h - 3) * S);
     ctx.clip();
-    // Marge intérieure : 4 px sous la bordure (moins pour un bloc trop petit, texte alors centré)
-    const ty = h >= 20 ? y1 + 7 : y1 + Math.floor((h - 8) / 2) + 1;
-    drawText(ctx, font, fitText(title, grid.w - 22), grid.x + 10, ty, '#FFFFFF', S, true);
-    if (sub && h >= 30) drawText(ctx, font, sub, grid.x + 10, ty + 10, '#E0E0E0', S, true);
+    // Horaires toujours affichés : sous le titre si le bloc est assez haut, sinon à sa droite.
+    const hours = `${fmtMin(debut)} - ${fmtMin(fin)}`, tx = grid.x + 10, maxW = grid.w - 22;
+    if (h >= 28) {
+      drawText(ctx, font, fitText(title, maxW), tx, y1 + 7, '#FFFFFF', S, true);
+      drawText(ctx, font, hours, tx, y1 + 17, '#E8E8E8', S, true);
+    } else {
+      const ty = h >= 20 ? y1 + 7 : y1 + Math.floor((h - 8) / 2) + 1;
+      const hw = textWidth(font, hours), t = fitText(title, maxW - hw - 8);
+      drawText(ctx, font, t, tx, ty, '#FFFFFF', S, true);
+      drawText(ctx, font, hours, tx + maxW - hw, ty, '#E8E8E8', S, true);
+    }
     ctx.restore();
   };
   const colorOf = (b, i) => TB_COLORS[(b.couleur ?? i) % TB_COLORS.length];
-  tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, null, colorOf(b, i)); });
+  tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, colorOf(b, i)); });
   const d = tb.drag;
   if (d && d.mode === 'create' && d.color == null) d.color = randomColor();
   if (d && d.moved) {   // bloc en cours de création / déplacement : on affiche ses horaires
     const [a, z] = d.mode === 'create' ? [Math.min(d.start, d.end), Math.max(d.start, d.end)] : [d.debut, d.fin];
     const color = d.mode === 'create' ? TB_COLORS[d.color] : colorOf(d.block, tbBlocks().indexOf(d.block));
-    drawBlock(a, z, d.mode === 'create' ? 'Nouveau bloc' : d.block.titre, `${fmtMin(a)} - ${fmtMin(z)}`, color);
+    drawBlock(a, z, d.mode === 'create' ? 'Nouveau bloc' : d.block.titre, color);
   }
   if (tb.date === formatDate(new Date())) {   // heure actuelle
     const now = new Date(), m = now.getHours() * 60 + now.getMinutes();
