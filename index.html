@@ -141,9 +141,9 @@ function sermentSlots() {
   }
   return slots;
 }
-// Une colonne de la page « Serments S » : le livre du serment en haut, puis 5 vitres colorées en dessous.
+// Une colonne de la page « Serments S » : le livre du serment en haut, puis 3 vitres colorées en dessous.
 function sermentColumn(col, page, name) {
-  const panes = ['lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass', 'red_stained_glass', 'red_stained_glass'];
+  const panes = ['lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass'];
   const slots = { [`0,${col}`]: { item: 'book', tooltip: [`§a${name}`, ...LORE], open: page } };
   panes.forEach((pane, i) => { slots[`${i + 1},${col}`] = { pane }; });
   return slots;
@@ -243,9 +243,9 @@ const PAGES = {
   serments: {
     title: PAGE_TITLES.serments,
     slots: {
-      ...sermentColumn(1, 'serment1', 'Serment S 1 - 12K/Mois'),
-      ...sermentColumn(3, 'serment2', 'Serment S 2 - 75Kg Sec'),
-      ...sermentColumn(5, 'serment3', 'Serment S 3'),
+      ...sermentColumn(2, 'serment1', 'Serment S 1 - 12K/Mois'),
+      ...sermentColumn(4, 'serment2', 'Serment S 2 - 75Kg Sec'),
+      ...sermentColumn(6, 'serment3', 'Serment S 3'),
       '5,8': { item: 'painting', tooltip: ['§aDurée des Serments', ...LORE], open: 'duree' },
       ...navSlots('main'),
     },
