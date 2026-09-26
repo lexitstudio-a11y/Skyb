@@ -33,6 +33,27 @@
     pointer-events: none;
     z-index: 10;
   }
+  #signScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+  }
+  #signScreen[hidden] {
+    display: none;
+  }
+  #signCanvas {
+    position: absolute;
+    inset: 0;
+  }
+  /* Champ invisible posé sur le panneau : reçoit la saisie (et ouvre le clavier numérique sur mobile). */
+  #signInput {
+    position: absolute;
+    opacity: 0;
+    font-size: 16px;
+    border: 0;
+    padding: 0;
+    caret-color: transparent;
+  }
   canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -42,6 +63,10 @@
 <body>
 <canvas id="gui"></canvas>
 <canvas id="tooltip" hidden></canvas>
+<div id="signScreen" hidden>
+  <canvas id="signCanvas"></canvas>
+  <input id="signInput" type="text" inputmode="numeric" autocomplete="off" maxlength="10" aria-label="Date (JJ/MM/AAAA)">
+</div>
 <script>
 // Interface "Profil Joueur" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
 const TEX = 'assets/textures/';
@@ -54,7 +79,8 @@ const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la c
 // les cases absentes = vitre teintée noire.
 //   item / block / head : l'item affiché ;  pane : vitre colorée décorative (pas un item, pas d'overlay)
 //   tooltip : lignes de l'overlay au survol (1re ligne = nom). Codes couleur Minecraft : §a vert, §7 gris, §e jaune…
-//   open : page ouverte au clic
+//   open : page ouverte au clic ;  sign : ouvre le panneau de saisie de date (voir DATE_FIELDS)
+//   tooltip peut aussi être une fonction qui renvoie les lignes (contenu dynamique)
 // Contenu provisoire, à remplacer par les vrais textes.
 const LORE = ['§7Description à venir.', '', '§eClique pour voir !'];
 
@@ -82,7 +108,29 @@ function sermentSlots() {
   }
   return slots;
 }
-const PAGE_TITLES = { main: 'Profil Joueur', serments: 'Serments S' };
+// Dates de début / fin des serments, saisies sur un panneau et gardées dans ce navigateur.
+const DATES_KEY = 'serments-dates';
+const DATE_FIELDS = {
+  start: { name: "§aDate d'entrée", title: "Modifier la date d'entrée", label: "Date d'entrée" },
+  end:   { name: '§cDate de fin',   title: 'Modifier la date de fin',   label: 'Date de fin' },
+};
+function loadDates() {
+  try { return JSON.parse(localStorage.getItem(DATES_KEY)) || {}; } catch { return {}; }
+}
+const dates = loadDates();
+function saveDates() {
+  try { localStorage.setItem(DATES_KEY, JSON.stringify(dates)); } catch {}
+}
+function dateSlot(field) {
+  const f = DATE_FIELDS[field];
+  return {
+    item: 'clock_00',
+    sign: field,
+    tooltip: () => [f.name, dates[field] ? `§7Date : §e${dates[field]}` : '§7Date : §cnon définie', '', '§eClique pour modifier !'],
+  };
+}
+
+const PAGE_TITLES = { main: 'Profil Joueur', serments: 'Serments S', duree: 'Durée des Serments' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
@@ -97,7 +145,7 @@ const PAGES = {
   serments: {
     title: PAGE_TITLES.serments,
     slots: {
-      '0,4': { item: 'painting', tooltip: ['§aSerments S', ...LORE] },
+      '0,4': { item: 'painting', tooltip: ['§aDurée des Serments', ...LORE], open: 'duree' },
       '1,1': { item: 'book', tooltip: ['§aSerment S 1 - 12K/Mois', ...LORE], open: 'serment1' },
       '1,3': { pane: 'lime_stained_glass' },
       '1,4': { pane: 'yellow_stained_glass' },
@@ -111,6 +159,14 @@ const PAGES = {
       '3,6': { pane: 'red_stained_glass' },
       '3,7': { pane: 'red_stained_glass' },
       ...navSlots('main'),
+    },
+  },
+  duree: {
+    title: PAGE_TITLES.duree,
+    slots: {
+      '2,2': dateSlot('start'),
+      '2,6': dateSlot('end'),
+      ...navSlots('serments'),
     },
   },
   serment1: {
@@ -127,7 +183,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'blue_terracotta', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'blue_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -472,7 +528,8 @@ function onMove(ev) {
     state.hovered = hovered;
     renderGui();
     if (slot && slot.tooltip) {
-      renderTooltip(tip, font, slot.tooltip, tooltipScale(state.S));
+      const lines = typeof slot.tooltip === 'function' ? slot.tooltip() : slot.tooltip;
+      renderTooltip(tip, font, lines, tooltipScale(state.S));
       tip.hidden = false;
     } else tip.hidden = true;
     canvas.style.cursor = hovered ? 'pointer' : '';
@@ -495,6 +552,7 @@ function hideTooltip() {
 
 // Navigation entre pages via l'ancre de l'URL (#serments), pour que "Précédent" du navigateur marche.
 function showPageFromHash() {
+  if (sign.field) closeSign();
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
   hideTooltip();
@@ -515,11 +573,138 @@ function onClick(ev) {
   const slot = itemAt(slotAt(ev));
   if (!slot) return;
   playClick();
+  if (slot.sign) { openSign(slot.sign); return; }
   if (!slot.open) return;
   if (slot.open === 'main') history.pushState(null, '', location.pathname + location.search);
   else location.hash = slot.open;
   showPageFromHash();
 }
+
+// --- Panneau de saisie d'une date (comme l'écran d'édition de panneau de Minecraft) ---
+const signScreen = document.getElementById('signScreen');
+const signCanvas = document.getElementById('signCanvas');
+const signInput = document.getElementById('signInput');
+const sign = { field: null, error: false, hoverDone: false, blinkOn: true, timer: null, layout: null };
+
+// "12032026" -> "12/03/2026" (les / sont ajoutés au fil de la saisie).
+function formatDigits(d) {
+  return d.slice(0, 2) + (d.length > 2 ? '/' + d.slice(2, 4) : '') + (d.length > 4 ? '/' + d.slice(4, 8) : '');
+}
+function signDigits() {
+  return signInput.value.replace(/\D/g, '').slice(0, 8);
+}
+function isValidDate(d) {
+  if (d.length !== 8) return false;
+  const day = +d.slice(0, 2), month = +d.slice(2, 4), year = +d.slice(4);
+  const dt = new Date(year, month - 1, day);
+  return year >= 1900 && year <= 2100 && dt.getFullYear() === year && dt.getMonth() === month - 1 && dt.getDate() === day;
+}
+
+function signScale() {
+  return Math.max(1, Math.min(5, Math.floor(innerHeight / 215), Math.floor(innerWidth / 112)));
+}
+
+function renderSign() {
+  const S = signScale();
+  signCanvas.width = innerWidth;
+  signCanvas.height = innerHeight;
+  const ctx = signCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const W = Math.floor(innerWidth / S), H = Math.floor(innerHeight / S);
+  ctx.fillStyle = 'rgba(16, 16, 16, 0.35)';
+  ctx.fillRect(0, 0, signCanvas.width, signCanvas.height);
+  const centered = (text, y, color, shadow) => drawText(ctx, font, text, Math.floor(W / 2 - textWidth(font, text) / 2), y, color, S, shadow);
+
+  const f = DATE_FIELDS[sign.field];
+  const top = Math.max(8, Math.floor((H - 200) / 2));
+  centered(f.title, top, '#FFFFFF', true);
+
+  // Panneau en chêne : face avant (24x12 texels) + poteau (2x14 texels), agrandis 4x.
+  const bx = Math.floor(W / 2) - 48, by = top + 28;
+  ctx.drawImage(T.oak, 2, 2, 24, 12, bx * S, by * S, 96 * S, 48 * S);
+  ctx.drawImage(T.oak, 2, 16, 2, 14, (Math.floor(W / 2) - 4) * S, (by + 48) * S, 8 * S, 56 * S);
+
+  const text = formatDigits(signDigits());
+  const first = `> ${text}${sign.blinkOn ? '_' : ' '} <`;
+  const lines = [first, '^^^^^^^^^^^^', f.label, 'JJ/MM/AAAA'];
+  lines.forEach((line, i) => centered(line, by + 5 + i * 10, i === 0 && sign.error ? '#AA0000' : '#000000', false));
+
+  // Bouton "Terminé" (texture de bouton Minecraft, 200x20) ; plus étroit sur petit écran :
+  // on garde les deux bords de la texture (moitié gauche + moitié droite).
+  const btnW = Math.min(200, W - 16), half = Math.floor(btnW / 2);
+  const btnX = Math.floor(W / 2) - half, btnY = Math.min(H - 24, by + 48 + 56 + 16);
+  const btnTex = sign.hoverDone ? T.button_highlighted : T.button;
+  ctx.drawImage(btnTex, 0, 0, half, 20, btnX * S, btnY * S, half * S, 20 * S);
+  ctx.drawImage(btnTex, 200 - (btnW - half), 0, btnW - half, 20, (btnX + half) * S, btnY * S, (btnW - half) * S, 20 * S);
+  centered('Terminé', btnY + 6, '#FFFFFF', true);
+
+  sign.layout = { S, board: [bx, by, 96, 48], button: [btnX, btnY, btnW, 20] };
+  Object.assign(signInput.style, { left: bx * S + 'px', top: by * S + 'px', width: 96 * S + 'px', height: 48 * S + 'px' });
+}
+
+function inRect(ev, [x, y, w, h]) {
+  const S = sign.layout.S, gx = ev.clientX / S, gy = ev.clientY / S;
+  return gx >= x && gx < x + w && gy >= y && gy < y + h;
+}
+
+function openSign(field) {
+  sign.field = field;
+  sign.error = false;
+  sign.hoverDone = false;
+  signInput.value = dates[field] || '';
+  hideTooltip();
+  canvas.hidden = true;
+  signScreen.hidden = false;
+  sign.blinkOn = true;
+  clearInterval(sign.timer);
+  sign.timer = setInterval(() => { sign.blinkOn = !sign.blinkOn; renderSign(); }, 300);
+  renderSign();
+  signInput.focus();
+}
+
+function closeSign() {
+  clearInterval(sign.timer);
+  signScreen.hidden = true;
+  canvas.hidden = false;
+  sign.field = null;
+  renderGui();
+}
+
+// Valide la saisie : date complète et réelle, ou vide pour effacer.
+function finishSign() {
+  const d = signDigits();
+  if (d.length && !isValidDate(d)) {
+    sign.error = true;
+    renderSign();
+    signInput.focus();
+    return;
+  }
+  if (d.length) dates[sign.field] = formatDigits(d);
+  else delete dates[sign.field];
+  saveDates();
+  closeSign();
+}
+
+signInput.addEventListener('input', () => {
+  signInput.value = formatDigits(signDigits());
+  sign.error = false;
+  sign.blinkOn = true;
+  renderSign();
+});
+signInput.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter') { ev.preventDefault(); playClick(); finishSign(); }
+  else if (ev.key === 'Escape') { ev.preventDefault(); closeSign(); }
+});
+signCanvas.addEventListener('mousemove', ev => {
+  if (!sign.layout) return;
+  const hover = inRect(ev, sign.layout.button);
+  signCanvas.style.cursor = hover ? 'pointer' : '';
+  if (hover !== sign.hoverDone) { sign.hoverDone = hover; renderSign(); }
+});
+signCanvas.addEventListener('click', ev => {
+  if (sign.layout && inRect(ev, sign.layout.button)) { playClick(); finishSign(); }
+  else signInput.focus();
+});
 
 function resize() {
   state.S = Math.max(2, Math.min(5, Math.floor(Math.min(innerWidth / (GUI_W + 16), innerHeight / (GUI_H + 16)))));
@@ -528,6 +713,7 @@ function resize() {
   state.hovered = null;
   tip.hidden = true;
   renderGui();
+  if (sign.field) renderSign();
 }
 
 async function main() {
