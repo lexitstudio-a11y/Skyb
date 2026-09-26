@@ -650,12 +650,31 @@ function freresSlots(n, id) {
     ] },
   };
 }
+// Montre en haut de la page quand demain tombe dans la saison / le round : numéro = jour de demain,
+// clic = agenda de demain.
+function tomorrowClock(firstMonth, lastMonth) {
+  const inPeriod = () => {
+    if (!dates.start) return false;
+    const t = toDate(tomorrow());
+    return t >= toDate(addMonths(dates.start, firstMonth - 1)) && t < toDate(addMonths(dates.start, lastMonth));
+  };
+  return {
+    '0,4': {
+      item: 'clock_00', when: inPeriod,
+      count: () => toDate(tomorrow()).getDate(),
+      tooltip: () => ['§aAgenda ' + tomorrow(), '§7Demain fait partie de cette période.', '', '§eClique pour écrire !'],
+      action: () => editAgenda(tomorrow()),
+    },
+  };
+}
 for (const n of [1, 2, 3]) {
   const periods = [...[1, 2, 3, 4].map(k => `saison${k}`), ...Array.from({ length: 12 }, (_, i) => `round${i + 1}`)];
   for (const period of periods) {
     const id = `freres-${n}-${period}`;
     const label = period.replace(/^saison/, 'Saison ').replace(/^round/, 'Round ');   // « saison2 » -> « Saison 2 »
-    PAGES[id] = { title: `Les 3 Frères - ${label}`, slots: { ...freresSlots(n, id), ...navSlots(`serment${n}`) } };
+    const k = +period.replace(/\D/g, '');
+    const [first, last] = period.startsWith('saison') ? [3 * k - 2, 3 * k] : [k, k];   // mois du serment couverts
+    PAGES[id] = { title: `Les 3 Frères - ${label}`, slots: { ...freresSlots(n, id), ...tomorrowClock(first, last), ...navSlots(`serment${n}`) } };
     // Sous-pages (vides pour l'instant) ouvertes par la TNT et l'étiquette.
     PAGES[`${id}-actions`] = { title: "Objectifs d'Action", slots: navSlots(id) };
     PAGES[`${id}-identite`] = { title: "Objectifs d'Identité", slots: navSlots(id) };
@@ -940,7 +959,12 @@ function renderTooltip(tipCanvas, font, lines, S) {
 }
 
 const state = { S: 3, hovered: null, page: 'main' };
-const currentSlots = () => PAGES[state.page].slots;
+// Cases de la page ; une case avec when() ne s'affiche que si when() est vrai (contenu qui dépend de la date).
+function currentSlots() {
+  const slots = PAGES[state.page].slots;
+  if (!Object.values(slots).some(s => s.when)) return slots;
+  return Object.fromEntries(Object.entries(slots).filter(([, s]) => !s.when || s.when()));
+}
 // Une case est un item (survol, overlay, clic) sauf les vitres.
 const itemAt = key => { const slot = key && currentSlots()[key]; return slot && !slot.pane ? slot : null; };
 let T, font, BLOCKS;
@@ -985,8 +1009,9 @@ function renderGui() {
       }
 
       // Nombre en bas à droite de la case (comme la taille d'une pile en jeu), en blanc avec ombre.
-      if (slot && slot.count != null) {
-        const txt = String(slot.count);
+      const count = slot && (typeof slot.count === 'function' ? slot.count() : slot.count);
+      if (count != null) {
+        const txt = String(count);
         drawText(ctx, font, txt, 8 + c * 18 + 17 - textWidth(font, txt), 18 + r * 18 + 9, '#FFFFFF', S, true);
       }
 
