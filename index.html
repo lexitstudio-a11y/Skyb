@@ -325,7 +325,10 @@ const PAGES = {
   },
   todo: {
     title: PAGE_TITLES.todo,
-    slots: { ...navSlots('main') },   // vide pour l'instant
+    slots: {
+      '4,7': { head: 'plus', tooltip: ['§aAjouter', ...LORE] },
+      ...navSlots('main'),
+    },
   },
   duree: {
     title: PAGE_TITLES.duree,
@@ -500,6 +503,17 @@ const HEADS = {
       side:  pixelTex(p, ['kbbbbbbk', 'bbwbbbbb', 'bbbbgbbb', 'bgbbbbwb', 'bbbwbbbb', 'bbbbbgbb', 'bwbbbbbb', 'kbbbbbbk']),
     };
   })(),
+  // Tête verte avec un « + » vert clair sur le côté (bouton d'ajout).
+  plus: (() => {
+    const p = { a: '#57701d', b: '#546c1b', c: '#50681a', d: '#5b7520', P: '#acde37', s: '#7b9e2d' };
+    const base = ['abcbabdb', 'bdabcaba', 'cbabdbac', 'abcabbda', 'bdbacbab', 'acbdabcb', 'babcadba', 'cabbacbd'];
+    return {
+      top: pixelTex(p, base),
+      front: pixelTex(p, [...base].reverse()),
+      side: pixelTex(p, ['abcbabdb', 'bdaPPaba', 'cbaPPsac', 'aPPPPPPa', 'bPPPPPPs', 'acsPPscb', 'babPPsba', 'cabssacb']),
+      shade: [1.0, 0.85, 0.95],   // côté peu ombré pour que le « + » reste bien visible
+    };
+  })(),
   globe: (() => {
     const p = { o: '#2750b5', O: '#3d6fe0', g: '#3e9a2e', G: '#5cc043', w: '#e8f0ff', s: '#c9b56b' };
     return {
@@ -645,9 +659,10 @@ function drawCube(ctx, faces, px, py, S, scale = 1) {
   const P = (x, y) => [cx + x * k, cy + y * k];
   const L = P(-7, -4), T = P(0, -7.5), R = P(7, -4), C = P(0, -0.5), D = [0, 8 * k];
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
-  drawFace(ctx, faces.top,   L, sub(T, L), sub(C, L), 1.0);
-  drawFace(ctx, faces.front, L, sub(C, L), D, 0.8);
-  drawFace(ctx, faces.side,  C, sub(R, C), D, 0.6);
+  const [shTop, shFront, shSide] = faces.shade || [1.0, 0.8, 0.6];   // luminosité de chaque face
+  drawFace(ctx, faces.top,   L, sub(T, L), sub(C, L), shTop);
+  drawFace(ctx, faces.front, L, sub(C, L), D, shFront);
+  drawFace(ctx, faces.side,  C, sub(R, C), D, shSide);
 }
 
 function chestFaces(img) {
