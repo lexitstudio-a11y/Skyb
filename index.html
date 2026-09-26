@@ -661,24 +661,27 @@ function numberDuplicates(slots) {
 
 // Pages « Les 3 Frères » : une par saison et par round de chaque serment (ex. #freres-1-saison3, #freres-2-round11).
 // Objectifs numérotés 1, 2, 3 : Résultat (lingot d'or), Actions (TNT, au centre), Identité (étiquette).
-// Clic sur l'Objectif de Résultat : panneau pour l'écrire. C'est le nom du serment (la suite de « Serment S n - »),
-// donc il se met aussi à jour sur le livre du serment, sa page et « Renommer les Serments ».
-function editResultGoal(n) {
+// Objectif de Résultat : propre à chaque saison et à chaque round (indépendant du nom du serment).
+// Clé = identifiant de la page « Les 3 Frères » (ex. freres-1-saison3).
+const RESULT_KEY = 'objectifs-resultat';
+const resultGoals = loadJSON(RESULT_KEY);
+const resultGoal = id => resultGoals[id] || '';
+function editResultGoal(id) {
   openSign({
     title: 'Objectif de Résultat',
-    lines: 1, fixed: ['', '^^^^^^^^^^^^', `Serment S ${n} - ...`, ''],
-    initial: sermentSuffix(n),
+    lines: 1, fixed: ['', '^^^^^^^^^^^^', 'Objectif de Résultat', ''],
+    initial: resultGoal(id),
     onDone: text => {
-      sermentInfo[n] = { ...(sermentInfo[n] || {}), suffix: text.trim() };
-      saveJSON(SERMENTS_KEY, sermentInfo);
+      const t = text.trim();
+      if (t) resultGoals[id] = t; else delete resultGoals[id];
+      saveJSON(RESULT_KEY, resultGoals);
     },
   });
 }
-// L'Objectif de Résultat est le serment lui-même : son overlay affiche le nom du serment n (sans « Serment S n - »).
 // id = identifiant de la page « Les 3 Frères » (ex. freres-1-saison3), pour ouvrir ses sous-pages.
 function freresSlots(n, id) {
   return {
-    '2,2': { item: 'gold_ingot', count: 1, action: () => editResultGoal(n), tooltip: () => ['§aObjectif de Résultat', '§7Ce que je veux atteindre', '§7émotionnellement.', ...(sermentSuffix(n) ? ['', '§f' + sermentSuffix(n)] : [])] },
+    '2,2': { item: 'gold_ingot', count: 1, action: () => editResultGoal(id), tooltip: () => ['§aObjectif de Résultat', '§7Ce que je veux atteindre', '§7émotionnellement.', '', resultGoal(id) ? '§f' + resultGoal(id) : '§8Pas encore défini.', '', '§eClique pour modifier !'] },
     '2,4': { block: 'tnt', count: 2, open: `${id}-actions`, tooltip: [
       "§aObjectifs d'Action",
       "§7Les actions à faire pour réussir",
@@ -753,7 +756,7 @@ function seasonGoals(n, season) {
   return {
     '3,2': {
       image: 'lingot_netherite', count: 1,
-      tooltip: () => ['§aObjectif de Résultat', tag, ...(sermentSuffix(n) ? ['', '§f' + sermentSuffix(n)] : []), '', readOnly],
+      tooltip: () => ['§aObjectif de Résultat', tag, '', resultGoal(`freres-${n}-saison${season}`) ? '§f' + resultGoal(`freres-${n}-saison${season}`) : '§8Pas encore défini.', '', readOnly],
     },
     '3,4': { image: 'minecart_tnt', count: 2, tooltip: ["§aObjectifs d'Action", tag, '', readOnly] },
     '3,6': { image: 'laisse', count: 3, tooltip: ["§aObjectifs d'Identité", tag, '', readOnly] },
