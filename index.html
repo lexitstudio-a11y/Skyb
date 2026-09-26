@@ -323,38 +323,64 @@ function sermentBookTooltip(n) {
 }
 
 // --- Liste de choses à faire ---
-// Chaque action : { texte, item (id Minecraft choisi dans l'inventaire créatif), date }.
+// Chaque action : { texte, item (id Minecraft choisi dans l'inventaire créatif), date, fini (date de fin, si terminée) }.
+// Page « Liste de choses à faire » : les actions en cours ; page « Actions terminées » : les terminées,
+// gardées 30 jours puis supprimées automatiquement.
 // Rangées de gauche à droite puis de haut en bas dans la zone de 4x7 cases, la plus récente en haut à gauche.
 const TODO_KEY = 'todo-actions';
+const TODO_KEEP_DAYS = 30;
 const todos = (() => { try { return JSON.parse(localStorage.getItem(TODO_KEY)) || []; } catch { return []; } })();
 const TODO_ROWS = 4, TODO_COLS = 7;
 function saveTodos() {
   try { localStorage.setItem(TODO_KEY, JSON.stringify(todos)); } catch {}
 }
-function todoSlots() {
-  const slots = {
-    '5,8': { image: 'tete_plus', tooltip: ['§aAjouter', '§7Ajoute une action à faire.', '', '§eClique pour ajouter !'], action: addTodo },
-    ...navSlots('main'),
-  };
-  const newestFirst = [...todos].reverse().slice(0, TODO_ROWS * TODO_COLS);
-  newestFirst.forEach((todo, i) => {
+const addDays = (date, n) => { const d = toDate(date); d.setDate(d.getDate() + n); return d; };
+// Supprime les actions terminées depuis 30 jours ou plus.
+function purgeOldTodos() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const keep = todos.filter(t => !t.fini || addDays(t.fini, TODO_KEEP_DAYS) > today);
+  if (keep.length !== todos.length) {
+    todos.splice(0, todos.length, ...keep);
+    saveTodos();
+  }
+}
+purgeOldTodos();
+
+// Place une liste d'actions (la première en haut à gauche) dans la zone 4x7.
+function todoGrid(list, slots) {
+  list.slice(0, TODO_ROWS * TODO_COLS).forEach((todo, i) => {
     const lines = todo.texte.split('\n').map(l => l.trim()).filter(Boolean);
     slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = {
       icon: todo.item,
-      look: () => todo.fini ? { dim: true } : null,   // action terminée : icône assombrie
       tooltip: [
         '§a' + (lines[0] || 'Action'), ...lines.slice(1).map(l => '§7' + l), '',
         `§8Ajoutée le ${todo.date}`,
-        ...(todo.fini ? [`§cTerminée le ${todo.fini}`] : ['§eClique quand elle est terminée !']),
+        ...(todo.fini
+          ? [`§cTerminée le ${todo.fini}`, `§8Supprimée le ${formatDate(addDays(todo.fini, TODO_KEEP_DAYS))}`]
+          : ['§eClique quand elle est terminée !']),
       ],
       action: () => askTodoDone(todo),
     };
   });
   return slots;
 }
+function todoSlots() {
+  return todoGrid([...todos].filter(t => !t.fini).reverse(), {
+    '5,0': { icon: 'oak_button', tooltip: ['§aActions terminées', `§7Les actions terminées depuis moins`, `§7de ${TODO_KEEP_DAYS} jours.`, '', '§eClique pour voir !'], open: 'todo-finies' },
+    '5,8': { image: 'tete_plus', tooltip: ['§aAjouter', '§7Ajoute une action à faire.', '', '§eClique pour ajouter !'], action: addTodo },
+    ...navSlots('main'),
+  });
+}
+function doneTodoSlots() {
+  const done = todos.filter(t => t.fini).sort((a, b) => toDate(b.fini) - toDate(a.fini));   // la plus récemment terminée d'abord
+  return todoGrid(done, { ...navSlots('todo') });
+}
 function refreshTodo() {
+  purgeOldTodos();
   PAGES.todo.slots = todoSlots();
-  if (state.page === 'todo') renderGui();
+  PAGES['todo-finies'].slots = doneTodoSlots();
+  if (state.page === 'todo' || state.page === 'todo-finies') renderGui();
 }
 // Ajouter : panneau (texte de l'action) -> inventaire créatif (choix de l'item) -> action ajoutée.
 function addTodo() {
@@ -371,13 +397,13 @@ function addTodo() {
     },
   });
 }
-// Oui = terminée (reste affichée, assombrie) ; Non = pas terminée ; Supprimer = retirée de la liste.
+// Oui = terminée (passe dans « Actions terminées ») ; Non = en cours ; Supprimer = retirée.
 function askTodoDone(todo) {
   const update = change => { change(); saveTodos(); refreshTodo(); };
   openConfirm({
     question: "L'objectif est-il terminé ?",
     detail: todo.texte.split('\n').map(l => l.trim()).filter(Boolean),
-    onYes: () => update(() => { todo.fini = formatDate(new Date()); }),
+    onYes: () => update(() => { todo.fini ||= formatDate(new Date()); }),
     onNo: () => update(() => { delete todo.fini; }),
     onDelete: () => update(() => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); }),
   });
@@ -391,7 +417,7 @@ function renameSlot(n) {
   };
 }
 
-const PAGE_TITLES = { main: 'Profil Joueur', todo: 'Liste de choses à faire', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments' };
+const PAGE_TITLES = { main: 'Profil Joueur', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
@@ -416,7 +442,11 @@ const PAGES = {
   },
   todo: {
     title: PAGE_TITLES.todo,
-    slots: todoSlots(),   // reconstruit à chaque ajout / suppression (refreshTodo)
+    slots: todoSlots(),   // reconstruit à chaque changement (refreshTodo)
+  },
+  'todo-finies': {
+    title: PAGE_TITLES['todo-finies'],
+    slots: doneTodoSlots(),
   },
   duree: {
     title: PAGE_TITLES.duree,
@@ -515,7 +545,7 @@ for (const n of [1, 2, 3]) {
 }
 
 const pageTitle = id => { const t = PAGES[id].title; return typeof t === 'function' ? t() : t; };
-Object.entries(PAGES).forEach(([id, page]) => { if (id !== 'todo') numberDuplicates(page.slots); });
+Object.entries(PAGES).forEach(([id, page]) => { if (!id.startsWith('todo')) numberDuplicates(page.slots); });
 
 const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
@@ -811,7 +841,7 @@ function renderGui() {
   ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
 
   drawText(ctx, font, pageTitle(state.page), 8, 6, '#404040', S);
-  if (state.page === 'todo') loadCreative();   // icônes de l'inventaire créatif chargées seulement ici
+  if (state.page.startsWith('todo')) loadCreative();   // icônes de l'inventaire créatif chargées seulement ici
 
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
@@ -934,6 +964,7 @@ function showPageFromHash() {
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
   hideTooltip();
+  if (state.page.startsWith('todo')) refreshTodo();   // retire les actions terminées depuis 30 jours
   renderGui();
 }
 
