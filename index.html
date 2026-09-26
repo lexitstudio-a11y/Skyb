@@ -95,16 +95,16 @@ function navSlots(previous) {
 }
 // Contenu commun des pages « Serment S … » :
 //   4 tableaux numérotés 1 à 4 (carré 2x2) et 12 blocs de terre cuite bleue numérotés 1 à 12 (2 colonnes x 6 lignes),
-//   numérotés de gauche à droite puis de haut en bas. count = nombre affiché en bas à droite de l'item.
+//   numérotés de gauche à droite puis de haut en bas (numéros ajoutés automatiquement, voir numberDuplicates).
 function sermentSlots() {
   const slots = {};
   for (let i = 0; i < 4; i++) {
     const n = i + 1;
-    slots[`${2 + Math.floor(i / 2)},${1 + i % 2}`] = { item: 'painting', count: n, tooltip: [`§aSaison ${n}`, ...LORE] };
+    slots[`${2 + Math.floor(i / 2)},${1 + i % 2}`] = { item: 'painting', tooltip: [`§aSaison ${n}`, ...LORE] };
   }
   for (let i = 0; i < 12; i++) {
     const n = i + 1;
-    slots[`${Math.floor(i / 2)},${6 + i % 2}`] = { block: 'blue_terracotta', count: n, tooltip: [`§aRound ${n}`, ...LORE] };
+    slots[`${Math.floor(i / 2)},${6 + i % 2}`] = { block: 'blue_terracotta', tooltip: [`§aRound ${n}`, ...LORE] };
   }
   return slots;
 }
@@ -125,7 +125,6 @@ function dateSlot(field) {
   const f = DATE_FIELDS[field];
   return {
     item: 'clock_00',
-    count: 1,
     sign: field,
     tooltip: () => [f.name, dates[field] ? `§7Date : §e${dates[field]}` : '§7Date : §cnon définie', '', '§eClique pour modifier !'],
   };
@@ -141,7 +140,6 @@ function plusOneYear(date) {
 function endDateSlot() {
   return {
     item: 'clock_00',
-    count: 2,
     tooltip: () => [
       '§cDate de fin',
       dates.start ? `§7Date : §e${plusOneYear(dates.start)}` : '§7Date : §cnon définie',
@@ -198,6 +196,25 @@ const PAGES = {
     slots: { ...sermentSlots(), ...navSlots('serments') },
   },
 };
+
+// Numérotation automatique : quand un même item apparaît plusieurs fois sur une page, chaque exemplaire
+// reçoit un numéro (1, 2, 3…) de gauche à droite puis de haut en bas, affiché en bas à droite de la case.
+// Un item unique sur sa page n'a pas de numéro. On peut forcer un numéro avec `count`.
+function numberDuplicates(slots) {
+  const groups = {};
+  const keys = Object.keys(slots).sort((a, b) => {
+    const [ra, ca] = a.split(',').map(Number), [rb, cb] = b.split(',').map(Number);
+    return ra - rb || ca - cb;
+  });
+  for (const key of keys) {
+    const slot = slots[key];
+    const type = slot.item || slot.block || slot.head;
+    if (type) (groups[type] ||= []).push(slot);
+  }
+  for (const group of Object.values(groups))
+    if (group.length > 1) group.forEach((slot, i) => { if (slot.count == null) slot.count = i + 1; });
+}
+Object.values(PAGES).forEach(page => numberDuplicates(page.slots));
 
 const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
