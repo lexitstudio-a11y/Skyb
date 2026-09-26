@@ -375,10 +375,11 @@ function numberDuplicates(slots) {
 // Pages « Les 3 Frères » : une par saison et par round de chaque serment (ex. #freres-1-saison3, #freres-2-round11).
 // Objectifs numérotés 1, 2, 3 : Résultat (lingot d'or), Actions (TNT, au centre), Identité (étiquette).
 // L'Objectif de Résultat est le serment lui-même : son overlay affiche le nom du serment n (sans « Serment S n - »).
-function freresSlots(n) {
+// id = identifiant de la page « Les 3 Frères » (ex. freres-1-saison3), pour ouvrir ses sous-pages.
+function freresSlots(n, id) {
   return {
     '2,2': { item: 'gold_ingot', count: 1, tooltip: () => ['§aObjectif de Résultat', '§7Ce que je veux atteindre', '§7émotionnellement.', ...(sermentSuffix(n) ? ['', '§f' + sermentSuffix(n)] : [])] },
-    '2,4': { block: 'tnt', count: 2, tooltip: [
+    '2,4': { block: 'tnt', count: 2, open: `${id}-actions`, tooltip: [
       "§aObjectifs d'Action",
       "§7Les actions à faire pour réussir",
       "§7l'Objectif de Résultat.",
@@ -390,7 +391,7 @@ function freresSlots(n) {
       '§7- 10K Steps/J',
       '', '§eClique pour voir !',
     ] },
-    '2,6': { item: 'name_tag', count: 3, tooltip: [
+    '2,6': { item: 'name_tag', count: 3, open: `${id}-identite`, tooltip: [
       "§aObjectifs d'Identité",
       '§7Quelles actions je dois faire à telle heure',
       "§7pour que je puisse réussir les Objectifs d'Action.",
@@ -409,8 +410,13 @@ function freresSlots(n) {
 }
 for (const n of [1, 2, 3]) {
   const periods = [...[1, 2, 3, 4].map(k => `saison${k}`), ...Array.from({ length: 12 }, (_, i) => `round${i + 1}`)];
-  for (const period of periods)
-    PAGES[`freres-${n}-${period}`] = { title: 'Les 3 Frères', slots: { ...freresSlots(n), ...navSlots(`serment${n}`) } };
+  for (const period of periods) {
+    const id = `freres-${n}-${period}`;
+    PAGES[id] = { title: 'Les 3 Frères', slots: { ...freresSlots(n, id), ...navSlots(`serment${n}`) } };
+    // Sous-pages (vides pour l'instant) ouvertes par la TNT et l'étiquette.
+    PAGES[`${id}-actions`] = { title: "Objectifs d'Action", slots: navSlots(id) };
+    PAGES[`${id}-identite`] = { title: "Objectifs d'Identité", slots: navSlots(id) };
+  }
 }
 
 const pageTitle = id => { const t = PAGES[id].title; return typeof t === 'function' ? t() : t; };
