@@ -698,7 +698,26 @@ function editActionGoals(id) {
     },
   });
 }
-// id = identifiant de la page « Les 3 Frères » (ex. freres-1-saison3), pour ouvrir ses sous-pages.
+// Objectifs d'Identité : même fonctionnement que les Objectifs d'Action (livre, affichés dans l'overlay de l'étiquette).
+const IDENTITY_KEY = 'objectifs-identite';
+const identityGoals = loadJSON(IDENTITY_KEY);
+const identityGoalLines = id => {
+  const lines = (identityGoals[id] || '').split('\n').map(l => l.trim()).filter(Boolean);
+  return lines.length ? ['', ...lines.flatMap(l => wrapText('- ' + l, 200).map(w => '§g' + w))] : [];
+};
+function editIdentityGoals(id) {
+  openSign({
+    book: true, title: "Objectifs d'Identité",
+    lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
+    initial: identityGoals[id] || '',
+    onDone: text => {
+      const clean = text.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+      if (clean) identityGoals[id] = clean; else delete identityGoals[id];
+      saveJSON(IDENTITY_KEY, identityGoals);
+    },
+  });
+}
+// id = identifiant de la page « Les 3 Frères » (ex. freres-1-saison3).
 function freresSlots(n, id) {
   return {
     '2,2': { item: 'gold_ingot', count: 1, action: () => editResultGoal(id), tooltip: () => ['§aObjectif de Résultat', '§7Ce que je veux atteindre', '§7émotionnellement.', '', resultGoal(id) ? '§f' + resultGoal(id) : '§8Pas encore défini.', '', '§eClique pour modifier !'] },
@@ -715,10 +734,11 @@ function freresSlots(n, id) {
       '§7- 10K Steps/J',
       '', '§eClique pour écrire !',
     ] },
-    '2,6': { item: 'name_tag', count: 3, open: `${id}-identite`, tooltip: [
+    '2,6': { item: 'name_tag', count: 3, action: () => editIdentityGoals(id), tooltip: () => [
       "§aObjectifs d'Identité",
       '§7Quelles actions je dois faire à telle heure',
       "§7pour que je puisse réussir les Objectifs d'Action.",
+      ...identityGoalLines(id),
       '',
       '§fEx :',
       '§7- À Quelle heure je dois me coucher ?',
@@ -728,7 +748,7 @@ function freresSlots(n, id) {
       '§7- Quel jour Nettoyer ?',
       "§7- À Quelle heure il me reste de l'énergie pour travailler ?",
       '§7- Quelle heure je dois arrêter les écrans ?',
-      '', '§eClique pour voir !',
+      '', '§eClique pour écrire !',
     ] },
   };
 }
@@ -780,7 +800,7 @@ function seasonGoals(n, season) {
       tooltip: () => ['§aObjectif de Résultat', tag, '', resultGoal(`freres-${n}-saison${season}`) ? '§f' + resultGoal(`freres-${n}-saison${season}`) : '§8Pas encore défini.', '', readOnly],
     },
     '3,4': { image: 'minecart_tnt', count: 2, tooltip: () => ["§aObjectifs d'Action", tag, ...actionGoalLines(`freres-${n}-saison${season}`), '', readOnly] },
-    '3,6': { image: 'laisse', count: 3, tooltip: ["§aObjectifs d'Identité", tag, '', readOnly] },
+    '3,6': { image: 'laisse', count: 3, tooltip: () => ["§aObjectifs d'Identité", tag, ...identityGoalLines(`freres-${n}-saison${season}`), '', readOnly] },
   };
 }
 // Page d'un round : œil de l'Ender en bas à gauche qui mène à la saison de ce round (numéroté avec la saison).
