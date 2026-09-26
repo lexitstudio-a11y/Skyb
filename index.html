@@ -83,6 +83,9 @@
   <canvas id="signCanvas"></canvas>
   <textarea id="signInput" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Texte du panneau"></textarea>
 </div>
+<div id="timeblockScreen" class="screen" hidden>
+  <canvas id="timeblockCanvas"></canvas>
+</div>
 <div id="dialogScreen" class="screen" hidden>
   <canvas id="dialogCanvas"></canvas>
 </div>
@@ -460,12 +463,14 @@ function refreshAgenda() {
   if (state.page.startsWith('agenda')) renderGui();
 }
 // Ouvre le livre de l'agenda de cette date (le crée s'il n'existe pas encore).
-function editAgenda(date) {
+// text : texte déjà tapé mais pas encore enregistré (retour depuis le Timeblock).
+function editAgenda(date, text) {
   const existing = agendas.find(a => a.date === date);
   openSign({
     book: true, title: 'Objectifs de la journée',
     lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
-    initial: existing ? existing.texte : '',
+    initial: text != null ? text : existing ? existing.texte : '',
+    onExtra: typed => openTimeblock(date, () => editAgenda(date, typed)),
     onDone: text => {
       const clean = text.split('\n').filter(l => l.trim()).join('\n');
       const i = agendas.findIndex(a => a.date === date);
@@ -1031,6 +1036,7 @@ function hideTooltip() {
 function showPageFromHash() {
   if (sign.cfg) closeSign();
   if (dialog.cfg) closeConfirm();
+  if (tb.date) closeTimeblock(false);
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
   hideTooltip();
@@ -1301,7 +1307,7 @@ signInput.addEventListener('input', () => {
 // Le curseur bouge (flèches, clic) : redessine la ligne active.
 document.addEventListener('selectionchange', () => { if (sign.cfg) { sign.blinkOn = true; renderSign(); } });
 signInput.addEventListener('keydown', ev => {
-  if (ev.key === 'Escape') { ev.preventDefault(); closeSign(); return; }
+  if (ev.key === 'Escape') { ev.preventDefault(); const cfg = sign.cfg; closeSign(); if (cfg.onCancel) cfg.onCancel(); return; }
   if (ev.key !== 'Enter') return;
   // Entrée : ligne suivante s'il en reste, sinon « Terminé ».
   const lineCount = sign.cfg.book ? bookRows(signInput.value).length : signInput.value.split('\n').length;
@@ -1320,8 +1326,10 @@ signCanvas.addEventListener('mousemove', ev => {
 signCanvas.addEventListener('click', ev => {
   if (sign.layout && inRect(ev, sign.layout.button)) { playClick(); finishSign(); }
   else if (sign.layout && sign.layout.button2 && inRect(ev, sign.layout.button2)) {
-    playClick();   // « Timeblock » : action à définir
-    signInput.focus();
+    playClick();
+    const cfg = sign.cfg, text = signInput.value;
+    if (cfg.onExtra) { closeSign(); cfg.onExtra(text); }   // ex. ouvrir le Timeblock de la journée
+    else signInput.focus();
   }
   else signInput.focus();
 });
@@ -1372,8 +1380,8 @@ function renderConfirm() {
   const bw = Math.min(90, Math.floor((W - 20) / 2)), by = y + 14;
   const no = [Math.floor(W / 2) - bw - 4, by, bw, 20], yes = [Math.floor(W / 2) + 4, by, bw, 20];
   const del = [no[0], by + 24, 2 * bw + 8, 20];   // sous les deux autres, sur toute leur largeur
-  drawButton(ctx, ...no.slice(0, 3), 'Non', dialog.hover === 'no', S);
-  drawButton(ctx, ...yes.slice(0, 3), 'Oui', dialog.hover === 'yes', S);
+  drawButton(ctx, ...no.slice(0, 3), dialog.cfg.noLabel || 'Non', dialog.hover === 'no', S);
+  drawButton(ctx, ...yes.slice(0, 3), dialog.cfg.yesLabel || 'Oui', dialog.hover === 'yes', S);
   if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), '§cSupprimer', dialog.hover === 'del', S);
   dialog.layout = { S, no, yes, del: dialog.cfg.onDelete ? del : null };
 }
@@ -1404,7 +1412,268 @@ dialogCanvas.addEventListener('click', ev => {
   else if (inRect(ev, yes, S)) { playClick(); closeConfirm(); cfg.onYes(); }
   else if (del && inRect(ev, del, S)) { playClick(); closeConfirm(); cfg.onDelete(); }
 });
-addEventListener('keydown', ev => { if (ev.key === 'Escape' && dialog.cfg) closeConfirm(); });
+addEventListener('keydown', ev => {
+  if (ev.key !== 'Escape' || !dialog.cfg) return;
+  ev.preventDefault();
+  const cfg = dialog.cfg;
+  closeConfirm();
+  if (cfg.onCancel) cfg.onCancel();
+});
+
+// --- Timeblocking : les blocs horaires d'une journée, dans le style Minecraft ---
+// Chaque bloc : { debut, fin } en minutes depuis minuit, + titre ; dessiné comme une bulle d'info Minecraft.
+// Glisser sur une zone vide = nouveau bloc ; glisser un bloc = le déplacer ; glisser son bord bas = changer
+// sa durée ; clic sur un bloc = renommer / supprimer. Molette = défiler dans la journée.
+const TB_KEY = 'timeblocks';
+const timeblocks = (() => { try { return JSON.parse(localStorage.getItem(TB_KEY)) || {}; } catch { return {}; } })();
+const TB_START = 6 * 60, TB_END = 24 * 60, TB_HOUR = 24, TB_SNAP = 15;   // de 6h à minuit, 24 px GUI par heure
+const TB_CONTENT = (TB_END - TB_START) * TB_HOUR / 60;
+const timeblockScreen = document.getElementById('timeblockScreen');
+const timeblockCanvas = document.getElementById('timeblockCanvas');
+const tb = { date: null, onClose: null, layout: null, scroll: null, drag: null, hoverDone: false };
+const fmtMin = m => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+const tbBlocks = () => timeblocks[tb.date] || [];
+function saveTimeblocks() {
+  for (const d of Object.keys(timeblocks)) if (!timeblocks[d].length) delete timeblocks[d];
+  try { localStorage.setItem(TB_KEY, JSON.stringify(timeblocks)); } catch {}
+}
+
+// Cadre gris clair façon inventaire (9 tranches de la texture du coffre).
+function drawPanel(ctx, x, y, w, h, S) {
+  const t = T.generic_54, b = 4;
+  const part = (sx, sy, sw, sh, dx, dy, dw, dh) => ctx.drawImage(t, sx, sy, sw, sh, dx * S, dy * S, dw * S, dh * S);
+  ctx.fillStyle = '#C6C6C6';
+  ctx.fillRect((x + b) * S, (y + b) * S, (w - 2 * b) * S, (h - 2 * b) * S);
+  part(0, 0, b, b, x, y, b, b); part(172, 0, b, b, x + w - b, y, b, b);
+  part(0, 218, b, b, x, y + h - b, b, b); part(172, 218, b, b, x + w - b, y + h - b, b, b);
+  part(b, 0, 1, b, x + b, y, w - 2 * b, b); part(b, 218, 1, b, x + b, y + h - b, w - 2 * b, b);
+  part(0, b, b, 1, x, y + b, b, h - 2 * b); part(172, b, b, 1, x + w - b, y + b, b, h - 2 * b);
+}
+// Bulle d'info Minecraft (fond sombre, coins coupés, bordure en dégradé) en pixels GUI.
+function drawBubble(ctx, x, y, w, h, S) {
+  const r = (rx, ry, rw, rh, fill) => { if (rw > 0 && rh > 0) { ctx.fillStyle = fill; ctx.fillRect(rx * S, ry * S, rw * S, rh * S); } };
+  r(x + 1, y, w - 2, h, TOOLTIP_BG);
+  r(x, y + 1, 1, h - 2, TOOLTIP_BG);
+  r(x + w - 1, y + 1, 1, h - 2, TOOLTIP_BG);
+  if (h < 5) return;
+  const grad = ctx.createLinearGradient(0, (y + 1) * S, 0, (y + h - 1) * S);
+  grad.addColorStop(0, TOOLTIP_BORDER_TOP);
+  grad.addColorStop(1, TOOLTIP_BORDER_BOTTOM);
+  r(x + 1, y + 1, w - 2, 1, TOOLTIP_BORDER_TOP);
+  r(x + 1, y + h - 2, w - 2, 1, TOOLTIP_BORDER_BOTTOM);
+  r(x + 1, y + 2, 1, h - 4, grad);
+  r(x + w - 2, y + 2, 1, h - 4, grad);
+}
+function fitText(text, w) {
+  if (textWidth(font, text) <= w) return text;
+  while (text && textWidth(font, text + '...') > w) text = text.slice(0, -1);
+  return text + '...';
+}
+
+function tbScale() {
+  return Math.max(1, Math.min(3, Math.floor(innerWidth / 236), Math.floor(innerHeight / 250)));
+}
+function renderTimeblock() {
+  const S = tbScale();
+  const { ctx, W, H } = prepareScreen(timeblockCanvas, S);
+  const pw = 220, ph = Math.min(H - 8, 18 + TB_CONTENT + 36);
+  const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph) / 2));
+  const grid = { x: px + 38, y: py + 18, w: pw - 38 - 8, h: ph - 18 - 34 };
+  const maxScroll = Math.max(0, TB_CONTENT - grid.h);
+  if (tb.scroll == null) {   // premier affichage : on se place sur le premier bloc (ou 8h)
+    const first = Math.min(8 * 60, ...tbBlocks().map(b => b.debut));
+    tb.scroll = (first - TB_START) * TB_HOUR / 60 - 4;
+  }
+  tb.scroll = Math.max(0, Math.min(maxScroll, tb.scroll));
+  const yOf = m => grid.y + (m - TB_START) * TB_HOUR / 60 - tb.scroll;
+
+  drawPanel(ctx, px, py, pw, ph, S);
+  drawText(ctx, font, 'Timeblock ' + tb.date, px + 8, py + 6, '#404040', S);
+  // Zone de la journée, creusée comme une case d'inventaire
+  const fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
+  fr(grid.x - 1, grid.y - 1, grid.w + 2, grid.h + 2, '#FFFFFF');
+  fr(grid.x - 1, grid.y - 1, grid.w + 1, grid.h + 1, '#373737');
+  fr(grid.x, grid.y, grid.w, grid.h, '#8B8B8B');
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(grid.x * S, grid.y * S, grid.w * S, grid.h * S);
+  ctx.clip();
+  for (let m = TB_START; m <= TB_END; m += 30) fr(grid.x, yOf(m), grid.w, 1, m % 60 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.3)');
+  const drawBlock = (debut, fin, title, sub) => {
+    const y1 = yOf(debut), h = yOf(fin) - y1;
+    drawBubble(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, S);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect((grid.x + 3) * S, (y1 + 2) * S, (grid.w - 6) * S, (h - 3) * S);
+    ctx.clip();
+    const ty = h >= 14 ? y1 + 4 : y1 + Math.floor((h - 8) / 2) + 1;
+    drawText(ctx, font, '§a' + fitText(title, grid.w - 14), grid.x + 6, ty, '#55FF55', S, true);
+    if (sub && h >= 24) drawText(ctx, font, sub, grid.x + 6, ty + 10, '#AAAAAA', S, true);
+    ctx.restore();
+  };
+  for (const b of tbBlocks()) if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre);
+  const d = tb.drag;
+  if (d && d.moved) {   // bloc en cours de création / déplacement : on affiche ses horaires
+    const [a, z] = d.mode === 'create' ? [Math.min(d.start, d.end), Math.max(d.start, d.end)] : [d.debut, d.fin];
+    drawBlock(a, z, d.mode === 'create' ? 'Nouveau bloc' : d.block.titre, `${fmtMin(a)} - ${fmtMin(z)}`);
+  }
+  if (tb.date === formatDate(new Date())) {   // heure actuelle
+    const now = new Date(), m = now.getHours() * 60 + now.getMinutes();
+    if (m >= TB_START) fr(grid.x, yOf(m), grid.w, 1, '#FF5555');
+  }
+  ctx.restore();
+
+  // Heures à gauche
+  for (let h = TB_START / 60; h <= TB_END / 60; h++) {
+    const y = yOf(h * 60) - 3;
+    if (y >= grid.y - 4 && y <= grid.y + grid.h - 5) drawText(ctx, font, fmtMin(h * 60), px + 7, y, '#404040', S);
+  }
+  const btn = [Math.floor(W / 2) - 32, py + ph - 26, 64, 20];
+  drawButton(ctx, btn[0], btn[1], btn[2], 'Terminé', tb.hoverDone, S);
+  tb.layout = { S, grid, btn, yOf };
+}
+
+function openTimeblock(date, onClose) {
+  tb.date = date;
+  tb.onClose = onClose;
+  tb.scroll = null;
+  showTimeblock();
+}
+function showTimeblock() {
+  hideTooltip();
+  canvas.hidden = true;
+  timeblockScreen.hidden = false;
+  tb.drag = null;
+  renderTimeblock();
+}
+function hideTimeblock() {
+  timeblockScreen.hidden = true;
+}
+function closeTimeblock(callBack = true) {
+  const done = tb.onClose;
+  hideTimeblock();
+  tb.date = null;
+  canvas.hidden = false;
+  renderGui();
+  if (callBack && done) done();
+}
+const tbOpen = () => tb.date && !timeblockScreen.hidden;
+
+function tbPoint(ev) {
+  const { S } = tb.layout;
+  return { x: ev.clientX / S, y: ev.clientY / S };
+}
+function tbTimeAt(y) {
+  const { grid } = tb.layout;
+  const m = TB_START + (y - grid.y + tb.scroll) * 60 / TB_HOUR;
+  return Math.max(TB_START, Math.min(TB_END, Math.round(m / TB_SNAP) * TB_SNAP));
+}
+function tbInGrid(p) {
+  const { grid } = tb.layout;
+  return p.x >= grid.x && p.x < grid.x + grid.w && p.y >= grid.y && p.y < grid.y + grid.h;
+}
+function tbBlockAt(p) {
+  const { yOf } = tb.layout;
+  return [...tbBlocks()].reverse().find(b => p.y >= yOf(b.debut) && p.y < yOf(b.fin));
+}
+// Titre d'un bloc (nouveau ou existant) sur un panneau ; retour ensuite au Timeblock.
+function editBlockTitle(block, isNew) {
+  hideTimeblock();
+  openSign({
+    title: isNew ? 'Nouveau bloc' : 'Renommer le bloc',
+    lines: 2, fixed: ['', '', '^^^^^^^^^^^^', `${fmtMin(block.debut)} - ${fmtMin(block.fin)}`],
+    initial: isNew ? '' : block.titre,
+    onDone: text => {
+      block.titre = text.split('\n').map(l => l.trim()).filter(Boolean).join(' ') || '(Sans titre)';
+      if (isNew) (timeblocks[tb.date] ||= []).push(block);
+      saveTimeblocks();
+      showTimeblock();
+    },
+    onCancel: showTimeblock,
+  });
+}
+function blockMenu(block) {
+  hideTimeblock();
+  openConfirm({
+    question: block.titre,
+    detail: [`De ${fmtMin(block.debut)} à ${fmtMin(block.fin)}`],
+    noLabel: 'Renommer', yesLabel: 'Retour',
+    onNo: () => editBlockTitle(block, false),
+    onYes: showTimeblock,
+    onCancel: showTimeblock,
+    onDelete: () => {
+      const list = timeblocks[tb.date] || [];
+      list.splice(list.indexOf(block), 1);
+      saveTimeblocks();
+      showTimeblock();
+    },
+  });
+}
+
+timeblockCanvas.addEventListener('pointerdown', ev => {
+  if (!tb.layout) return;
+  const p = tbPoint(ev);
+  if (inRect(ev, tb.layout.btn, tb.layout.S)) { playClick(); closeTimeblock(); return; }
+  if (!tbInGrid(p)) return;
+  timeblockCanvas.setPointerCapture(ev.pointerId);
+  const t = tbTimeAt(p.y), block = tbBlockAt(p);
+  if (block) {
+    const resize = p.y > tb.layout.yOf(block.fin) - 4;
+    tb.drag = { mode: resize ? 'resize' : 'move', block, debut: block.debut, fin: block.fin, grab: t - block.debut, t0: t, moved: false };
+  } else {
+    const start = Math.min(TB_END - TB_SNAP, Math.floor((TB_START + (p.y - tb.layout.grid.y + tb.scroll) * 60 / TB_HOUR) / TB_SNAP) * TB_SNAP);
+    tb.drag = { mode: 'create', start, end: start + TB_SNAP, t0: t, moved: false };
+  }
+});
+timeblockCanvas.addEventListener('pointermove', ev => {
+  if (!tb.layout) return;
+  const p = tbPoint(ev), d = tb.drag;
+  if (!d) {   // curseur selon ce qui est survolé
+    const block = tbInGrid(p) && tbBlockAt(p);
+    const onBtn = inRect(ev, tb.layout.btn, tb.layout.S);
+    timeblockCanvas.style.cursor = onBtn ? 'pointer' : block ? (p.y > tb.layout.yOf(block.fin) - 4 ? 'ns-resize' : 'move') : tbInGrid(p) ? 'crosshair' : '';
+    if (onBtn !== tb.hoverDone) { tb.hoverDone = onBtn; renderTimeblock(); }
+    return;
+  }
+  const t = tbTimeAt(p.y);
+  if (t !== d.t0) d.moved = true;
+  if (!d.moved) return;
+  if (d.mode === 'create') d.end = t === d.start ? d.start + TB_SNAP : t;
+  else if (d.mode === 'move') {
+    const dur = d.block.fin - d.block.debut;
+    d.debut = Math.max(TB_START, Math.min(TB_END - dur, t - d.grab));
+    d.fin = d.debut + dur;
+  } else d.fin = Math.max(d.debut + TB_SNAP, t);
+  renderTimeblock();
+});
+timeblockCanvas.addEventListener('pointerup', () => {
+  const d = tb.drag;
+  if (!d) return;
+  tb.drag = null;
+  if (d.mode === 'create') {
+    let [debut, fin] = [Math.min(d.start, d.end), Math.max(d.start, d.end)];
+    if (!d.moved) fin = Math.min(TB_END, debut + 60);   // simple clic : bloc d'une heure
+    playClick();
+    editBlockTitle({ debut, fin, titre: '' }, true);
+  } else if (!d.moved) {
+    playClick();
+    blockMenu(d.block);
+  } else {
+    d.block.debut = d.debut;
+    d.block.fin = d.fin;
+    saveTimeblocks();
+    renderTimeblock();
+  }
+});
+timeblockCanvas.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  tb.scroll += ev.deltaY / (tb.layout ? tb.layout.S : 2) / 2;
+  renderTimeblock();
+}, { passive: false });
+addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && !ev.defaultPrevented && tbOpen()) closeTimeblock();
+});
 
 function resize() {
   state.S = Math.max(2, Math.min(5, Math.floor(Math.min(innerWidth / (GUI_W + 16), innerHeight / (GUI_H + 16)))));
@@ -1415,6 +1684,7 @@ function resize() {
   renderGui();
   if (sign.cfg) renderSign();
   if (dialog.cfg) renderConfirm();
+  if (tbOpen()) renderTimeblock();
 }
 
 async function main() {
