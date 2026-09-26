@@ -1754,8 +1754,90 @@ function renderTimeblock() {
     if (y >= grid.y - 4 && y <= grid.y + grid.h - 5) drawText(ctx, font, fmtMin(h * 60), px + 7, y, '#404040', S);
   }
   const btn = [Math.floor(W / 2) - 32, py + ph - 26, 64, 20];
+  const photo = [px + pw - 8 - 50, py + ph - 26, 50, 20];   // « Photo » en bas à droite
   drawButton(ctx, btn[0], btn[1], btn[2], 'Terminé', tb.hoverDone, S);
-  tb.layout = { S, grid, btn, yOf };
+  drawButton(ctx, photo[0], photo[1], photo[2], 'Photo', tb.hoverPhoto, S);
+  tb.layout = { S, grid, btn, photo, yOf };
+}
+
+// --- « Photo » : image 1080 x 1920 (9:16) des blocs de la journée, pour un fond d'écran de téléphone ---
+// Dessinée en pixels GUI (216 x 384) puis agrandie x5 ; les heures affichées couvrent les blocs (8 h au minimum).
+let photoBackground = null;
+function loadPhotoBackground() {
+  photoBackground ||= new Promise(res => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = 'assets/background.webp'; });
+  return photoBackground;
+}
+async function timeblockPhoto() {
+  const S = 5, W = 216, H = 384;
+  const cv = document.createElement('canvas');
+  cv.width = W * S;
+  cv.height = H * S;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  // Fond : l'image du site, assombrie
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  const bg = await loadPhotoBackground();
+  if (bg) {
+    const k = Math.max(cv.width / bg.width, cv.height / bg.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(bg, (cv.width - bg.width * k) / 2, (cv.height - bg.height * k) / 2, bg.width * k, bg.height * k);
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+  const blocks = tbBlocks();
+  let start = blocks.length ? Math.floor(Math.min(...blocks.map(b => b.debut)) / 60) * 60 : 8 * 60;
+  let end = blocks.length ? Math.ceil(Math.max(...blocks.map(b => b.fin)) / 60) * 60 : 16 * 60;
+  if (end - start < 8 * 60) end = Math.min(TB_END, start + 8 * 60);
+  if (end - start < 8 * 60) start = Math.max(TB_START, end - 8 * 60);
+
+  const px = 8, py = 20, pw = W - 16, ph = H - 36;   // marges pour les zones système du téléphone
+  drawPanel(ctx, px, py, pw, ph, S);
+  drawText(ctx, font, 'Timeblock ' + tb.date, px + 8, py + 7, '#404040', S);
+  const grid = { x: px + 38, y: py + 26, w: pw - 38 - 8, h: ph - 26 - 16 };
+  const hourH = grid.h * 60 / (end - start);
+  const yOf = m => grid.y + (m - start) * hourH / 60;
+  const fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
+  fr(grid.x - 1, grid.y - 1, grid.w + 2, grid.h + 2, '#FFFFFF');
+  fr(grid.x - 1, grid.y - 1, grid.w + 1, grid.h + 1, '#373737');
+  fr(grid.x, grid.y, grid.w, grid.h, '#8B8B8B');
+  for (let m = start; m <= end; m += 30) fr(grid.x, Math.round(yOf(m)), grid.w, 1, m % 60 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.3)');
+  for (let m = start; m <= end; m += 60) drawText(ctx, font, fmtMin(m), px + 7, Math.round(yOf(m)) - 3, '#404040', S);
+  blocks.forEach((b, i) => {
+    const y1 = Math.round(yOf(b.debut)), h = Math.round(yOf(b.fin)) - y1;
+    drawColorBlock(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, TB_COLORS[(b.couleur ?? i) % TB_COLORS.length], S);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect((grid.x + 3) * S, (y1 + 2) * S, (grid.w - 6) * S, (h - 3) * S);
+    ctx.clip();
+    const hours = `${fmtMin(b.debut)} - ${fmtMin(b.fin)}`, tx = grid.x + 8, maxW = grid.w - 18;
+    if (h >= 28) {
+      drawText(ctx, font, fitText(b.titre, maxW), tx, y1 + 7, '#FFFFFF', S, true);
+      drawText(ctx, font, hours, tx, y1 + 17, '#E8E8E8', S, true);
+    } else {
+      const ty = h >= 20 ? y1 + 7 : y1 + Math.floor((h - 8) / 2) + 1;
+      const hw = textWidth(font, hours);
+      drawText(ctx, font, fitText(b.titre, maxW - hw - 6), tx, ty, '#FFFFFF', S, true);
+      drawText(ctx, font, hours, tx + maxW - hw, ty, '#E8E8E8', S, true);
+    }
+    ctx.restore();
+  });
+
+  // Enregistrement : partage (téléphone) ou téléchargement du PNG
+  const name = `timeblock-${tb.date.split('/').reverse().join('-')}.png`;
+  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  const file = new File([blob], name, { type: 'image/png' });
+  if (navigator.maxTouchPoints > 0 && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 function openTimeblock(date, onClose) {
@@ -1839,6 +1921,7 @@ timeblockCanvas.addEventListener('pointerdown', ev => {
   if (!tb.layout) return;
   const p = tbPoint(ev);
   if (inRect(ev, tb.layout.btn, tb.layout.S)) { playClick(); closeTimeblock(); return; }
+  if (inRect(ev, tb.layout.photo, tb.layout.S)) { playClick(); timeblockPhoto(); return; }
   if (!tbInGrid(p)) return;
   timeblockCanvas.setPointerCapture(ev.pointerId);
   const t = tbTimeAt(p.y), block = tbBlockAt(p);
@@ -1855,8 +1938,9 @@ timeblockCanvas.addEventListener('pointermove', ev => {
   const p = tbPoint(ev), d = tb.drag;
   if (!d) {   // curseur selon ce qui est survolé
     const block = tbInGrid(p) && tbBlockAt(p);
-    const onBtn = inRect(ev, tb.layout.btn, tb.layout.S);
-    timeblockCanvas.style.cursor = onBtn ? 'pointer' : block ? (p.y > tb.layout.yOf(block.fin) - 4 ? 'ns-resize' : 'move') : tbInGrid(p) ? 'crosshair' : '';
+    const onBtn = inRect(ev, tb.layout.btn, tb.layout.S), onPhoto = inRect(ev, tb.layout.photo, tb.layout.S);
+    if (onPhoto !== !!tb.hoverPhoto) { tb.hoverPhoto = onPhoto; renderTimeblock(); }
+    timeblockCanvas.style.cursor = onBtn || onPhoto ? 'pointer' : block ? (p.y > tb.layout.yOf(block.fin) - 4 ? 'ns-resize' : 'move') : tbInGrid(p) ? 'crosshair' : '';
     if (onBtn !== tb.hoverDone) { tb.hoverDone = onBtn; renderTimeblock(); }
     return;
   }
