@@ -141,6 +141,14 @@ function sermentSlots() {
   }
   return slots;
 }
+// Une colonne de la page « Serments S » : le livre du serment en haut, puis 5 vitres colorées en dessous.
+function sermentColumn(col, page, name) {
+  const panes = ['lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass', 'red_stained_glass', 'red_stained_glass'];
+  const slots = { [`0,${col}`]: { item: 'book', tooltip: [`§a${name}`, ...LORE], open: page } };
+  panes.forEach((pane, i) => { slots[`${i + 1},${col}`] = { pane }; });
+  return slots;
+}
+
 // Date d'entrée des serments, saisie sur un panneau et gardée dans ce navigateur ;
 // la date de fin en est déduite (date d'entrée + 1 an).
 const DATES_KEY = 'serments-dates';
@@ -235,19 +243,10 @@ const PAGES = {
   serments: {
     title: PAGE_TITLES.serments,
     slots: {
-      '0,4': { item: 'painting', tooltip: ['§aDurée des Serments', ...LORE], open: 'duree' },
-      '1,1': { item: 'book', tooltip: ['§aSerment S 1 - 12K/Mois', ...LORE], open: 'serment1' },
-      '1,3': { pane: 'lime_stained_glass' },
-      '1,4': { pane: 'yellow_stained_glass' },
-      '1,5': { pane: 'red_stained_glass' },
-      '1,6': { pane: 'red_stained_glass' },
-      '1,7': { pane: 'red_stained_glass' },
-      '3,1': { item: 'book', tooltip: ['§aSerment S 2 - 75Kg Sec', ...LORE], open: 'serment2' },
-      '3,3': { pane: 'lime_stained_glass' },
-      '3,4': { pane: 'yellow_stained_glass' },
-      '3,5': { pane: 'red_stained_glass' },
-      '3,6': { pane: 'red_stained_glass' },
-      '3,7': { pane: 'red_stained_glass' },
+      ...sermentColumn(1, 'serment1', 'Serment S 1 - 12K/Mois'),
+      ...sermentColumn(3, 'serment2', 'Serment S 2 - 75Kg Sec'),
+      ...sermentColumn(5, 'serment3', 'Serment S 3'),
+      '5,8': { item: 'painting', tooltip: ['§aDurée des Serments', ...LORE], open: 'duree' },
       ...navSlots('main'),
     },
   },
@@ -265,6 +264,10 @@ const PAGES = {
   },
   serment2: {
     title: 'Serment S 2 - 75Kg Sec',
+    slots: { ...sermentSlots(), ...navSlots('serments') },
+  },
+  serment3: {
+    title: 'Serment S 3',
     slots: { ...sermentSlots(), ...navSlots('serments') },
   },
 };
