@@ -31,7 +31,30 @@
   #tooltip {
     position: fixed;
     pointer-events: none;
-    z-index: 10;
+    z-index: 30;
+  }
+  /* Écrans plein écran (inventaire créatif, question oui/non). */
+  .screen {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+  }
+  .screen[hidden] {
+    display: none;
+  }
+  .screen canvas {
+    position: absolute;
+    inset: 0;
+  }
+  #creativeSearch {
+    position: absolute;
+    opacity: 0;
+    font-size: 16px;
+    border: 0;
+    padding: 0;
+    color: transparent;
+    background: transparent;
+    caret-color: transparent;
   }
   #signScreen {
     position: fixed;
@@ -70,6 +93,13 @@
   <canvas id="signCanvas"></canvas>
   <textarea id="signInput" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Texte du panneau"></textarea>
 </div>
+<div id="creativeScreen" class="screen" hidden>
+  <canvas id="creativeCanvas"></canvas>
+  <input id="creativeSearch" type="text" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Rechercher un objet">
+</div>
+<div id="dialogScreen" class="screen" hidden>
+  <canvas id="dialogCanvas"></canvas>
+</div>
 <script>
 // Interface "Profil Joueur" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
 const TEX = 'assets/textures/';
@@ -80,7 +110,7 @@ const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la c
 
 // Pages de l'interface. Chaque page : un titre + le contenu des cases (ligne, colonne) ;
 // les cases absentes = vitre teintée noire.
-//   item / block / head / image : l'item affiché (image = fichier PNG utilisé tel quel) ;  pane : vitre colorée décorative (pas un item, pas d'overlay)
+//   item / block / head / image / icon : l'item affiché (image = fichier PNG tel quel, icon = item de l'inventaire créatif) ;  pane : vitre colorée décorative (pas un item, pas d'overlay)
 //   tooltip : lignes de l'overlay au survol (1re ligne = nom). Codes couleur Minecraft : §a vert, §7 gris, §e jaune…
 //   open : page ouverte au clic ;  action : fonction appelée au clic (ex. ouvrir un panneau de saisie)
 //   tooltip peut aussi être une fonction qui renvoie les lignes (contenu dynamique)
@@ -292,6 +322,63 @@ function sermentBookTooltip(n) {
   };
 }
 
+// --- Liste de choses à faire ---
+// Chaque action : { texte, item (id Minecraft choisi dans l'inventaire créatif), date }.
+// Rangées de gauche à droite puis de haut en bas dans la zone de 4x7 cases, la plus récente en haut à gauche.
+const TODO_KEY = 'todo-actions';
+const todos = (() => { try { return JSON.parse(localStorage.getItem(TODO_KEY)) || []; } catch { return []; } })();
+const TODO_ROWS = 4, TODO_COLS = 7;
+function saveTodos() {
+  try { localStorage.setItem(TODO_KEY, JSON.stringify(todos)); } catch {}
+}
+function todoSlots() {
+  const slots = {
+    '5,8': { image: 'tete_plus', tooltip: ['§aAjouter', '§7Ajoute une action à faire.', '', '§eClique pour ajouter !'], action: addTodo },
+    ...navSlots('main'),
+  };
+  const newestFirst = [...todos].reverse().slice(0, TODO_ROWS * TODO_COLS);
+  newestFirst.forEach((todo, i) => {
+    const lines = todo.texte.split('\n').map(l => l.trim()).filter(Boolean);
+    slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = {
+      icon: todo.item,
+      tooltip: ['§a' + (lines[0] || 'Action'), ...lines.slice(1).map(l => '§7' + l), '', `§8Ajoutée le ${todo.date}`, '§eClique quand elle est terminée !'],
+      action: () => askTodoDone(todo),
+    };
+  });
+  return slots;
+}
+function refreshTodo() {
+  PAGES.todo.slots = todoSlots();
+  if (state.page === 'todo') renderGui();
+}
+// Ajouter : panneau (texte de l'action) -> inventaire créatif (choix de l'item) -> action ajoutée.
+function addTodo() {
+  openSign({
+    title: "Écris l'action à faire",
+    lines: 4, fixed: [],
+    onDone: text => {
+      if (!text.trim()) return;
+      openCreative(item => {
+        todos.push({ texte: text, item, date: formatDate(new Date()) });
+        saveTodos();
+        refreshTodo();
+      });
+    },
+  });
+}
+function askTodoDone(todo) {
+  openConfirm({
+    question: "L'objectif est-il terminé ?",
+    detail: todo.texte.split('\n').map(l => l.trim()).filter(Boolean),
+    onYes: () => {
+      const i = todos.indexOf(todo);
+      if (i >= 0) todos.splice(i, 1);
+      saveTodos();
+      refreshTodo();
+    },
+  });
+}
+
 function renameSlot(n) {
   return {
     block: 'cyan_terracotta',
@@ -325,10 +412,7 @@ const PAGES = {
   },
   todo: {
     title: PAGE_TITLES.todo,
-    slots: {
-      '5,8': { image: 'tete_plus', tooltip: ['§aAjouter', ...LORE] },
-      ...navSlots('main'),
-    },
+    slots: todoSlots(),   // reconstruit à chaque ajout / suppression (refreshTodo)
   },
   duree: {
     title: PAGE_TITLES.duree,
@@ -427,13 +511,13 @@ for (const n of [1, 2, 3]) {
 }
 
 const pageTitle = id => { const t = PAGES[id].title; return typeof t === 'function' ? t() : t; };
-Object.values(PAGES).forEach(page => numberDuplicates(page.slots));
+Object.entries(PAGES).forEach(([id, page]) => { if (id !== 'todo') numberDuplicates(page.slots); });
 
 const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'creatif/tab_item_search', 'creatif/scroller', 'creatif/scroller_disabled', 'creatif/tab_top_selected_7', 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -441,7 +525,7 @@ const FILES = [
 function load(name) {
   return new Promise((res, rej) => {
     const img = new Image();
-    img.onload = () => res([name, img]);
+    img.onload = () => res([name.split('/').pop(), img]);   // clé = nom du fichier sans dossier
     img.onerror = rej;
     img.src = TEX + name + '.png';
   });
@@ -738,6 +822,10 @@ function renderGui() {
         }
         else if (look.block) drawCube(ctx, BLOCKS[look.block], px, py, S, (look.block === 'chest' ? 0.9 : 1) * ITEM_SCALE);
         else if (look.head) drawCube(ctx, HEADS[look.head], px, py, S, 0.85 * ITEM_SCALE);
+        else if (look.icon) {
+          const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
+          drawIcon(ctx, look.icon, px + off, py + off, size);
+        }
         else if (look.image) {
           // Image fournie telle quelle (rendu déjà en 3D) : réduite pour tenir dans la case, proportions gardées.
           const img = T[look.image], size = 16 * S * ITEM_SCALE * 0.9;
@@ -835,6 +923,8 @@ function hideTooltip() {
 // Navigation entre pages via l'ancre de l'URL (#serments), pour que "Précédent" du navigateur marche.
 function showPageFromHash() {
   if (sign.cfg) closeSign();
+  if (creative.onPick) closeCreative();
+  if (dialog.cfg) closeConfirm();
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
   hideTooltip();
@@ -876,13 +966,31 @@ const signInput = document.getElementById('signInput');
 const sign = { cfg: null, error: false, hoverDone: false, blinkOn: true, timer: null, layout: null };
 const SIGN_TEXT_W = 90;   // largeur max d'une ligne de texte sur le panneau (pixels GUI)
 
-// Coupe le texte au nombre de lignes et à la largeur du panneau.
-function fitSignText(text) {
-  const lines = text.split('\n').slice(0, sign.cfg.lines);
-  return lines.map(line => {
-    while (line && textWidth(font, line) > SIGN_TEXT_W) line = line.slice(0, -1);
-    return line;
-  }).join('\n');
+// Fait tenir le texte dans le panneau : une ligne trop longue passe à la ligne suivante
+// (coupure au dernier espace si possible), et ce qui dépasse la dernière ligne est coupé.
+// caret = position du curseur, ajustée si des caractères sont ajoutés ou retirés avant lui.
+function fitSignText(text, caret = text.length) {
+  const max = sign.cfg.lines;
+  for (let guard = 0; guard < 200; guard++) {
+    const lines = text.split('\n');
+    const i = lines.findIndex(l => textWidth(font, l) > SIGN_TEXT_W);
+    if (i < 0) break;
+    const start = lines.slice(0, i).reduce((n, l) => n + l.length + 1, 0), line = lines[i];
+    let k = 0;
+    while (k < line.length && textWidth(font, line.slice(0, k + 1)) <= SIGN_TEXT_W) k++;
+    if (lines.length < max) {
+      const sp = line.lastIndexOf(' ', k);
+      if (sp > 0) text = text.slice(0, start + sp) + '\n' + text.slice(start + sp + 1);   // espace -> retour à la ligne
+      else { text = text.slice(0, start + k) + '\n' + text.slice(start + k); if (caret > start + k) caret++; }
+    } else {
+      const cut = line.length - k;   // plus de ligne libre : on coupe
+      text = text.slice(0, start + k) + text.slice(start + line.length);
+      if (caret > start + k) caret = Math.max(start + k, caret - cut);
+    }
+  }
+  const lines = text.split('\n');
+  if (lines.length > max) text = lines.slice(0, max).join('\n');
+  return { text, caret: Math.min(caret, text.length) };
 }
 
 function signScale() {
@@ -931,22 +1039,36 @@ function renderSign() {
     }
   }
 
-  // Bouton "Terminé" (texture de bouton Minecraft, 200x20) ; plus étroit sur petit écran :
-  // on garde les deux bords de la texture (moitié gauche + moitié droite).
-  const btnW = Math.min(200, W - 16), half = Math.floor(btnW / 2);
-  const btnX = Math.floor(W / 2) - half, btnY = Math.min(H - 24, by + 48 + 56 + 16);
-  const btnTex = sign.hoverDone ? T.button_highlighted : T.button;
-  ctx.drawImage(btnTex, 0, 0, half, 20, btnX * S, btnY * S, half * S, 20 * S);
-  ctx.drawImage(btnTex, 200 - (btnW - half), 0, btnW - half, 20, (btnX + half) * S, btnY * S, (btnW - half) * S, 20 * S);
-  centered('Terminé', btnY + 6, '#FFFFFF', true);
+  const btnW = Math.min(200, W - 16);
+  const btnX = Math.floor(W / 2) - Math.floor(btnW / 2), btnY = Math.min(H - 24, by + 48 + 56 + 16);
+  drawButton(ctx, btnX, btnY, btnW, 'Terminé', sign.hoverDone, S);
 
   sign.layout = { S, board: [bx, by, 96, 48], button: [btnX, btnY, btnW, 20] };
   Object.assign(signInput.style, { left: bx * S + 'px', top: by * S + 'px', width: 96 * S + 'px', height: 48 * S + 'px' });
 }
 
-function inRect(ev, [x, y, w, h]) {
-  const S = sign.layout.S, gx = ev.clientX / S, gy = ev.clientY / S;
+function inRect(ev, [x, y, w, h], S = sign.layout.S) {
+  const gx = ev.clientX / S, gy = ev.clientY / S;
   return gx >= x && gx < x + w && gy >= y && gy < y + h;
+}
+
+// Bouton Minecraft (texture 200x20) en pixels GUI ; plus étroit : on garde les deux bords de la texture.
+function drawButton(ctx, x, y, w, label, hover, S) {
+  const half = Math.floor(w / 2), tex = hover ? T.button_highlighted : T.button;
+  ctx.drawImage(tex, 0, 0, half, 20, x * S, y * S, half * S, 20 * S);
+  ctx.drawImage(tex, 200 - (w - half), 0, w - half, 20, (x + half) * S, y * S, (w - half) * S, 20 * S);
+  drawText(ctx, font, label, x + Math.floor(w / 2 - textWidth(font, label) / 2), y + 6, '#FFFFFF', S, true);
+}
+
+// Fond assombri commun aux écrans plein écran ; renvoie la taille en pixels GUI.
+function prepareScreen(cv, S) {
+  cv.width = innerWidth;
+  cv.height = innerHeight;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = 'rgba(16, 16, 16, 0.35)';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  return { ctx, W: Math.floor(innerWidth / S), H: Math.floor(innerHeight / S) };
 }
 
 function openSign(cfg) {
@@ -954,7 +1076,7 @@ function openSign(cfg) {
   sign.error = false;
   sign.hoverDone = false;
   signInput.inputMode = cfg.numeric ? 'numeric' : 'text';
-  signInput.value = fitSignText(sign.cfg.transform(cfg.initial || ''));
+  signInput.value = fitSignText(sign.cfg.transform(cfg.initial || '')).text;
   hideTooltip();
   canvas.hidden = true;
   signScreen.hidden = false;
@@ -987,8 +1109,12 @@ function finishSign() {
 }
 
 signInput.addEventListener('input', () => {
-  const fitted = fitSignText(sign.cfg.transform(signInput.value));
-  if (fitted !== signInput.value) signInput.value = fitted;
+  const raw = sign.cfg.transform(signInput.value);
+  const { text, caret } = fitSignText(raw, signInput.selectionStart + raw.length - signInput.value.length);
+  if (text !== signInput.value) {
+    signInput.value = text;
+    signInput.setSelectionRange(caret, caret);
+  }
   sign.error = false;
   sign.blinkOn = true;
   renderSign();
@@ -1045,6 +1171,207 @@ function openDateSign(field) {
   });
 }
 
+// --- Inventaire créatif (Minecraft 26.3) : choisir un item ---
+// Icônes générées par outils/generer_inventaire_creatif.py (assets/creatif/atlas.png + items.json).
+const CREATIVE = { ready: null, atlas: null, items: [], byId: {}, size: 32, cols: 40 };
+function loadCreative() {
+  CREATIVE.ready ||= Promise.all([
+    fetch('assets/creatif/items.json').then(r => r.json()),
+    new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = 'assets/creatif/atlas.png'; }),
+  ]).then(([data, atlas]) => {
+    Object.assign(CREATIVE, { atlas, items: data.items, size: data.taille, cols: data.colonnes });
+    for (const it of data.items) CREATIVE.byId[it.id] = it;
+    renderGui();   // les actions déjà créées peuvent maintenant afficher leur icône
+  });
+  return CREATIVE.ready;
+}
+function drawIcon(ctx, id, x, y, size) {
+  const it = CREATIVE.byId[id];
+  if (!it || !CREATIVE.atlas) return;
+  const n = CREATIVE.size;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(CREATIVE.atlas, (it.i % CREATIVE.cols) * n, Math.floor(it.i / CREATIVE.cols) * n, n, n, x, y, size, size);
+}
+
+const creativeScreen = document.getElementById('creativeScreen');
+const creativeCanvas = document.getElementById('creativeCanvas');
+const creativeSearch = document.getElementById('creativeSearch');
+const creative = { onPick: null, list: [], scroll: 0, hovered: -1, dragging: false, blinkOn: true, timer: null, layout: null };
+const normalize = t => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const C_W = 195, C_H = 136;   // taille de l'écran créatif (texture tab_item_search)
+
+function creativeScale() {
+  return Math.max(1, Math.min(5, Math.floor(innerWidth / C_W), Math.floor(innerHeight / (C_H + 36))));
+}
+function filterCreative() {
+  const q = normalize(creativeSearch.value.trim());
+  creative.list = q ? CREATIVE.items.filter(it => normalize(it.nom).includes(q) || it.id.includes(q.replace(/ /g, '_'))) : CREATIVE.items;
+  creative.scroll = 0;
+}
+const creativeMaxScroll = () => Math.max(0, Math.ceil(creative.list.length / 9) - 5);
+
+function renderCreative() {
+  const S = creativeScale();
+  const { ctx, W, H } = prepareScreen(creativeCanvas, S);
+  const left = Math.floor((W - C_W) / 2), top = Math.floor((H - C_H + 28) / 2);
+  const tabX = left + 169, tabY = top - 28;
+  ctx.drawImage(T.tab_item_search, 0, 0, C_W, C_H, left * S, top * S, C_W * S, C_H * S);
+  ctx.drawImage(T.tab_top_selected_7, tabX * S, tabY * S, 26 * S, 32 * S);   // onglet « Rechercher »
+  drawIcon(ctx, 'compass', (tabX + 5) * S, (tabY + 9) * S, 16 * S);
+  drawText(ctx, font, 'Rechercher', left + 8, top + 6, '#404040', S);
+  // Champ de recherche
+  let q = creativeSearch.value;
+  while (q && textWidth(font, q + '_') > 86) q = q.slice(1);
+  drawText(ctx, font, q + (creative.blinkOn ? '_' : ''), left + 82, top + 6, '#FFFFFF', S, true);
+  // Grille 9x5
+  for (let r = 0; r < 5; r++)
+    for (let c = 0; c < 9; c++) {
+      const idx = (creative.scroll + r) * 9 + c, it = creative.list[idx];
+      const x = left + 9 + c * 18, y = top + 18 + r * 18;
+      if (it) drawIcon(ctx, it.id, x * S, y * S, 16 * S);
+      if (it && idx === creative.hovered) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fillRect(x * S, y * S, 16 * S, 16 * S);
+      }
+    }
+  // Barre de défilement
+  const max = creativeMaxScroll();
+  const sy = top + 18 + (max ? Math.round(97 * creative.scroll / max) : 0);
+  ctx.drawImage(max ? T.scroller : T.scroller_disabled, (left + 175) * S, sy * S, 12 * S, 15 * S);
+  creative.layout = { S, left, top };
+  Object.assign(creativeSearch.style, { left: (left + 80) * S + 'px', top: (top + 4) * S + 'px', width: 90 * S + 'px', height: 12 * S + 'px' });
+}
+
+function creativeSlotAt(ev) {
+  const { S, left, top } = creative.layout;
+  const gx = ev.clientX / S - left - 8, gy = ev.clientY / S - top - 17;
+  const c = Math.floor(gx / 18), r = Math.floor(gy / 18);
+  if (gx < 0 || gy < 0 || c > 8 || r > 4) return -1;
+  const idx = (creative.scroll + r) * 9 + c;
+  return idx < creative.list.length ? idx : -1;
+}
+function creativeScrollTo(ev) {
+  const { S, top } = creative.layout;
+  const max = creativeMaxScroll();
+  const t = (ev.clientY / S - top - 18 - 7) / 97;
+  creative.scroll = Math.round(Math.max(0, Math.min(1, t)) * max);
+}
+function onScrollbar(ev) {
+  const { S, left, top } = creative.layout;
+  const gx = ev.clientX / S - left, gy = ev.clientY / S - top;
+  return gx >= 174 && gx < 188 && gy >= 18 && gy < 130;
+}
+
+async function openCreative(onPick) {
+  await loadCreative();
+  creative.onPick = onPick;
+  creative.hovered = -1;
+  creativeSearch.value = '';
+  filterCreative();
+  hideTooltip();
+  canvas.hidden = true;
+  creativeScreen.hidden = false;
+  clearInterval(creative.timer);
+  creative.timer = setInterval(() => { creative.blinkOn = !creative.blinkOn; renderCreative(); }, 300);
+  renderCreative();
+  creativeSearch.focus();
+}
+function closeCreative() {
+  clearInterval(creative.timer);
+  creativeScreen.hidden = true;
+  canvas.hidden = false;
+  creative.onPick = null;
+  tip.hidden = true;
+  renderGui();
+}
+
+creativeSearch.addEventListener('input', () => { filterCreative(); creative.blinkOn = true; renderCreative(); });
+creativeSearch.addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.preventDefault(); closeCreative(); } });
+creativeCanvas.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  creative.scroll = Math.max(0, Math.min(creativeMaxScroll(), creative.scroll + Math.sign(ev.deltaY)));
+  creative.hovered = creativeSlotAt(ev);
+  renderCreative();
+}, { passive: false });
+creativeCanvas.addEventListener('mousedown', ev => {
+  if (!onScrollbar(ev)) return;
+  creative.dragging = true;
+  creativeScrollTo(ev);
+  renderCreative();
+});
+addEventListener('mouseup', () => { creative.dragging = false; });
+creativeCanvas.addEventListener('mousemove', ev => {
+  if (creative.dragging) { creativeScrollTo(ev); renderCreative(); return; }
+  const idx = creativeSlotAt(ev);
+  if (idx !== creative.hovered) {
+    creative.hovered = idx;
+    renderCreative();
+    if (idx >= 0) {
+      renderTooltip(tip, font, ['§f' + creative.list[idx].nom], tooltipScale(creative.layout.S));
+      tip.hidden = false;
+    } else tip.hidden = true;
+    creativeCanvas.style.cursor = idx >= 0 ? 'pointer' : '';
+  }
+  if (!tip.hidden) placeTooltip(ev);
+});
+creativeCanvas.addEventListener('mouseleave', () => { creative.hovered = -1; tip.hidden = true; renderCreative(); });
+creativeCanvas.addEventListener('click', ev => {
+  const idx = creativeSlotAt(ev);
+  if (idx < 0) { creativeSearch.focus(); return; }
+  playClick();
+  const pick = creative.onPick, id = creative.list[idx].id;
+  closeCreative();
+  pick(id);
+});
+
+// --- Question oui / non (comme l'écran de confirmation de Minecraft) ---
+const dialogScreen = document.getElementById('dialogScreen');
+const dialogCanvas = document.getElementById('dialogCanvas');
+const dialog = { cfg: null, hover: null, layout: null };
+
+function renderConfirm() {
+  const S = signScale();
+  const { ctx, W, H } = prepareScreen(dialogCanvas, S);
+  const centered = (text, y, color) => drawText(ctx, font, text, Math.floor(W / 2 - textWidth(font, text) / 2), y, color, S, true);
+  const lines = dialog.cfg.detail || [];
+  let y = Math.floor(H / 2) - 30 - lines.length * 5;
+  centered(dialog.cfg.question, y, '#FFFFFF');
+  y += 16;
+  for (const line of lines) { centered(line, y, '#AAAAAA'); y += 10; }
+  const bw = Math.min(150, Math.floor((W - 20) / 2)), by = y + 14;
+  const no = [Math.floor(W / 2) - bw - 4, by, bw, 20], yes = [Math.floor(W / 2) + 4, by, bw, 20];
+  drawButton(ctx, ...no.slice(0, 3), 'Non', dialog.hover === 'no', S);
+  drawButton(ctx, ...yes.slice(0, 3), 'Oui', dialog.hover === 'yes', S);
+  dialog.layout = { S, no, yes };
+}
+function openConfirm(cfg) {
+  dialog.cfg = cfg;
+  dialog.hover = null;
+  hideTooltip();
+  canvas.hidden = true;
+  dialogScreen.hidden = false;
+  renderConfirm();
+}
+function closeConfirm() {
+  dialogScreen.hidden = true;
+  canvas.hidden = false;
+  dialog.cfg = null;
+  renderGui();
+}
+dialogCanvas.addEventListener('mousemove', ev => {
+  const { S, no, yes } = dialog.layout;
+  const hover = inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : null;
+  dialogCanvas.style.cursor = hover ? 'pointer' : '';
+  if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
+});
+dialogCanvas.addEventListener('click', ev => {
+  const { S, no, yes } = dialog.layout;
+  const cfg = dialog.cfg;
+  if (inRect(ev, no, S)) { playClick(); closeConfirm(); }
+  else if (inRect(ev, yes, S)) { playClick(); closeConfirm(); cfg.onYes(); }
+});
+addEventListener('keydown', ev => { if (ev.key === 'Escape' && dialog.cfg) closeConfirm(); });
+
 function resize() {
   state.S = Math.max(2, Math.min(5, Math.floor(Math.min(innerWidth / (GUI_W + 16), innerHeight / (GUI_H + 16)))));
   canvas.width = GUI_W * state.S;
@@ -1053,6 +1380,8 @@ function resize() {
   tip.hidden = true;
   renderGui();
   if (sign.cfg) renderSign();
+  if (creative.onPick) renderCreative();
+  if (dialog.cfg) renderConfirm();
 }
 
 async function main() {
@@ -1074,6 +1403,7 @@ async function main() {
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
   resize();
+  loadCreative();
   addEventListener('resize', resize);
   addEventListener('popstate', showPageFromHash);
   canvas.addEventListener('click', onClick);
