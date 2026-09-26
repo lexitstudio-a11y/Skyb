@@ -1457,8 +1457,12 @@ function drawPanel(ctx, x, y, w, h, S) {
   part(b, 0, 1, b, x + b, y, w - 2 * b, b); part(b, 218, 1, b, x + b, y + h - b, w - 2 * b, b);
   part(0, b, b, 1, x, y + b, b, h - 2 * b); part(172, b, b, 1, x + w - b, y + b, b, h - 2 * b);
 }
-// Couleurs des blocs : teintes des colorants Minecraft (assez foncées pour le texte blanc).
-const TB_COLORS = ['#3C44AA', '#5E7C16', '#169C9C', '#8932B8', '#B02E26', '#C9650E', '#A9309F', '#835432'];
+// Couleurs des blocs : palette fournie (24 teintes), dessinées en relief façon Minecraft.
+const TB_COLORS = [
+  '#9F2757', '#C73361', '#D88277', '#C3291C', '#E25D33', '#DF742D', '#E39835', '#EEC14C',
+  '#DFC55A', '#C2CA51', '#88B253', '#397E49', '#5EB47E', '#429488', '#4599DF', '#5384ED',
+  '#7C86C6', '#4351AF', '#B09ED7', '#976CAB', '#832DA4', '#74574A', '#616161', '#A59C90',
+];
 // Assombrit (k < 1) ou éclaircit (k > 1) une couleur #rrggbb.
 function shade(hex, k) {
   const n = parseInt(hex.slice(1), 16);
