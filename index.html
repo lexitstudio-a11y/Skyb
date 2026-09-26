@@ -141,7 +141,7 @@ function sermentSlots() {
   }
   return slots;
 }
-// Une colonne de la page « Serments S » : le livre du serment en haut, puis 3 vitres colorées en dessous.
+// Une colonne de la page « Les Pilliers Temporels » : le livre du serment en haut, puis 3 vitres colorées en dessous.
 function sermentColumn(col, page, name) {
   const panes = ['lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass'];
   const slots = { [`0,${col}`]: { item: 'book', tooltip: [`§a${name}`, ...LORE], open: page } };
@@ -228,14 +228,14 @@ function editProfile() {
   });
 }
 
-const PAGE_TITLES = { main: 'Profil Joueur', serments: 'Serments S', duree: 'Durée des Serments' };
+const PAGE_TITLES = { main: 'Profil Joueur', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
     slots: {
       '1,4': { head: 'profile', tooltip: profileTooltip, action: editProfile },
       '2,1': { item: 'diamond_sword', tooltip: ['§aCompétences', ...LORE] },
-      '2,4': { item: 'book', tooltip: ['§aSerments S', ...LORE], open: 'serments' },
+      '2,4': { item: 'book', tooltip: ['§aLes Pilliers Temporels', ...LORE], open: 'serments' },
       '2,5': { item: 'paper', tooltip: ['§aTo-Do', ...LORE] },
       '2,6': { item: 'clock_00', tooltip: ['§aAgenda de la journée', ...LORE] },
     },
