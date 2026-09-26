@@ -376,9 +376,9 @@ function numberDuplicates(slots) {
 // Objectifs numérotés 1, 2, 3 : Résultat (lingot d'or), Action (TNT, au centre), Identité (étiquette).
 function freresSlots() {
   return {
-    '2,2': { item: 'gold_ingot', count: 1, tooltip: ['§aObjectif de Résultat', ...LORE] },
-    '2,4': { block: 'tnt', count: 2, tooltip: ["§aObjectif d'Action", ...LORE] },
-    '2,6': { item: 'name_tag', count: 3, tooltip: ["§aObjectif d'Identité", ...LORE] },
+    '2,2': { item: 'gold_ingot', count: 1, tooltip: ['§aObjectif de Résultat', '§7Ce que je veux atteindre', '§7émotionnellement.', '', '§eClique pour voir !'] },
+    '2,4': { block: 'tnt', count: 2, tooltip: ["§aObjectif d'Action", '§7Ce que je peux contrôler à 100%.', '', '§eClique pour voir !'] },
+    '2,6': { item: 'name_tag', count: 3, tooltip: ["§aObjectif d'Identité", "§7Qu'est-ce que je dois faire dans ma journée", "§7pour réussir mon Objectif d'Action ?", '', '§eClique pour voir !'] },
   };
 }
 for (const n of [1, 2, 3]) {
