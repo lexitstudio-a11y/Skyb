@@ -1433,6 +1433,8 @@ const timeblockCanvas = document.getElementById('timeblockCanvas');
 const tb = { date: null, onClose: null, layout: null, scroll: null, drag: null, hoverDone: false };
 const fmtMin = m => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
 const tbBlocks = () => timeblocks[tb.date] || [];
+// Chaque nouveau bloc prend la couleur suivante de la palette (gardée ensuite, même s'il est déplacé).
+const nextColor = () => tbBlocks().reduce((m, b, i) => Math.max(m, (b.couleur ?? i) + 1), 0);
 function saveTimeblocks() {
   for (const d of Object.keys(timeblocks)) if (!timeblocks[d].length) delete timeblocks[d];
   try { localStorage.setItem(TB_KEY, JSON.stringify(timeblocks)); } catch {}
@@ -1449,20 +1451,24 @@ function drawPanel(ctx, x, y, w, h, S) {
   part(b, 0, 1, b, x + b, y, w - 2 * b, b); part(b, 218, 1, b, x + b, y + h - b, w - 2 * b, b);
   part(0, b, b, 1, x, y + b, b, h - 2 * b); part(172, b, b, 1, x + w - b, y + b, b, h - 2 * b);
 }
-// Bulle d'info Minecraft (fond sombre, coins coupés, bordure en dégradé) en pixels GUI.
-function drawBubble(ctx, x, y, w, h, S) {
+// Couleurs des blocs : teintes des colorants Minecraft (assez foncées pour le texte blanc).
+const TB_COLORS = ['#3C44AA', '#5E7C16', '#169C9C', '#8932B8', '#B02E26', '#C9650E', '#A9309F', '#835432'];
+// Assombrit (k < 1) ou éclaircit (k > 1) une couleur #rrggbb.
+function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16);
+  const f = v => Math.max(0, Math.min(255, Math.round(k > 1 ? v + (255 - v) * (k - 1) : v * k)));
+  return `rgb(${f(n >> 16)}, ${f((n >> 8) & 255)}, ${f(n & 255)})`;
+}
+// Bloc coloré en relief, comme un bouton Minecraft : contour sombre, reflet en haut à gauche, ombre en bas à droite.
+function drawColorBlock(ctx, x, y, w, h, color, S) {
   const r = (rx, ry, rw, rh, fill) => { if (rw > 0 && rh > 0) { ctx.fillStyle = fill; ctx.fillRect(rx * S, ry * S, rw * S, rh * S); } };
-  r(x + 1, y, w - 2, h, TOOLTIP_BG);
-  r(x, y + 1, 1, h - 2, TOOLTIP_BG);
-  r(x + w - 1, y + 1, 1, h - 2, TOOLTIP_BG);
+  r(x, y, w, h, '#000000');
+  r(x + 1, y + 1, w - 2, h - 2, color);
   if (h < 5) return;
-  const grad = ctx.createLinearGradient(0, (y + 1) * S, 0, (y + h - 1) * S);
-  grad.addColorStop(0, TOOLTIP_BORDER_TOP);
-  grad.addColorStop(1, TOOLTIP_BORDER_BOTTOM);
-  r(x + 1, y + 1, w - 2, 1, TOOLTIP_BORDER_TOP);
-  r(x + 1, y + h - 2, w - 2, 1, TOOLTIP_BORDER_BOTTOM);
-  r(x + 1, y + 2, 1, h - 4, grad);
-  r(x + w - 2, y + 2, 1, h - 4, grad);
+  r(x + 1, y + 1, w - 2, 1, shade(color, 1.35));
+  r(x + 1, y + 2, 1, h - 3, shade(color, 1.35));
+  r(x + 1, y + h - 2, w - 2, 1, shade(color, 0.6));
+  r(x + w - 2, y + 1, 1, h - 3, shade(color, 0.6));
 }
 function fitText(text, w) {
   if (textWidth(font, text) <= w) return text;
@@ -1501,24 +1507,26 @@ function renderTimeblock() {
   ctx.rect(grid.x * S, grid.y * S, grid.w * S, grid.h * S);
   ctx.clip();
   for (let m = TB_START; m <= TB_END; m += 30) fr(grid.x, yOf(m), grid.w, 1, m % 60 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.3)');
-  const drawBlock = (debut, fin, title, sub) => {
+  const drawBlock = (debut, fin, title, sub, color) => {
     const y1 = yOf(debut), h = yOf(fin) - y1;
-    drawBubble(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, S);
+    drawColorBlock(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, color, S);
     ctx.save();
     ctx.beginPath();
     ctx.rect((grid.x + 3) * S, (y1 + 2) * S, (grid.w - 6) * S, (h - 3) * S);
     ctx.clip();
     // Marge intérieure : 4 px sous la bordure (moins pour un bloc trop petit, texte alors centré)
     const ty = h >= 20 ? y1 + 7 : y1 + Math.floor((h - 8) / 2) + 1;
-    drawText(ctx, font, '§a' + fitText(title, grid.w - 22), grid.x + 10, ty, '#55FF55', S, true);
-    if (sub && h >= 30) drawText(ctx, font, sub, grid.x + 10, ty + 10, '#AAAAAA', S, true);
+    drawText(ctx, font, fitText(title, grid.w - 22), grid.x + 10, ty, '#FFFFFF', S, true);
+    if (sub && h >= 30) drawText(ctx, font, sub, grid.x + 10, ty + 10, '#E0E0E0', S, true);
     ctx.restore();
   };
-  for (const b of tbBlocks()) if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre);
+  const colorOf = (b, i) => TB_COLORS[(b.couleur ?? i) % TB_COLORS.length];
+  tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, null, colorOf(b, i)); });
   const d = tb.drag;
   if (d && d.moved) {   // bloc en cours de création / déplacement : on affiche ses horaires
     const [a, z] = d.mode === 'create' ? [Math.min(d.start, d.end), Math.max(d.start, d.end)] : [d.debut, d.fin];
-    drawBlock(a, z, d.mode === 'create' ? 'Nouveau bloc' : d.block.titre, `${fmtMin(a)} - ${fmtMin(z)}`);
+    const color = d.mode === 'create' ? TB_COLORS[nextColor() % TB_COLORS.length] : colorOf(d.block, tbBlocks().indexOf(d.block));
+    drawBlock(a, z, d.mode === 'create' ? 'Nouveau bloc' : d.block.titre, `${fmtMin(a)} - ${fmtMin(z)}`, color);
   }
   if (tb.date === formatDate(new Date())) {   // heure actuelle
     const now = new Date(), m = now.getHours() * 60 + now.getMinutes();
@@ -1657,7 +1665,7 @@ timeblockCanvas.addEventListener('pointerup', () => {
     let [debut, fin] = [Math.min(d.start, d.end), Math.max(d.start, d.end)];
     if (!d.moved) fin = Math.min(TB_END, debut + 60);   // simple clic : bloc d'une heure
     playClick();
-    editBlockTitle({ debut, fin, titre: '' }, true);
+    editBlockTitle({ debut, fin, titre: '', couleur: nextColor() }, true);
   } else if (!d.moved) {
     playClick();
     blockMenu(d.block);
