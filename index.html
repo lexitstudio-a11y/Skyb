@@ -406,6 +406,12 @@ function askTodoDone(todo) {
       todo.fini = formatDate(new Date());
     }),
     onNo: () => update(() => { delete todo.fini; delete todo.image; }),
+    onEdit: () => openSign({   // modifier le texte de l'action sur un panneau
+      title: "Modifier l'action",
+      lines: 4, fixed: [],
+      initial: todo.texte,
+      onDone: text => { if (text.trim()) update(() => { todo.texte = text; }); },
+    }),
     onDelete: () => update(() => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); }),
   });
 }
@@ -1379,11 +1385,16 @@ function renderConfirm() {
   for (const line of lines) { centered(line, y, '#AAAAAA'); y += 10; }
   const bw = Math.min(90, Math.floor((W - 20) / 2)), by = y + 14;
   const no = [Math.floor(W / 2) - bw - 4, by, bw, 20], yes = [Math.floor(W / 2) + 4, by, bw, 20];
-  const del = [no[0], by + 24, 2 * bw + 8, 20];   // sous les deux autres, sur toute leur largeur
+  // Sous Non / Oui, sur toute leur largeur : « Modifier » (si prévu) puis « Supprimer ».
+  let rowY = by + 24;
+  const edit = dialog.cfg.onEdit ? [no[0], rowY, 2 * bw + 8, 20] : null;
+  if (edit) rowY += 24;
+  const del = [no[0], rowY, 2 * bw + 8, 20];
   drawButton(ctx, ...no.slice(0, 3), dialog.cfg.noLabel || 'Non', dialog.hover === 'no', S);
   drawButton(ctx, ...yes.slice(0, 3), dialog.cfg.yesLabel || 'Oui', dialog.hover === 'yes', S);
+  if (edit) drawButton(ctx, ...edit.slice(0, 3), dialog.cfg.editLabel || 'Modifier le titre', dialog.hover === 'edit', S);
   if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), '§cSupprimer', dialog.hover === 'del', S);
-  dialog.layout = { S, no, yes, del: dialog.cfg.onDelete ? del : null };
+  dialog.layout = { S, no, yes, edit, del: dialog.cfg.onDelete ? del : null };
 }
 function openConfirm(cfg) {
   dialog.cfg = cfg;
@@ -1400,14 +1411,15 @@ function closeConfirm() {
   renderGui();
 }
 dialogCanvas.addEventListener('mousemove', ev => {
-  const { S, no, yes, del } = dialog.layout;
-  const hover = inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : del && inRect(ev, del, S) ? 'del' : null;
+  const { S, no, yes, edit, del } = dialog.layout;
+  const hover = inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
 });
 dialogCanvas.addEventListener('click', ev => {
-  const { S, no, yes, del } = dialog.layout;
+  const { S, no, yes, edit, del } = dialog.layout;
   const cfg = dialog.cfg;
+  if (edit && inRect(ev, edit, S)) { playClick(); closeConfirm(); cfg.onEdit(); return; }
   if (inRect(ev, no, S)) { playClick(); closeConfirm(); if (cfg.onNo) cfg.onNo(); }
   else if (inRect(ev, yes, S)) { playClick(); closeConfirm(); cfg.onYes(); }
   else if (del && inRect(ev, del, S)) { playClick(); closeConfirm(); cfg.onDelete(); }
