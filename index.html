@@ -389,7 +389,21 @@ function freresSlots() {
       '§7- 10K Steps/J',
       '', '§eClique pour voir !',
     ] },
-    '2,6': { item: 'name_tag', count: 3, tooltip: ["§aObjectif d'Identité", "§7Qu'est-ce que je dois faire dans ma journée", "§7pour réussir mon Objectif d'Action ?", '', '§eClique pour voir !'] },
+    '2,6': { item: 'name_tag', count: 3, tooltip: [
+      "§aObjectif d'Identité",
+      '§7Quelles actions je dois faire à telle heure',
+      "§7pour que je puisse réussir l'Objectif d'Action.",
+      '',
+      '§fEx :',
+      '§7- À Quelle heure je dois me coucher ?',
+      "§7- M'Entraîner ?",
+      '§7- Manger ?',
+      '§7- Marcher',
+      '§7- Quel jour Nettoyer ?',
+      "§7- À Quelle heure il me reste de l'énergie pour travailler ?",
+      '§7- Quelle heure je dois arrêter les écrans ?',
+      '', '§eClique pour voir !',
+    ] },
   };
 }
 for (const n of [1, 2, 3]) {
@@ -757,6 +771,7 @@ function placeTooltip(ev) {
   let x = ev.clientX + 12 * S, y = ev.clientY - 12 * S;
   if (x + tip.width > innerWidth - margin) x = ev.clientX - 12 * S - tip.width;
   y = Math.max(margin, Math.min(y, innerHeight - tip.height - margin));
+  x = Math.min(x, innerWidth - tip.width - margin);   // ne dépasse pas à droite
   tip.style.left = Math.max(margin, x) + 'px';
   tip.style.top = y + 'px';
 }
@@ -770,7 +785,11 @@ function onMove(ev) {
     renderGui();
     if (slot && slot.tooltip) {
       const lines = typeof slot.tooltip === 'function' ? slot.tooltip() : slot.tooltip;
-      renderTooltip(tip, font, lines, tooltipScale(state.S));
+      // Texte plus petit si l'overlay ne tient pas dans la fenêtre.
+      for (let ts = tooltipScale(state.S); ; ts--) {
+        renderTooltip(tip, font, lines, ts);
+        if (ts <= 1 || (tip.width <= innerWidth - 8 && tip.height <= innerHeight - 8)) break;
+      }
       tip.hidden = false;
     } else tip.hidden = true;
     canvas.style.cursor = hovered ? 'pointer' : '';
