@@ -227,7 +227,7 @@ function wrapForSign(text, maxLines) {
   const lines = [''];
   for (const word of text.split(/\s+/).filter(Boolean)) {
     const cur = lines[lines.length - 1], next = cur ? cur + ' ' + word : word;
-    if (textWidth(font, next) <= SIGN_TEXT_W || !cur) lines[lines.length - 1] = next;
+    if (textWidth(font, next) <= SIGN_W || !cur) lines[lines.length - 1] = next;
     else if (lines.length < maxLines) lines.push(word);
     else break;
   }
@@ -407,6 +407,76 @@ function askTodoDone(todo) {
   });
 }
 
+// --- Agenda de la journée ---
+// Chaque agenda : { date: "JJ/MM/AAAA", texte } (une ligne = un objectif), un par jour.
+// Page « Agenda de la journée » : les 7 derniers (datés d'il y a 7 jours au plus), numérotés 1 = le plus récent ;
+// les plus anciens sont sur la page « Autres Journées ».
+const AGENDA_KEY = 'agendas';
+const agendas = (() => { try { return JSON.parse(localStorage.getItem(AGENDA_KEY)) || []; } catch { return []; } })();
+function saveAgendas() {
+  try { localStorage.setItem(AGENDA_KEY, JSON.stringify(agendas)); } catch {}
+}
+const tomorrow = () => formatDate(new Date(Date.now() + 864e5));
+function splitAgendas() {
+  const sorted = [...agendas].sort((a, b) => toDate(b.date) - toDate(a.date));   // le plus récent d'abord
+  const limit = new Date();
+  limit.setHours(0, 0, 0, 0);
+  limit.setDate(limit.getDate() - 7);
+  const recent = sorted.filter(a => toDate(a.date) >= limit).slice(0, 7);
+  return { recent, older: sorted.filter(a => !recent.includes(a)) };
+}
+function agendaSlot(agenda, n) {
+  const lines = agenda.texte.split('\n').map(l => l.trim()).filter(Boolean);
+  return {
+    image: 'carte_vide', count: n,
+    tooltip: ['§aAgenda ' + agenda.date, ...(lines.length ? lines.map(l => '§7- ' + l) : ['§7Aucun objectif.']), '', '§eClique pour voir !'],
+    action: () => editAgenda(agenda.date),
+  };
+}
+// Place les agendas (le premier en haut à gauche) dans la zone 4x7.
+function agendaGrid(list, slots, numbered) {
+  list.slice(0, TODO_ROWS * TODO_COLS).forEach((a, i) => {
+    slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = agendaSlot(a, numbered ? i + 1 : null);
+  });
+  return slots;
+}
+function agendaSlots() {
+  return agendaGrid(splitAgendas().recent, {
+    '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', '§7Les agendas de plus de 7 jours.', '', '§eClique pour voir !'], open: 'agenda-autres' },
+    '5,8': {
+      image: 'tete_plus_bleue', action: () => editAgenda(tomorrow()),
+      tooltip: () => ['§aAgenda ' + tomorrow(), '§7Écris les objectifs de demain.', '', '§eClique pour écrire !'],
+    },
+    ...navSlots('main'),
+  }, true);
+}
+function olderAgendaSlots() {
+  return agendaGrid(splitAgendas().older, { ...navSlots('agenda') }, false);
+}
+function refreshAgenda() {
+  PAGES.agenda.slots = agendaSlots();
+  PAGES['agenda-autres'].slots = olderAgendaSlots();
+  if (state.page.startsWith('agenda')) renderGui();
+}
+// Ouvre le livre de l'agenda de cette date (le crée s'il n'existe pas encore).
+function editAgenda(date) {
+  const existing = agendas.find(a => a.date === date);
+  openSign({
+    book: true, title: 'Objectifs de la journée',
+    lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
+    initial: existing ? existing.texte : '',
+    onDone: text => {
+      const clean = text.split('\n').filter(l => l.trim()).join('\n');
+      const i = agendas.findIndex(a => a.date === date);
+      if (!clean) { if (i >= 0) agendas.splice(i, 1); }   // livre vide : pas d'agenda
+      else if (i >= 0) agendas[i].texte = clean;
+      else agendas.push({ date, texte: clean });
+      saveAgendas();
+      refreshAgenda();
+    },
+  });
+}
+
 function renameSlot(n) {
   return {
     block: 'cyan_terracotta',
@@ -415,7 +485,7 @@ function renameSlot(n) {
   };
 }
 
-const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments' };
+const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
@@ -444,12 +514,11 @@ const PAGES = {
   },
   agenda: {
     title: PAGE_TITLES.agenda,
-    slots: {
-      // Tête « + » bleue : son nom donne la date de demain (calculée à chaque survol).
-      '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', ...LORE] },
-      '5,8': { image: 'tete_plus_bleue', tooltip: () => ['§aAgenda ' + formatDate(new Date(Date.now() + 864e5)), ...LORE] },
-      ...navSlots('main'),
-    },
+    slots: agendaSlots(),   // reconstruit à chaque changement (refreshAgenda)
+  },
+  'agenda-autres': {
+    title: PAGE_TITLES['agenda-autres'],
+    slots: olderAgendaSlots(),
   },
   'todo-finies': {
     title: PAGE_TITLES['todo-finies'],
@@ -552,13 +621,13 @@ for (const n of [1, 2, 3]) {
 }
 
 const pageTitle = id => { const t = PAGES[id].title; return typeof t === 'function' ? t() : t; };
-Object.entries(PAGES).forEach(([id, page]) => { if (!id.startsWith('todo')) numberDuplicates(page.slots); });
+Object.entries(PAGES).forEach(([id, page]) => { if (!id.startsWith('todo') && !id.startsWith('agenda')) numberDuplicates(page.slots); });
 
 const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'carte_vide', 'book_gui', ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -965,6 +1034,7 @@ function showPageFromHash() {
   state.page = PAGES[page] ? page : 'main';
   hideTooltip();
   if (state.page.startsWith('todo')) refreshTodo();   // retire les actions terminées depuis 30 jours
+  if (state.page.startsWith('agenda')) refreshAgenda();   // les agendas de plus de 7 jours changent de page
   renderGui();
 }
 
@@ -1001,13 +1071,17 @@ const signScreen = document.getElementById('signScreen');
 const signCanvas = document.getElementById('signCanvas');
 const signInput = document.getElementById('signInput');
 const sign = { cfg: null, error: false, hoverDone: false, blinkOn: true, timer: null, layout: null };
-const SIGN_TEXT_W = 90;   // largeur max d'une ligne de texte sur le panneau (pixels GUI)
+const SIGN_W = 90;   // largeur max d'une ligne de texte sur le panneau (pixels GUI)
 
 // Fait tenir le texte dans le panneau : une ligne trop longue passe à la ligne suivante
 // (coupure au dernier espace si possible), et ce qui dépasse la dernière ligne est coupé.
 // caret = position du curseur, ajustée si des caractères sont ajoutés ou retirés avant lui.
 function fitSignText(text, caret = text.length) {
-  const max = sign.cfg.lines;
+  if (sign.cfg.book) {   // livre : retour à la ligne visuel seulement ; au-delà de la page, on coupe la fin
+    while (bookRows(text).length > sign.cfg.lines) text = text.slice(0, -1);
+    return { text, caret: Math.min(caret, text.length) };
+  }
+  const max = sign.cfg.lines, SIGN_TEXT_W = sign.cfg.width || SIGN_W;
   for (let guard = 0; guard < 200; guard++) {
     const lines = text.split('\n');
     const i = lines.findIndex(l => textWidth(font, l) > SIGN_TEXT_W);
@@ -1036,6 +1110,7 @@ function signScale() {
 
 function renderSign() {
   const cfg = sign.cfg;
+  if (cfg.book) return renderBook();
   const S = signScale();
   signCanvas.width = innerWidth;
   signCanvas.height = innerHeight;
@@ -1082,6 +1157,68 @@ function renderSign() {
 
   sign.layout = { S, board: [bx, by, 96, 48], button: [btnX, btnY, btnW, 20] };
   Object.assign(signInput.style, { left: bx * S + 'px', top: by * S + 'px', width: 96 * S + 'px', height: 48 * S + 'px' });
+}
+
+// --- Livre (comme l'écran d'écriture d'un livre de Minecraft) ---
+// Même saisie que le panneau (cfg.book = true) ; un gros point est dessiné devant chaque ligne écrite.
+const BOOK_LINES = 14, BOOK_TEXT_W = 104;
+// Découpe le texte en lignes affichées : un objectif (ligne du texte) trop long continue sur la ligne
+// suivante (coupure entre les mots), sans nouveau point. Renvoie [{ text, start, bullet }].
+function bookRows(text) {
+  const rows = [];
+  let offset = 0;
+  for (const line of text.split('\n')) {
+    let pos = 0, first = true;
+    do {
+      let end = line.length;
+      if (textWidth(font, line.slice(pos)) > BOOK_TEXT_W) {
+        end = pos;
+        while (end < line.length && textWidth(font, line.slice(pos, end + 1)) <= BOOK_TEXT_W) end++;
+        const sp = line.lastIndexOf(' ', end);
+        if (sp > pos) end = sp + 1;   // coupe après l'espace
+      }
+      rows.push({ text: line.slice(pos, end), start: offset + pos, bullet: first && line.trim() !== '' });
+      pos = end;
+      first = false;
+    } while (pos < line.length);
+    offset += line.length + 1;
+  }
+  return rows;
+}
+function renderBook() {
+  const cfg = sign.cfg;
+  const S = Math.max(1, Math.min(5, Math.floor(innerHeight / 228), Math.floor(innerWidth / 200)));
+  const { ctx, W, H } = prepareScreen(signCanvas, S);
+  const left = Math.floor((W - 192) / 2), top = Math.max(2, Math.floor((H - 222) / 2));
+  ctx.drawImage(T.book_gui, 0, 0, 192, 192, left * S, top * S, 192 * S, 192 * S);
+  // Titre en haut de la page (à la place de « Page 1 of 1 »), centré sur la page
+  drawText(ctx, font, cfg.title, left + 94 - Math.floor(textWidth(font, cfg.title) / 2), top + 16, '#000000', S);
+
+  const text = signInput.value, rows = bookRows(text);
+  const caret = signInput.selectionStart ?? text.length;
+  // ligne affichée qui contient le curseur (la dernière qui commence avant lui)
+  let active = 0;
+  rows.forEach((r, i) => { if (r.start <= caret) active = i; });
+  const tx = left + 36 + 8;
+  rows.forEach((row, i) => {
+    const y = top + 32 + i * 9;
+    if (row.bullet) {   // gros point à gauche de chaque objectif
+      ctx.fillStyle = '#000000';
+      ctx.fillRect((tx - 7) * S, (y + 2) * S, 3 * S, 3 * S);
+    }
+    const shown = row.text.replace(/ $/, '');
+    drawText(ctx, font, shown, tx, y, '#000000', S);
+    if (i === active && sign.blinkOn) {
+      const col = caret - row.start;
+      if (col >= shown.length) drawText(ctx, font, '_', tx + textWidth(font, row.text.slice(0, col)), y, '#000000', S);
+      else { ctx.fillStyle = '#000000'; ctx.fillRect((tx + textWidth(font, row.text.slice(0, col)) - 1) * S, (y - 1) * S, S, 9 * S); }
+    }
+  });
+
+  const btnW = 98, btnX = Math.floor(W / 2) - 49, btnY = Math.min(H - 22, top + 196);
+  drawButton(ctx, btnX, btnY, btnW, 'Terminé', sign.hoverDone, S);
+  sign.layout = { S, board: [left + 36, top + 30, 118, BOOK_LINES * 9], button: [btnX, btnY, btnW, 20] };
+  Object.assign(signInput.style, { left: (left + 36) * S + 'px', top: (top + 30) * S + 'px', width: 118 * S + 'px', height: BOOK_LINES * 9 * S + 'px' });
 }
 
 function inRect(ev, [x, y, w, h], S = sign.layout.S) {
@@ -1162,7 +1299,7 @@ signInput.addEventListener('keydown', ev => {
   if (ev.key === 'Escape') { ev.preventDefault(); closeSign(); return; }
   if (ev.key !== 'Enter') return;
   // Entrée : ligne suivante s'il en reste, sinon « Terminé ».
-  const lineCount = signInput.value.split('\n').length;
+  const lineCount = sign.cfg.book ? bookRows(signInput.value).length : signInput.value.split('\n').length;
   if (lineCount < sign.cfg.lines && !ev.shiftKey) return;
   ev.preventDefault();
   playClick();
