@@ -1433,7 +1433,7 @@ function renderBook() {
   if (cfg.placeholders) {
     const lines = text.split('\n');
     const lastEmpty = !lines[lines.length - 1].trim();
-    const written = lastEmpty ? lines.length - 1 : lines.length;
+    const written = lines.filter(l => l.trim()).length;   // les lignes sautées (Maj + Entrée) ne consomment pas d'exemple
     const firstRow = lastEmpty ? rows.length - 1 : rows.length;
     const ph = cfg.placeholders.slice(written).flatMap(ex => wrapText(ex, BOOK_TEXT_W).map((t, j) => ({ t, bullet: j === 0 })));
     ph.slice(0, Math.max(0, cfg.lines - firstRow)).forEach((p, j) => {
