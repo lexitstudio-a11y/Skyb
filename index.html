@@ -415,7 +415,7 @@ function renameSlot(n) {
   };
 }
 
-const PAGE_TITLES = { main: 'Profil Joueur', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments' };
+const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
@@ -424,7 +424,7 @@ const PAGES = {
       '2,1': { item: 'diamond_sword', tooltip: ['§aCompétences', ...LORE] },
       '2,4': { item: 'book', tooltip: ['§aLes Pilliers Temporels', ...LORE], open: 'serments' },
       '2,5': { item: 'paper', tooltip: ['§aListe de choses à faire', '§7Je note ici les choses que je dois faire', '§7hors Serment S.', '', '§eClique pour voir !'], open: 'todo' },
-      '2,6': { item: 'clock_00', tooltip: ['§aAgenda de la journée', ...LORE] },
+      '2,6': { item: 'clock_00', tooltip: ['§aAgenda de la journée', ...LORE], open: 'agenda' },
     },
   },
   serments: {
@@ -441,6 +441,10 @@ const PAGES = {
   todo: {
     title: PAGE_TITLES.todo,
     slots: todoSlots(),   // reconstruit à chaque changement (refreshTodo)
+  },
+  agenda: {
+    title: PAGE_TITLES.agenda,
+    slots: { ...navSlots('main') },   // vide pour l'instant
   },
   'todo-finies': {
     title: PAGE_TITLES['todo-finies'],
