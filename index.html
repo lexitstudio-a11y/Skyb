@@ -1343,6 +1343,19 @@ document.addEventListener('selectionchange', () => { if (sign.cfg) { sign.blinkO
 signInput.addEventListener('keydown', ev => {
   if (ev.key === 'Escape') { ev.preventDefault(); const cfg = sign.cfg; closeSign(); if (cfg.onCancel) cfg.onCancel(); return; }
   if (ev.key !== 'Enter') return;
+  // Livre : Maj + Entrée saute toujours une ligne (jamais « Terminé »), s'il reste de la place sur la page.
+  if (sign.cfg.book && ev.shiftKey) {
+    ev.preventDefault();
+    const v = signInput.value, a = signInput.selectionStart, b = signInput.selectionEnd;
+    const next = v.slice(0, a) + '\n' + v.slice(b);
+    if (bookRows(next).length <= sign.cfg.lines) {
+      signInput.value = next;
+      signInput.setSelectionRange(a + 1, a + 1);
+      sign.blinkOn = true;
+      renderSign();
+    }
+    return;
+  }
   // Entrée : ligne suivante s'il en reste, sinon « Terminé ».
   const lineCount = sign.cfg.book ? bookRows(signInput.value).length : signInput.value.split('\n').length;
   if (lineCount < sign.cfg.lines && !ev.shiftKey) return;
