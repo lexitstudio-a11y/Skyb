@@ -860,7 +860,7 @@ function renderGui() {
         else if (look.head) drawCube(ctx, HEADS[look.head], px, py, S, 0.85 * ITEM_SCALE);
         else if (look.icon) {
           const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
-          drawIcon(ctx, look.icon, px + off, py + off, size, look.dim);
+          drawIcon(ctx, look.icon, px + off, py + off, size, look.dim, true);
         }
         else if (look.image) {
           // Image fournie telle quelle (rendu déjà en 3D) : réduite pour tenir dans la case, proportions gardées.
@@ -1225,9 +1225,29 @@ function loadCreative() {
   });
   return CREATIVE.ready;
 }
-function drawIcon(ctx, id, x, y, size, dim = false) {
+// PNG haute définition des blocs 3D (assets/creatif/hd/<id>.png), chargés un par un à la demande.
+const hdImages = {};
+function hdImage(id) {
+  if (!(id in hdImages)) {
+    const img = new Image();
+    hdImages[id] = null;
+    img.onload = () => { hdImages[id] = img; renderGui(); };
+    img.src = `assets/creatif/hd/${id}.png`;
+  }
+  return hdImages[id];
+}
+// hd = true : pour un bloc 3D, utilise son PNG haute définition (pages) plutôt que l'atlas (inventaire créatif).
+function drawIcon(ctx, id, x, y, size, dim = false, hd = false) {
   const it = CREATIVE.byId[id];
   if (!it || !CREATIVE.atlases) return;
+  const big = hd && it.a === 1 ? hdImage(id) : null;
+  if (big && !dim) {
+    ctx.imageSmoothingEnabled = true;   // réduction d'une grande image : lissage de bonne qualité
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(big, x, y, size, size);
+    ctx.imageSmoothingEnabled = false;
+    return;
+  }
   const atlas = CREATIVE.atlases[it.a], n = CREATIVE.sizes[it.a];
   const sx = (it.i % CREATIVE.cols) * n, sy = Math.floor(it.i / CREATIVE.cols) * n;
   ctx.imageSmoothingEnabled = false;

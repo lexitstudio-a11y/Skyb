@@ -4,6 +4,8 @@
 Sortie :
   assets/creatif/items.png  : icônes des items plats, 16x16 px (les textures du jeu telles quelles)
   assets/creatif/blocs.png  : icônes des blocs en 3D, BLOCK x BLOCK px (dessinées nettes, sans lissage)
+  assets/creatif/hd/<id>.png : chaque bloc en 3D en haute définition (HD x HD px), pour l'affichage
+                              en dehors de l'inventaire créatif (chargés un par un, à la demande)
   assets/creatif/items.json : [{ "id", "nom" (français), "a" (0 = items.png, 1 = blocs.png), "i" (index), "o" (onglet) }]
 
 Les items « plats » (épées, nourriture…) sont les textures du jeu telles quelles. Les blocs n'existent
@@ -24,7 +26,8 @@ SRC, JSONS = sys.argv[1], sys.argv[2]
 TEX = os.path.join(SRC, 'assets/minecraft/textures')
 OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'creatif')
 ICON = 16          # taille des icônes plates (px) = taille des textures du jeu
-BLOCK = int(os.environ.get('BLOCK', 32))   # taille des icônes 3D (px) : rendu net à l'échelle de l'écran
+BLOCK = int(os.environ.get('BLOCK', 32))
+HD = 128           # taille des PNG haute définition des blocs   # taille des icônes 3D (px) : rendu net à l'échelle de l'écran
 COLS = 40
 
 items = json.load(open(os.path.join(JSONS, 'items__all.json')))
@@ -143,11 +146,13 @@ def face_corners(d, f, t):
 
 NORMALS = {'north': (0, 0, -1), 'south': (0, 0, 1), 'east': (1, 0, 0), 'west': (-1, 0, 0), 'up': (0, 1, 0), 'down': (0, -1, 0)}
 
+RENDER = {'size': None}   # taille de rendu 3D en cours (BLOCK ou HD)
+
 def render_elements(elements, get_tex, gui, tints=(), offset=(0, 0, 0)):
     gui = gui or DEFAULT_GUI
     R = rot_matrix(*gui.get('rotation', [0, 0, 0]))
     T = gui.get('translation', [0, 0, 0]); S = gui.get('scale', [1, 1, 1])
-    size = BLOCK
+    size = RENDER['size'] or BLOCK
     def project(p):
         v = [(p[i] + offset[i]) / 16 - 0.5 for i in range(3)]
         v = apply(R, [v[i] * S[i] for i in range(3)])
@@ -462,6 +467,16 @@ def main():
         for i, im in enumerate(groups[g]):
             atlas.alpha_composite(im.resize((size, size), Image.NEAREST), ((i % COLS) * size, (i // COLS) * size))
         atlas.save(os.path.join(OUT, f'{name}.png'), optimize=True)
+    # PNG haute définition de chaque bloc 3D (même rendu, plus grand)
+    hd_dir = os.path.join(OUT, 'hd')
+    os.makedirs(hd_dir, exist_ok=True)
+    RENDER['size'] = HD
+    for e in entries:
+        if e['a'] == 1:
+            im = icon_for(e['id'], items[e['id']]['model'])
+            if im is not None:
+                im.resize((HD, HD), Image.NEAREST).save(os.path.join(hd_dir, e['id'] + '.png'), optimize=True)
+    RENDER['size'] = None
     # Ordre : par onglet, puis par identifiant (regroupe les matériaux : acacia_*, birch_*…)
     entries.sort(key=lambda e: (ONGLETS.index(e['o']), e['id']))
     json.dump({'tailles': [ICON, BLOCK], 'colonnes': COLS, 'onglets': ONGLETS, 'items': entries}, open(os.path.join(OUT, 'items.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
