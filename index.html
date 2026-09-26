@@ -745,16 +745,17 @@ function roundCompass(n, k) {
     },
   };
 }
-// Page d'un round : sous les 3 objectifs du round, ceux de sa saison (lingot de netherite, minecart de TNT, laisse).
+// Page d'un round : sous les 3 objectifs du round, ceux de sa saison (lingot de netherite, minecart de TNT, laisse),
+// en lecture seule : ils ne se modifient que depuis la page de la saison.
 function seasonGoals(n, season) {
-  const sid = `freres-${n}-saison${season}`, tag = `§8Saison ${season}`;
+  const tag = `§8Saison ${season}`, readOnly = '§8Modifiable depuis la page de la saison.';
   return {
     '3,2': {
-      image: 'lingot_netherite', count: 1, action: () => editResultGoal(n),
-      tooltip: () => ['§aObjectif de Résultat', tag, ...(sermentSuffix(n) ? ['', '§f' + sermentSuffix(n)] : []), '', '§eClique pour modifier !'],
+      image: 'lingot_netherite', count: 1,
+      tooltip: () => ['§aObjectif de Résultat', tag, ...(sermentSuffix(n) ? ['', '§f' + sermentSuffix(n)] : []), '', readOnly],
     },
-    '3,4': { image: 'minecart_tnt', count: 2, open: `${sid}-actions`, tooltip: ["§aObjectifs d'Action", tag, '', '§eClique pour voir !'] },
-    '3,6': { image: 'laisse', count: 3, open: `${sid}-identite`, tooltip: ["§aObjectifs d'Identité", tag, '', '§eClique pour voir !'] },
+    '3,4': { image: 'minecart_tnt', count: 2, tooltip: ["§aObjectifs d'Action", tag, '', readOnly] },
+    '3,6': { image: 'laisse', count: 3, tooltip: ["§aObjectifs d'Identité", tag, '', readOnly] },
   };
 }
 // Page d'un round : œil de l'Ender en bas à gauche qui mène à la saison de ce round (numéroté avec la saison).
