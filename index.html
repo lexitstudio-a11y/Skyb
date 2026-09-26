@@ -708,16 +708,17 @@ function freresSlots(n, id) {
     ] },
   };
 }
-// Montre en haut de la page quand demain tombe dans la saison / le round : numéro = jour de demain,
+// Montre en bas à droite de la page quand demain tombe dans la saison / le round : numéro = jour de demain,
 // clic = agenda de demain.
-function tomorrowClock(firstMonth, lastMonth) {
+// key : case de la montre (en bas à droite ; à côté de la boussole sur les pages de saison).
+function tomorrowClock(firstMonth, lastMonth, key) {
   const inPeriod = () => {
     if (!dates.start) return false;
     const t = toDate(tomorrow());
     return t >= toDate(addMonths(dates.start, firstMonth - 1)) && t < toDate(addMonths(dates.start, lastMonth));
   };
   return {
-    '0,4': {
+    [key]: {
       item: 'clock_00', when: inPeriod,
       count: () => toDate(tomorrow()).getDate(),
       tooltip: () => ['§aAgenda ' + tomorrow(), '§7Demain fait partie de cette période.', '', '§eClique pour écrire !'],
@@ -774,7 +775,7 @@ for (const n of [1, 2, 3]) {
     const label = period.replace(/^saison/, 'Saison ').replace(/^round/, 'Round ');   // « saison2 » -> « Saison 2 »
     const k = +period.replace(/\D/g, '');
     const [first, last] = period.startsWith('saison') ? [3 * k - 2, 3 * k] : [k, k];   // mois du serment couverts
-    PAGES[id] = { title: `Les 3 Frères - ${label}`, slots: { ...freresSlots(n, id), ...tomorrowClock(first, last), ...(period.startsWith('saison') ? roundCompass(n, k) : { ...seasonEye(n, Math.ceil(k / 3)), ...seasonGoals(n, Math.ceil(k / 3)) }), ...navSlots(`serment${n}`) } };
+    PAGES[id] = { title: `Les 3 Frères - ${label}`, slots: { ...freresSlots(n, id), ...tomorrowClock(first, last, period.startsWith('saison') ? '5,7' : '5,8'), ...(period.startsWith('saison') ? roundCompass(n, k) : { ...seasonEye(n, Math.ceil(k / 3)), ...seasonGoals(n, Math.ceil(k / 3)) }), ...navSlots(`serment${n}`) } };
     // Sous-pages (vides pour l'instant) ouvertes par la TNT et l'étiquette.
     PAGES[`${id}-actions`] = { title: "Objectifs d'Action", slots: navSlots(id) };
     PAGES[`${id}-identite`] = { title: "Objectifs d'Identité", slots: navSlots(id) };
