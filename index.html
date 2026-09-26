@@ -341,7 +341,12 @@ function todoSlots() {
     const lines = todo.texte.split('\n').map(l => l.trim()).filter(Boolean);
     slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = {
       icon: todo.item,
-      tooltip: ['§a' + (lines[0] || 'Action'), ...lines.slice(1).map(l => '§7' + l), '', `§8Ajoutée le ${todo.date}`, '§eClique quand elle est terminée !'],
+      look: () => todo.fini ? { dim: true } : null,   // action terminée : icône assombrie
+      tooltip: [
+        '§a' + (lines[0] || 'Action'), ...lines.slice(1).map(l => '§7' + l), '',
+        `§8Ajoutée le ${todo.date}`,
+        ...(todo.fini ? [`§cTerminée le ${todo.fini}`] : ['§eClique quand elle est terminée !']),
+      ],
       action: () => askTodoDone(todo),
     };
   });
@@ -366,16 +371,15 @@ function addTodo() {
     },
   });
 }
+// Oui = terminée (reste affichée, assombrie) ; Non = pas terminée ; Supprimer = retirée de la liste.
 function askTodoDone(todo) {
+  const update = change => { change(); saveTodos(); refreshTodo(); };
   openConfirm({
     question: "L'objectif est-il terminé ?",
     detail: todo.texte.split('\n').map(l => l.trim()).filter(Boolean),
-    onYes: () => {
-      const i = todos.indexOf(todo);
-      if (i >= 0) todos.splice(i, 1);
-      saveTodos();
-      refreshTodo();
-    },
+    onYes: () => update(() => { todo.fini = formatDate(new Date()); }),
+    onNo: () => update(() => { delete todo.fini; }),
+    onDelete: () => update(() => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); }),
   });
 }
 
@@ -826,7 +830,7 @@ function renderGui() {
         else if (look.head) drawCube(ctx, HEADS[look.head], px, py, S, 0.85 * ITEM_SCALE);
         else if (look.icon) {
           const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
-          drawIcon(ctx, look.icon, px + off, py + off, size);
+          drawIcon(ctx, look.icon, px + off, py + off, size, look.dim);
         }
         else if (look.image) {
           // Image fournie telle quelle (rendu déjà en 3D) : réduite pour tenir dans la case, proportions gardées.
@@ -1187,12 +1191,18 @@ function loadCreative() {
   });
   return CREATIVE.ready;
 }
-function drawIcon(ctx, id, x, y, size) {
+function drawIcon(ctx, id, x, y, size, dim = false) {
   const it = CREATIVE.byId[id];
   if (!it || !CREATIVE.atlas) return;
-  const n = CREATIVE.size;
+  const n = CREATIVE.size, sx = (it.i % CREATIVE.cols) * n, sy = Math.floor(it.i / CREATIVE.cols) * n;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(CREATIVE.atlas, (it.i % CREATIVE.cols) * n, Math.floor(it.i / CREATIVE.cols) * n, n, n, x, y, size, size);
+  if (!dim) { ctx.drawImage(CREATIVE.atlas, sx, sy, n, n, x, y, size, size); return; }
+  const [c, cctx] = makeCanvas(n, n);   // version assombrie (seuls les pixels de l'icône)
+  cctx.drawImage(CREATIVE.atlas, sx, sy, n, n, 0, 0, n, n);
+  cctx.globalCompositeOperation = 'source-atop';
+  cctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  cctx.fillRect(0, 0, n, n);
+  ctx.drawImage(c, x, y, size, size);
 }
 
 const creativeScreen = document.getElementById('creativeScreen');
@@ -1395,11 +1405,13 @@ function renderConfirm() {
   centered(dialog.cfg.question, y, '#FFFFFF');
   y += 16;
   for (const line of lines) { centered(line, y, '#AAAAAA'); y += 10; }
-  const bw = Math.min(150, Math.floor((W - 20) / 2)), by = y + 14;
+  const bw = Math.min(90, Math.floor((W - 20) / 2)), by = y + 14;
   const no = [Math.floor(W / 2) - bw - 4, by, bw, 20], yes = [Math.floor(W / 2) + 4, by, bw, 20];
+  const del = [no[0], by + 24, 2 * bw + 8, 20];   // sous les deux autres, sur toute leur largeur
   drawButton(ctx, ...no.slice(0, 3), 'Non', dialog.hover === 'no', S);
   drawButton(ctx, ...yes.slice(0, 3), 'Oui', dialog.hover === 'yes', S);
-  dialog.layout = { S, no, yes };
+  if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), '§cSupprimer', dialog.hover === 'del', S);
+  dialog.layout = { S, no, yes, del: dialog.cfg.onDelete ? del : null };
 }
 function openConfirm(cfg) {
   dialog.cfg = cfg;
@@ -1416,16 +1428,17 @@ function closeConfirm() {
   renderGui();
 }
 dialogCanvas.addEventListener('mousemove', ev => {
-  const { S, no, yes } = dialog.layout;
-  const hover = inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : null;
+  const { S, no, yes, del } = dialog.layout;
+  const hover = inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
 });
 dialogCanvas.addEventListener('click', ev => {
-  const { S, no, yes } = dialog.layout;
+  const { S, no, yes, del } = dialog.layout;
   const cfg = dialog.cfg;
-  if (inRect(ev, no, S)) { playClick(); closeConfirm(); }
+  if (inRect(ev, no, S)) { playClick(); closeConfirm(); if (cfg.onNo) cfg.onNo(); }
   else if (inRect(ev, yes, S)) { playClick(); closeConfirm(); cfg.onYes(); }
+  else if (del && inRect(ev, del, S)) { playClick(); closeConfirm(); cfg.onDelete(); }
 });
 addEventListener('keydown', ev => { if (ev.key === 'Escape' && dialog.cfg) closeConfirm(); });
 
