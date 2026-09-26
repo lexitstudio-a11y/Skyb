@@ -654,7 +654,8 @@ for (const n of [1, 2, 3]) {
   const periods = [...[1, 2, 3, 4].map(k => `saison${k}`), ...Array.from({ length: 12 }, (_, i) => `round${i + 1}`)];
   for (const period of periods) {
     const id = `freres-${n}-${period}`;
-    PAGES[id] = { title: 'Les 3 Frères', slots: { ...freresSlots(n, id), ...navSlots(`serment${n}`) } };
+    const label = period.replace(/^saison/, 'Saison ').replace(/^round/, 'Round ');   // « saison2 » -> « Saison 2 »
+    PAGES[id] = { title: `Les 3 Frères - ${label}`, slots: { ...freresSlots(n, id), ...navSlots(`serment${n}`) } };
     // Sous-pages (vides pour l'instant) ouvertes par la TNT et l'étiquette.
     PAGES[`${id}-actions`] = { title: "Objectifs d'Action", slots: navSlots(id) };
     PAGES[`${id}-identite`] = { title: "Objectifs d'Identité", slots: navSlots(id) };
