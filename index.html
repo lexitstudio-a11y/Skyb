@@ -96,15 +96,26 @@ function navSlots(previous) {
 // Contenu commun des pages « Serment S … » :
 //   4 tableaux numérotés 1 à 4 (carré 2x2) et 12 blocs de terre cuite bleue numérotés 1 à 12 (2 colonnes x 6 lignes),
 //   numérotés de gauche à droite puis de haut en bas (numéros ajoutés automatiquement, voir numberDuplicates).
+// Une saison = 3 mois, un round = 1 mois, comptés à partir de la date d'entrée (page « Durée des Serments »).
+// Ex. saison 3 = mois 7 à 9 du serment, round 11 = mois 11.
+function periodTooltip(name, firstMonth, lastMonth) {
+  return () => {
+    const months = firstMonth === lastMonth ? `§8Mois ${firstMonth} du serment` : `§8Mois ${firstMonth} à ${lastMonth} du serment`;
+    const period = dates.start
+      ? [`§7Du §e${addMonths(dates.start, firstMonth - 1)}`, `§7au §e${dayBefore(addMonths(dates.start, lastMonth))}`]
+      : ["§7Dates : §cdate d'entrée non définie"];
+    return [name, ...period, months, '', '§eClique pour voir !'];
+  };
+}
 function sermentSlots() {
   const slots = {};
   for (let i = 0; i < 4; i++) {
     const n = i + 1;
-    slots[`${2 + Math.floor(i / 2)},${1 + i % 2}`] = { item: 'painting', tooltip: [`§aSaison ${n}`, ...LORE] };
+    slots[`${2 + Math.floor(i / 2)},${1 + i % 2}`] = { item: 'painting', tooltip: periodTooltip(`§aSaison ${n}`, 3 * i + 1, 3 * n) };
   }
   for (let i = 0; i < 12; i++) {
     const n = i + 1;
-    slots[`${Math.floor(i / 2)},${6 + i % 2}`] = { block: 'blue_terracotta', tooltip: [`§aRound ${n}`, ...LORE] };
+    slots[`${Math.floor(i / 2)},${6 + i % 2}`] = { block: 'blue_terracotta', tooltip: periodTooltip(`§aRound ${n}`, n, n) };
   }
   return slots;
 }
@@ -130,13 +141,23 @@ function dateSlot(field) {
   };
 }
 
-// "12/03/2026" -> "12/03/2027". Un 29/02 donne le 28/02 de l'année suivante.
-function plusOneYear(date) {
+// Calculs sur les dates "JJ/MM/AAAA".
+const pad2 = n => String(n).padStart(2, '0');
+const formatDate = dt => `${pad2(dt.getDate())}/${pad2(dt.getMonth() + 1)}/${dt.getFullYear()}`;
+// Ajoute k mois ; si le jour n'existe pas dans le mois d'arrivée, on prend le dernier jour
+// ("31/01/2026" + 1 mois -> "28/02/2026", "29/02/2028" + 12 mois -> "28/02/2029").
+function addMonths(date, k) {
   const [d, m, y] = date.split('/').map(Number);
-  const lastDay = new Date(y + 1, m, 0).getDate();
-  const pad = n => String(n).padStart(2, '0');
-  return `${pad(Math.min(d, lastDay))}/${pad(m)}/${y + 1}`;
+  const target = new Date(y, m - 1 + k, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(d, lastDay));
+  return formatDate(target);
 }
+function dayBefore(date) {
+  const [d, m, y] = date.split('/').map(Number);
+  return formatDate(new Date(y, m - 1, d - 1));
+}
+const plusOneYear = date => addMonths(date, 12);
 function endDateSlot() {
   return {
     item: 'clock_00',
