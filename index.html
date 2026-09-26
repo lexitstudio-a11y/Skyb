@@ -425,10 +425,11 @@ function splitAgendas() {
   const recent = sorted.filter(a => toDate(a.date) >= limit).slice(0, 7);
   return { recent, older: sorted.filter(a => !recent.includes(a)) };
 }
-function agendaSlot(agenda, n) {
+// Page principale : papier ; page « Autres Journées » : carte vide.
+function agendaSlot(agenda, n, image) {
   const lines = agenda.texte.split('\n').map(l => l.trim()).filter(Boolean);
   return {
-    image: 'carte_vide', count: n,
+    image, count: n,
     tooltip: ['§aAgenda ' + agenda.date, ...(lines.length ? lines.map(l => '§7- ' + l) : ['§7Aucun objectif.']), '', '§eClique pour voir !'],
     action: () => editAgenda(agenda.date),
   };
@@ -436,7 +437,7 @@ function agendaSlot(agenda, n) {
 // Place les agendas (le premier en haut à gauche) dans la zone 4x7.
 function agendaGrid(list, slots, numbered) {
   list.slice(0, TODO_ROWS * TODO_COLS).forEach((a, i) => {
-    slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = agendaSlot(a, numbered ? i + 1 : null);
+    slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = agendaSlot(a, numbered ? i + 1 : null, numbered ? 'papier_agenda' : 'carte_vide');
   });
   return slots;
 }
@@ -627,7 +628,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'carte_vide', 'book_gui', ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'carte_vide', 'papier_agenda', 'book_gui', ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
