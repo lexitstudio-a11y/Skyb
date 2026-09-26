@@ -1209,14 +1209,17 @@ function openDateSign(field) {
 }
 
 // --- Inventaire créatif (Minecraft 26.3) : choisir un item ---
-// Icônes générées par outils/generer_inventaire_creatif.py (assets/creatif/atlas.png + items.json).
-const CREATIVE = { ready: null, atlas: null, items: [], byId: {}, size: 32, cols: 40 };
+// Icônes préparées par outils/generer_inventaire_creatif.py : items.png (items plats = textures du jeu, 16 px)
+// et blocs.png (blocs en 3D, 32 px, nets) + items.json (nom, onglet, position de chaque icône).
+const CREATIVE = { ready: null, atlases: null, items: [], byId: {}, sizes: [16, 32], cols: 40 };
 function loadCreative() {
+  const loadImg = src => new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = src; });
   CREATIVE.ready ||= Promise.all([
     fetch('assets/creatif/items.json').then(r => r.json()),
-    new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = 'assets/creatif/atlas.png'; }),
-  ]).then(([data, atlas]) => {
-    Object.assign(CREATIVE, { atlas, items: data.items, size: data.taille, cols: data.colonnes });
+    loadImg('assets/creatif/items.png'),
+    loadImg('assets/creatif/blocs.png'),
+  ]).then(([data, flat, blocks]) => {
+    Object.assign(CREATIVE, { atlases: [flat, blocks], items: data.items, sizes: data.tailles, cols: data.colonnes });
     for (const it of data.items) CREATIVE.byId[it.id] = it;
     renderGui();   // les actions déjà créées peuvent maintenant afficher leur icône
   });
@@ -1224,12 +1227,13 @@ function loadCreative() {
 }
 function drawIcon(ctx, id, x, y, size, dim = false) {
   const it = CREATIVE.byId[id];
-  if (!it || !CREATIVE.atlas) return;
-  const n = CREATIVE.size, sx = (it.i % CREATIVE.cols) * n, sy = Math.floor(it.i / CREATIVE.cols) * n;
+  if (!it || !CREATIVE.atlases) return;
+  const atlas = CREATIVE.atlases[it.a], n = CREATIVE.sizes[it.a];
+  const sx = (it.i % CREATIVE.cols) * n, sy = Math.floor(it.i / CREATIVE.cols) * n;
   ctx.imageSmoothingEnabled = false;
-  if (!dim) { ctx.drawImage(CREATIVE.atlas, sx, sy, n, n, x, y, size, size); return; }
+  if (!dim) { ctx.drawImage(atlas, sx, sy, n, n, x, y, size, size); return; }
   const [c, cctx] = makeCanvas(n, n);   // version assombrie (seuls les pixels de l'icône)
-  cctx.drawImage(CREATIVE.atlas, sx, sy, n, n, 0, 0, n, n);
+  cctx.drawImage(atlas, sx, sy, n, n, 0, 0, n, n);
   cctx.globalCompositeOperation = 'source-atop';
   cctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
   cctx.fillRect(0, 0, n, n);

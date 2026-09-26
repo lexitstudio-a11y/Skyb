@@ -2,8 +2,9 @@
 """Génère les icônes de l'inventaire créatif (Minecraft 26.3) pour index.html.
 
 Sortie :
-  assets/creatif/atlas.png  : toutes les icônes (16x16 px, la résolution du jeu), rangées en grille
-  assets/creatif/items.json : [{ "id", "nom" (français), "i" (index dans l'atlas), "o" (onglet) }]
+  assets/creatif/items.png  : icônes des items plats, 16x16 px (les textures du jeu telles quelles)
+  assets/creatif/blocs.png  : icônes des blocs en 3D, BLOCK x BLOCK px (dessinées nettes, sans lissage)
+  assets/creatif/items.json : [{ "id", "nom" (français), "a" (0 = items.png, 1 = blocs.png), "i" (index), "o" (onglet) }]
 
 Les items « plats » (épées, nourriture…) sont les textures du jeu telles quelles. Les blocs n'existent
 pas en image dans les fichiers du jeu (il les dessine en 3D à partir de leurs modèles) : on fait le même
@@ -22,8 +23,8 @@ from PIL import Image, ImageDraw
 SRC, JSONS = sys.argv[1], sys.argv[2]
 TEX = os.path.join(SRC, 'assets/minecraft/textures')
 OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'creatif')
-ICON = 16          # taille d'une icône dans l'atlas (px) = résolution des icônes en jeu
-SS = 8             # sur-échantillonnage du rendu 3D
+ICON = 16          # taille des icônes plates (px) = taille des textures du jeu
+BLOCK = int(os.environ.get('BLOCK', 32))   # taille des icônes 3D (px) : rendu net à l'échelle de l'écran
 COLS = 40
 
 items = json.load(open(os.path.join(JSONS, 'items__all.json')))
@@ -146,7 +147,7 @@ def render_elements(elements, get_tex, gui, tints=(), offset=(0, 0, 0)):
     gui = gui or DEFAULT_GUI
     R = rot_matrix(*gui.get('rotation', [0, 0, 0]))
     T = gui.get('translation', [0, 0, 0]); S = gui.get('scale', [1, 1, 1])
-    size = ICON * SS
+    size = BLOCK
     def project(p):
         v = [(p[i] + offset[i]) / 16 - 0.5 for i in range(3)]
         v = apply(R, [v[i] * S[i] for i in range(3)])
@@ -191,7 +192,7 @@ def render_elements(elements, get_tex, gui, tints=(), offset=(0, 0, 0)):
     out = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     for depth, P, tex, uv, frot, color, k in faces:
         draw_face(out, P, tex, uv, frot, color, k)
-    return out.resize((ICON, ICON), Image.LANCZOS)
+    return out
 
 def el_rot_vec(v, rot):
     if not rot or not rot.get('angle'):
@@ -449,14 +450,21 @@ def main():
             continue
         entries.append({'id': item, 'nom': french_name(item), 'i': len(icons), 'o': onglet(item)})
         icons.append(im)
-    rows = math.ceil(len(icons) / COLS)
-    atlas = Image.new('RGBA', (COLS * ICON, rows * ICON))
-    for i, im in enumerate(icons):
-        atlas.alpha_composite(im, ((i % COLS) * ICON, (i // COLS) * ICON))
-    atlas.save(os.path.join(OUT, 'atlas.png'), optimize=True)
+    # Deux atlas : icônes plates (16 px) et icônes 3D (BLOCK px)
+    groups = ([], [])
+    for e, im in zip(entries, icons):
+        g = 0 if im.size == (ICON, ICON) else 1
+        e['a'], e['i'] = g, len(groups[g])
+        groups[g].append(im)
+    for g, (name, size) in enumerate((('items', ICON), ('blocs', BLOCK))):
+        rows = math.ceil(len(groups[g]) / COLS)
+        atlas = Image.new('RGBA', (COLS * size, rows * size))
+        for i, im in enumerate(groups[g]):
+            atlas.alpha_composite(im.resize((size, size), Image.NEAREST), ((i % COLS) * size, (i // COLS) * size))
+        atlas.save(os.path.join(OUT, f'{name}.png'), optimize=True)
     # Ordre : par onglet, puis par identifiant (regroupe les matériaux : acacia_*, birch_*…)
     entries.sort(key=lambda e: (ONGLETS.index(e['o']), e['id']))
-    json.dump({'taille': ICON, 'colonnes': COLS, 'onglets': ONGLETS, 'items': entries}, open(os.path.join(OUT, 'items.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
+    json.dump({'tailles': [ICON, BLOCK], 'colonnes': COLS, 'onglets': ONGLETS, 'items': entries}, open(os.path.join(OUT, 'items.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
     print(len(entries), 'icônes ;', len(missing), 'sans icône :', ' '.join(missing))
 
 main()
