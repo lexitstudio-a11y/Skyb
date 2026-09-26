@@ -377,7 +377,18 @@ function numberDuplicates(slots) {
 function freresSlots() {
   return {
     '2,2': { item: 'gold_ingot', count: 1, tooltip: ['§aObjectif de Résultat', '§7Ce que je veux atteindre', '§7émotionnellement.', '', '§eClique pour voir !'] },
-    '2,4': { block: 'tnt', count: 2, tooltip: ["§aObjectif d'Action", '§7Ce que je peux contrôler à 100%.', '', '§eClique pour voir !'] },
+    '2,4': { block: 'tnt', count: 2, tooltip: [
+      "§aObjectif d'Action",
+      "§7Les actions à faire pour réussir",
+      "§7l'Objectif de Résultat.",
+      '',
+      '§fEx :',
+      '§7- Réviser un chapitre 1H30/J',
+      '§7- Poster 1 Vidéo/J',
+      '§7- Envoyer 10 Mails de prospection/Semaine',
+      '§7- 10K Steps/J',
+      '', '§eClique pour voir !',
+    ] },
     '2,6': { item: 'name_tag', count: 3, tooltip: ["§aObjectif d'Identité", "§7Qu'est-ce que je dois faire dans ma journée", "§7pour réussir mon Objectif d'Action ?", '', '§eClique pour voir !'] },
   };
 }
