@@ -700,6 +700,10 @@ function editActionGoals(id) {
 }
 // Objectifs d'Identité : même fonctionnement que les Objectifs d'Action (livre, affichés dans l'overlay de l'étiquette).
 const IDENTITY_KEY = 'objectifs-identite';
+const IDENTITY_EXAMPLES = [
+  'À Quelle heure je dois me coucher ?', "M'Entraîner ?", 'Manger ?', 'Marcher', 'Quel jour Nettoyer ?',
+  "À Quelle heure il me reste de l'énergie pour travailler ?", 'Quelle heure je dois arrêter les écrans ?',
+];
 const identityGoals = loadJSON(IDENTITY_KEY);
 const identityGoalLines = id => {
   const lines = (identityGoals[id] || '').split('\n').map(l => l.trim()).filter(Boolean);
@@ -707,7 +711,7 @@ const identityGoalLines = id => {
 };
 function editIdentityGoals(id) {
   openSign({
-    book: true, title: "Objectifs d'Identité",
+    book: true, title: "Objectifs d'Identité", placeholders: IDENTITY_EXAMPLES,
     lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
     initial: identityGoals[id] || '',
     onDone: text => {
@@ -1424,6 +1428,21 @@ function renderBook() {
   let active = 0;
   rows.forEach((r, i) => { if (r.start <= caret) active = i; });
   const tx = left + 36 + (cfg.noBullets ? 0 : 8);
+  // Exemples en filigrane (cfg.placeholders) : l'exemple n°k est affiché tant que la ligne n°k n'est pas écrite ;
+  // les exemples restants se placent sous le texte déjà écrit.
+  if (cfg.placeholders) {
+    const lines = text.split('\n');
+    const lastEmpty = !lines[lines.length - 1].trim();
+    const written = lastEmpty ? lines.length - 1 : lines.length;
+    const firstRow = lastEmpty ? rows.length - 1 : rows.length;
+    const ph = cfg.placeholders.slice(written).flatMap(ex => wrapText(ex, BOOK_TEXT_W).map((t, j) => ({ t, bullet: j === 0 })));
+    ph.slice(0, Math.max(0, cfg.lines - firstRow)).forEach((p, j) => {
+      const i = firstRow + j;
+      const y = textTop + i * 9, faded = 'rgba(0, 0, 0, 0.22)';
+      if (p.bullet && !cfg.noBullets) { ctx.fillStyle = faded; ctx.fillRect((tx - 7) * S, (y + 2) * S, 3 * S, 3 * S); }
+      drawText(ctx, font, p.t, tx, y, faded, S);
+    });
+  }
   rows.forEach((row, i) => {
     const y = textTop + i * 9;
     if (row.bullet && !cfg.noBullets) {   // gros point à gauche de chaque objectif
