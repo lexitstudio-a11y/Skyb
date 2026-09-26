@@ -216,13 +216,14 @@ function wrapForSign(text, maxLines) {
   }
   return lines.join('\n');
 }
-// target = { label (ex. "du profil"), titleLines, get() -> {title, description}, save(title, description) }
+// target = { label (ex. "du profil"), titleLines, titleHint (ligne d'aide sous le titre),
+//            get() -> {title, description}, save(title, description) }
 function editTitleAndDescription(target) {
   const current = target.get();
   const n = target.titleLines || 1;
   const fixed = ['', '', '', ''];
   fixed[n] = '^^^^^^^^^^^^';
-  fixed[n + 1] = `Titre ${target.label}`;
+  fixed[n + 1] = target.titleHint || `Titre ${target.label}`;
   openSign({
     title: `Modifier le titre ${target.label}`,
     lines: n, fixed,
@@ -262,15 +263,25 @@ function editProfile() {
 }
 
 // Serments : nom et description modifiables (page « Renommer les Serments »).
+// Le début « Serment S n - » est fixe : seule la suite du nom (suffix) se modifie.
 const SERMENTS_KEY = 'serments-noms';
-const SERMENT_DEFAULTS = { 1: 'Serment S 1 - 12K/Mois', 2: 'Serment S 2 - 75Kg Sec', 3: 'Serment S 3' };
+const SERMENT_DEFAULTS = { 1: '12K/Mois', 2: '75Kg Sec', 3: '' };
 const sermentInfo = loadJSON(SERMENTS_KEY);
-const sermentTitle = n => (sermentInfo[n] && sermentInfo[n].title) || SERMENT_DEFAULTS[n];
+const sermentPrefix = n => `Serment S ${n}`;
+// Anciennes données (titre complet) : on ne garde que ce qui suit « Serment S n - ».
+for (const [n, info] of Object.entries(sermentInfo))
+  if (info.suffix == null && info.title != null)
+    info.suffix = info.title.replace(new RegExp(`^${sermentPrefix(n)}\\s*-?\\s*`), '');
+function sermentSuffix(n) {
+  const info = sermentInfo[n];
+  return info && info.suffix != null ? info.suffix : SERMENT_DEFAULTS[n];
+}
+const sermentTitle = n => sermentSuffix(n) ? `${sermentPrefix(n)} - ${sermentSuffix(n)}` : sermentPrefix(n);
 function editSerment(n) {
   editTitleAndDescription({
-    label: 'du serment', titleLines: 2,
-    get: () => ({ title: sermentTitle(n), description: (sermentInfo[n] && sermentInfo[n].description) || '' }),
-    save: (title, description) => { sermentInfo[n] = { title, description }; saveJSON(SERMENTS_KEY, sermentInfo); },
+    label: 'du serment', titleHint: `${sermentPrefix(n)} - ...`,
+    get: () => ({ title: sermentSuffix(n), description: (sermentInfo[n] && sermentInfo[n].description) || '' }),
+    save: (suffix, description) => { sermentInfo[n] = { suffix, description }; saveJSON(SERMENTS_KEY, sermentInfo); },
   });
 }
 function sermentBookTooltip(n) {
