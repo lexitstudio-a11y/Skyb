@@ -745,6 +745,18 @@ function roundCompass(n, k) {
     },
   };
 }
+// Page d'un round : sous les 3 objectifs du round, ceux de sa saison (lingot de netherite, minecart de TNT, laisse).
+function seasonGoals(n, season) {
+  const sid = `freres-${n}-saison${season}`, tag = `§8Saison ${season}`;
+  return {
+    '3,2': {
+      image: 'lingot_netherite', count: 1, action: () => editResultGoal(n),
+      tooltip: () => ['§aObjectif de Résultat', tag, ...(sermentSuffix(n) ? ['', '§f' + sermentSuffix(n)] : []), '', '§eClique pour modifier !'],
+    },
+    '3,4': { image: 'minecart_tnt', count: 2, open: `${sid}-actions`, tooltip: ["§aObjectifs d'Action", tag, '', '§eClique pour voir !'] },
+    '3,6': { image: 'laisse', count: 3, open: `${sid}-identite`, tooltip: ["§aObjectifs d'Identité", tag, '', '§eClique pour voir !'] },
+  };
+}
 // Page d'un round : œil de l'Ender en bas à gauche qui mène à la saison de ce round (numéroté avec la saison).
 function seasonEye(n, season) {
   return {
@@ -761,7 +773,7 @@ for (const n of [1, 2, 3]) {
     const label = period.replace(/^saison/, 'Saison ').replace(/^round/, 'Round ');   // « saison2 » -> « Saison 2 »
     const k = +period.replace(/\D/g, '');
     const [first, last] = period.startsWith('saison') ? [3 * k - 2, 3 * k] : [k, k];   // mois du serment couverts
-    PAGES[id] = { title: `Les 3 Frères - ${label}`, slots: { ...freresSlots(n, id), ...tomorrowClock(first, last), ...(period.startsWith('saison') ? roundCompass(n, k) : seasonEye(n, Math.ceil(k / 3))), ...navSlots(`serment${n}`) } };
+    PAGES[id] = { title: `Les 3 Frères - ${label}`, slots: { ...freresSlots(n, id), ...tomorrowClock(first, last), ...(period.startsWith('saison') ? roundCompass(n, k) : { ...seasonEye(n, Math.ceil(k / 3)), ...seasonGoals(n, Math.ceil(k / 3)) }), ...navSlots(`serment${n}`) } };
     // Sous-pages (vides pour l'instant) ouvertes par la TNT et l'étiquette.
     PAGES[`${id}-actions`] = { title: "Objectifs d'Action", slots: navSlots(id) };
     PAGES[`${id}-identite`] = { title: "Objectifs d'Identité", slots: navSlots(id) };
@@ -775,7 +787,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'boussole', 'oeil_ender', 'carte_vide', 'papier_agenda', 'book_gui', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
