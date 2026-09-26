@@ -74,7 +74,7 @@ function sermentSlots() {
   const slots = {};
   for (let i = 0; i < 4; i++) {
     const n = i + 1;
-    slots[`${2 + Math.floor(i / 2)},${2 + i % 2}`] = { item: 'painting', count: n, tooltip: [`§aSaison ${n}`, ...LORE] };
+    slots[`${2 + Math.floor(i / 2)},${1 + i % 2}`] = { item: 'painting', count: n, tooltip: [`§aSaison ${n}`, ...LORE] };
   }
   for (let i = 0; i < 12; i++) {
     const n = i + 1;
