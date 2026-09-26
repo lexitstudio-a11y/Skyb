@@ -125,6 +125,7 @@ function dateSlot(field) {
   const f = DATE_FIELDS[field];
   return {
     item: 'clock_00',
+    count: 1,
     sign: field,
     tooltip: () => [f.name, dates[field] ? `§7Date : §e${dates[field]}` : '§7Date : §cnon définie', '', '§eClique pour modifier !'],
   };
@@ -140,6 +141,7 @@ function plusOneYear(date) {
 function endDateSlot() {
   return {
     item: 'clock_00',
+    count: 2,
     tooltip: () => [
       '§cDate de fin',
       dates.start ? `§7Date : §e${plusOneYear(dates.start)}` : '§7Date : §cnon définie',
