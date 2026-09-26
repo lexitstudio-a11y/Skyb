@@ -1761,7 +1761,7 @@ function renderTimeblock() {
 }
 
 // --- « Photo » : image 1080 x 1920 (9:16) des blocs de la journée, pour un fond d'écran de téléphone ---
-// Dessinée en pixels GUI (216 x 384) puis agrandie x5 ; les heures affichées couvrent les blocs (8 h au minimum).
+// Dessinée en pixels GUI (216 x 384) puis agrandie x5 ; toute la journée de 6 h à minuit tient dans l'image.
 let photoBackground = null;
 function loadPhotoBackground() {
   photoBackground ||= new Promise(res => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = 'assets/background.webp'; });
@@ -1787,12 +1787,9 @@ async function timeblockPhoto() {
     ctx.fillRect(0, 0, cv.width, cv.height);
   }
   const blocks = tbBlocks();
-  let start = blocks.length ? Math.floor(Math.min(...blocks.map(b => b.debut)) / 60) * 60 : 8 * 60;
-  let end = blocks.length ? Math.ceil(Math.max(...blocks.map(b => b.fin)) / 60) * 60 : 16 * 60;
-  if (end - start < 8 * 60) end = Math.min(TB_END, start + 8 * 60);
-  if (end - start < 8 * 60) start = Math.max(TB_START, end - 8 * 60);
+  const start = TB_START, end = TB_END;   // toute la journée (6 h - minuit), resserrée pour tenir en hauteur
 
-  const px = 8, py = 20, pw = W - 16, ph = H - 36;   // marges pour les zones système du téléphone
+  const px = 8, py = 18, pw = W - 16, ph = H - 30;   // marges pour les zones système du téléphone
   drawPanel(ctx, px, py, pw, ph, S);
   drawText(ctx, font, 'Timeblock ' + tb.date, px + 8, py + 7, '#404040', S);
   const grid = { x: px + 38, y: py + 26, w: pw - 38 - 8, h: ph - 26 - 16 };
@@ -1803,7 +1800,7 @@ async function timeblockPhoto() {
   fr(grid.x - 1, grid.y - 1, grid.w + 1, grid.h + 1, '#373737');
   fr(grid.x, grid.y, grid.w, grid.h, '#8B8B8B');
   for (let m = start; m <= end; m += 30) fr(grid.x, Math.round(yOf(m)), grid.w, 1, m % 60 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.3)');
-  for (let m = start; m <= end; m += 60) drawText(ctx, font, fmtMin(m), px + 7, Math.round(yOf(m)) - 3, '#404040', S);
+  for (let m = start; m <= end; m += 60) drawText(ctx, font, fmtMin(m % 1440), px + 7, Math.round(yOf(m)) - 3, '#404040', S);
   blocks.forEach((b, i) => {
     const y1 = Math.round(yOf(b.debut)), h = Math.round(yOf(b.fin)) - y1;
     drawColorBlock(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, TB_COLORS[(b.couleur ?? i) % TB_COLORS.length], S);
@@ -1812,14 +1809,14 @@ async function timeblockPhoto() {
     ctx.rect((grid.x + 3) * S, (y1 + 2) * S, (grid.w - 6) * S, (h - 3) * S);
     ctx.clip();
     const hours = `${fmtMin(b.debut)} - ${fmtMin(b.fin)}`, tx = grid.x + 8, maxW = grid.w - 18;
-    if (h >= 28) {
-      drawText(ctx, font, fitText(b.titre, maxW), tx, y1 + 7, '#FFFFFF', S, true);
-      drawText(ctx, font, hours, tx, y1 + 17, '#E8E8E8', S, true);
-    } else {
-      const ty = h >= 20 ? y1 + 7 : y1 + Math.floor((h - 8) / 2) + 1;
-      const hw = textWidth(font, hours);
-      drawText(ctx, font, fitText(b.titre, maxW - hw - 6), tx, ty, '#FFFFFF', S, true);
-      drawText(ctx, font, hours, tx + maxW - hw, ty, '#E8E8E8', S, true);
+    if (h >= 26) {
+      drawText(ctx, font, fitText(b.titre, maxW), tx, y1 + 5, '#FFFFFF', S, true);
+      drawText(ctx, font, hours, tx, y1 + 15, '#E8E8E8', S, true);
+    } else {   // bloc court : titre et horaires sur une ligne, centrés ; texte plus petit si le bloc est très fin
+      const s2 = h >= 10 ? S : 3, k = S / s2;   // k : pixels GUI de la photo -> pixels du texte réduit
+      const ty = (y1 + (h - 8 / k) / 2) * k, hw = textWidth(font, hours);
+      drawText(ctx, font, fitText(b.titre, maxW * k - hw - 6), tx * k, ty, '#FFFFFF', s2, true);
+      drawText(ctx, font, hours, (tx + maxW) * k - hw, ty, '#E8E8E8', s2, true);
     }
     ctx.restore();
   });
