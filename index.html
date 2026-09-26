@@ -57,9 +57,20 @@ const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la c
 //   open : page ouverte au clic
 // Contenu provisoire, à remplacer par les vrais textes.
 const LORE = ['§7Description à venir.', '', '§eClique pour voir !'];
+
+// Boutons de navigation en bas d'une sous-page :
+//   barrière = retour à la page principale (toujours) ;
+//   flèche à sa gauche = retour à la page précédente, seulement si ce n'est pas la page principale.
+function navSlots(previous) {
+  const slots = { '5,4': { item: 'barrier', tooltip: ['§cFermer', '', '§eClique pour revenir au menu !'], open: 'main' } };
+  if (previous !== 'main')
+    slots['5,3'] = { item: 'arrow', tooltip: ['§aRetour', `§7Vers ${PAGE_TITLES[previous]}`], open: previous };
+  return slots;
+}
+const PAGE_TITLES = { main: 'Profil Joueur', serments: 'Serments S' };
 const PAGES = {
   main: {
-    title: 'Profil Joueur',
+    title: PAGE_TITLES.main,
     slots: {
       '1,4': { head: 'profile', tooltip: ['§aTon profil', ...LORE] },
       '2,1': { item: 'diamond_sword', tooltip: ['§aCompétences', ...LORE] },
@@ -69,7 +80,7 @@ const PAGES = {
     },
   },
   serments: {
-    title: 'Serments S',
+    title: PAGE_TITLES.serments,
     slots: {
       '0,4': { item: 'painting', tooltip: ['§aSerments S', ...LORE] },
       '1,1': { item: 'book', tooltip: ['§aSerment S 1 - 12K/Mois', ...LORE], open: 'serment1' },
@@ -84,20 +95,20 @@ const PAGES = {
       '3,5': { pane: 'red_stained_glass' },
       '3,6': { pane: 'red_stained_glass' },
       '3,7': { pane: 'red_stained_glass' },
-      '5,4': { item: 'barrier', tooltip: ['§cFermer', '', '§eClique pour revenir au menu !'], open: 'main' },
+      ...navSlots('main'),
     },
   },
-  // Pages des serments : vides pour l'instant, la barrière ramène à « Serments S ».
+  // Pages des serments : vides pour l'instant.
   serment1: {
     title: 'Serment S 1 - 12K/Mois',
     slots: {
-      '5,4': { item: 'barrier', tooltip: ['§cFermer', '', '§eClique pour revenir aux Serments S !'], open: 'serments' },
+      ...navSlots('serments'),
     },
   },
   serment2: {
     title: 'Serment S 2 - 75Kg Sec',
     slots: {
-      '5,4': { item: 'barrier', tooltip: ['§cFermer', '', '§eClique pour revenir aux Serments S !'], open: 'serments' },
+      ...navSlots('serments'),
     },
   },
 };
