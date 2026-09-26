@@ -1875,6 +1875,18 @@ function loadPhotoBackground() {
   return photoBackground;
 }
 async function timeblockPhoto() {
+  // Ordinateur (Chrome, Edge…) : on demande d'abord où enregistrer l'image, tant que le clic est encore « frais ».
+  const name = `timeblock-${tb.date.split('/').reverse().join('-')}.png`;
+  const touch = navigator.maxTouchPoints > 0;
+  let handle = null;
+  if (!touch && window.showSaveFilePicker) {
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: name, startIn: 'pictures',
+        types: [{ description: 'Image PNG', accept: { 'image/png': ['.png'] } }],
+      });
+    } catch (e) { if (e.name === 'AbortError') return; }   // fenêtre fermée : on n'enregistre rien
+  }
   const S = 6, W = 196, H = 426;
   const cv = document.createElement('canvas');
   cv.width = 1179;
@@ -1928,11 +1940,19 @@ async function timeblockPhoto() {
     ctx.restore();
   });
 
-  // Enregistrement : partage (téléphone) ou téléchargement du PNG
-  const name = `timeblock-${tb.date.split('/').reverse().join('-')}.png`;
+  // Enregistrement : dans le dossier choisi (ordinateur), menu de partage (téléphone : « Enregistrer dans Fichiers »
+  // permet de choisir le dossier), sinon téléchargement classique.
   const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  if (handle) {
+    try {
+      const out = await handle.createWritable();
+      await out.write(blob);
+      await out.close();
+      return;
+    } catch {}
+  }
   const file = new File([blob], name, { type: 'image/png' });
-  if (navigator.maxTouchPoints > 0 && navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
   const a = document.createElement('a');
