@@ -142,9 +142,9 @@ function sermentSlots() {
   return slots;
 }
 // Une colonne de la page « Les Pilliers Temporels » : le livre du serment en haut, puis 3 vitres colorées en dessous.
-function sermentColumn(col, page, name) {
+function sermentColumn(col, n) {
   const panes = ['lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass'];
-  const slots = { [`0,${col}`]: { item: 'book', tooltip: [`§a${name}`, ...LORE], open: page } };
+  const slots = { [`0,${col}`]: { item: 'book', tooltip: sermentBookTooltip(n), open: `serment${n}` } };
   panes.forEach((pane, i) => { slots[`${i + 1},${col}`] = { pane }; });
   return slots;
 }
@@ -199,33 +199,93 @@ function endDateSlot() {
   };
 }
 
-// Titre et description de la tête « Ton profil », modifiables via deux panneaux successifs.
-const PROFILE_KEY = 'profil';
-const profile = (() => { try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || {}; } catch { return {}; } })();
-function saveProfile() {
-  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch {}
-}
-function profileTooltip() {
-  const desc = (profile.description || '').split('\n');
+// Édition « titre puis description » via deux panneaux successifs (tête de profil, serments).
+function descLines(description) {
+  const desc = (description || '').split('\n');
   while (desc.length && !desc[desc.length - 1].trim()) desc.pop();   // retire les lignes vides de la fin
-  return ['§a' + (profile.title || 'Ton profil'), ...(desc.length ? desc.map(l => '§7' + l) : ['§7Description à venir.'])];
+  return desc.map(l => '§7' + l);
 }
-function editProfile() {
+// Répartit un texte sur plusieurs lignes de panneau (coupure entre les mots).
+function wrapForSign(text, maxLines) {
+  const lines = [''];
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const cur = lines[lines.length - 1], next = cur ? cur + ' ' + word : word;
+    if (textWidth(font, next) <= SIGN_TEXT_W || !cur) lines[lines.length - 1] = next;
+    else if (lines.length < maxLines) lines.push(word);
+    else break;
+  }
+  return lines.join('\n');
+}
+// target = { label (ex. "du profil"), titleLines, get() -> {title, description}, save(title, description) }
+function editTitleAndDescription(target) {
+  const current = target.get();
+  const n = target.titleLines || 1;
+  const fixed = ['', '', '', ''];
+  fixed[n] = '^^^^^^^^^^^^';
+  fixed[n + 1] = `Titre ${target.label}`;
   openSign({
-    title: 'Modifier le titre',
-    lines: 1, fixed: ['', '^^^^^^^^^^^^', 'Titre du profil', ''],
-    initial: profile.title || '',
+    title: `Modifier le titre ${target.label}`,
+    lines: n, fixed,
+    initial: wrapForSign(current.title || '', n),
     onDone: text => {
-      profile.title = text.trim();
-      saveProfile();
+      const title = text.split('\n').map(l => l.trim()).filter(Boolean).join(' ');
+      target.save(title, current.description || '');
       openSign({
-        title: 'Modifier la description',
+        title: `Modifier la description ${target.label}`,
         lines: 4, fixed: [],
-        initial: profile.description || '',
-        onDone: desc => { profile.description = desc; saveProfile(); },
+        initial: current.description || '',
+        onDone: desc => target.save(title, desc),
       });
     },
   });
+}
+function loadJSON(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; }
+}
+function saveJSON(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+// Tête « Ton profil ».
+const PROFILE_KEY = 'profil';
+const profile = loadJSON(PROFILE_KEY);
+function profileTooltip() {
+  const desc = descLines(profile.description);
+  return ['§a' + (profile.title || 'Ton profil'), ...(desc.length ? desc : ['§7Description à venir.'])];
+}
+function editProfile() {
+  editTitleAndDescription({
+    label: 'du profil',
+    get: () => profile,
+    save: (title, description) => { Object.assign(profile, { title, description }); saveJSON(PROFILE_KEY, profile); },
+  });
+}
+
+// Serments : nom et description modifiables (page « Renommer les Serments »).
+const SERMENTS_KEY = 'serments-noms';
+const SERMENT_DEFAULTS = { 1: 'Serment S 1 - 12K/Mois', 2: 'Serment S 2 - 75Kg Sec', 3: 'Serment S 3' };
+const sermentInfo = loadJSON(SERMENTS_KEY);
+const sermentTitle = n => (sermentInfo[n] && sermentInfo[n].title) || SERMENT_DEFAULTS[n];
+function editSerment(n) {
+  editTitleAndDescription({
+    label: 'du serment', titleLines: 2,
+    get: () => ({ title: sermentTitle(n), description: (sermentInfo[n] && sermentInfo[n].description) || '' }),
+    save: (title, description) => { sermentInfo[n] = { title, description }; saveJSON(SERMENTS_KEY, sermentInfo); },
+  });
+}
+function sermentBookTooltip(n) {
+  return () => {
+    const desc = descLines(sermentInfo[n] && sermentInfo[n].description);
+    return ['§a' + sermentTitle(n), ...(desc.length ? desc : ['§7Description à venir.']), '', '§eClique pour voir !'];
+  };
+}
+
+function renameSlot(n) {
+  return {
+    block: 'cyan_terracotta',
+    action: () => editSerment(n),
+    tooltip: () => ['§a' + sermentTitle(n), '§7Renommer ce serment', '§7et modifier sa description.', '', '§eClique pour modifier !'],
+  };
 }
 
 const PAGE_TITLES = { main: 'Profil Joueur', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments' };
@@ -243,9 +303,10 @@ const PAGES = {
   serments: {
     title: PAGE_TITLES.serments,
     slots: {
-      ...sermentColumn(2, 'serment1', 'Serment S 1 - 12K/Mois'),
-      ...sermentColumn(4, 'serment2', 'Serment S 2 - 75Kg Sec'),
-      ...sermentColumn(6, 'serment3', 'Serment S 3'),
+      ...sermentColumn(2, 1),
+      ...sermentColumn(4, 2),
+      ...sermentColumn(6, 3),
+      '5,0': { item: 'name_tag', count: 3, tooltip: ['§aRenommer les Serments', ...LORE], open: 'renommer' },
       '5,8': { item: 'painting', tooltip: ['§aDurée des Serments', ...LORE], open: 'duree' },
       ...navSlots('main'),
     },
@@ -258,16 +319,25 @@ const PAGES = {
       ...navSlots('serments'),
     },
   },
+  renommer: {
+    title: 'Renommer les Serments',
+    slots: {
+      '2,2': renameSlot(1),
+      '2,4': renameSlot(2),
+      '2,6': renameSlot(3),
+      ...navSlots('serments'),
+    },
+  },
   serment1: {
-    title: 'Serment S 1 - 12K/Mois',
+    title: () => sermentTitle(1),
     slots: { ...sermentSlots(), ...navSlots('serments') },
   },
   serment2: {
-    title: 'Serment S 2 - 75Kg Sec',
+    title: () => sermentTitle(2),
     slots: { ...sermentSlots(), ...navSlots('serments') },
   },
   serment3: {
-    title: 'Serment S 3',
+    title: () => sermentTitle(3),
     slots: { ...sermentSlots(), ...navSlots('serments') },
   },
 };
@@ -295,7 +365,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'blue_terracotta', 'black_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -583,7 +653,8 @@ function renderGui() {
   ctx.drawImage(T.generic_54, 0, 0, GUI_W, 125, 0, 0, GUI_W * S, 125 * S);
   ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
 
-  drawText(ctx, font, PAGES[state.page].title, 8, 6, '#404040', S);
+  const title = PAGES[state.page].title;
+  drawText(ctx, font, typeof title === 'function' ? title() : title, 8, 6, '#404040', S);
 
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
@@ -917,6 +988,7 @@ async function main() {
     barrel: { top: T.barrel_top, front: T.barrel_side, side: T.barrel_side },
     blue_terracotta: { top: T.blue_terracotta, front: T.blue_terracotta, side: T.blue_terracotta },
     black_terracotta: { top: T.black_terracotta, front: T.black_terracotta, side: T.black_terracotta },
+    cyan_terracotta: { top: T.cyan_terracotta, front: T.cyan_terracotta, side: T.cyan_terracotta },
   };
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
