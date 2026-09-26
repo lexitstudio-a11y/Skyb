@@ -312,7 +312,7 @@ function sermentBookTooltip(n) {
 }
 
 // --- Liste de choses à faire ---
-// Chaque action : { texte, date, fini (date de fin, si terminée), image (image gardée une fois terminée) }.
+// Chaque action : { titre, description, date, fini (date de fin, si terminée), image (image gardée une fois terminée) }.
 // Actions en cours numérotées de la plus ancienne (1) à la plus récente ; l'image alterne entre 5 images :
 // action 1 -> image 1, …, action 5 -> image 5, action 6 -> image 1, etc.
 // Page « Liste de choses à faire » : les actions en cours ; page « Actions terminées » : les terminées,
@@ -321,6 +321,24 @@ function sermentBookTooltip(n) {
 const TODO_KEY = 'todo-actions';
 const TODO_KEEP_DAYS = 30;
 const todos = (() => { try { return JSON.parse(localStorage.getItem(TODO_KEY)) || []; } catch { return []; } })();
+// Anciennes actions (un seul texte) : le texte devient le titre.
+for (const t of todos) if (t.titre == null) {
+  t.titre = (t.texte || '').split('\n').map(l => l.trim()).filter(Boolean).join(' ');
+  t.description = '';
+  delete t.texte;
+}
+// Coupe un texte en lignes d'au plus w pixels (entre les mots) ; les retours à la ligne sont gardés.
+function wrapText(text, w) {
+  return text.split('\n').flatMap(line => {
+    const out = [''];
+    for (const word of line.split(' ')) {
+      const cur = out[out.length - 1], next = cur ? cur + ' ' + word : word;
+      if (!cur || textWidth(font, next) <= w) out[out.length - 1] = next;
+      else out.push(word);
+    }
+    return out;
+  });
+}
 const TODO_ROWS = 4, TODO_COLS = 7;
 function saveTodos() {
   try { localStorage.setItem(TODO_KEY, JSON.stringify(todos)); } catch {}
@@ -344,13 +362,13 @@ const todoImage = n => `actions/${(n - 1) % TODO_IMAGES + 1}`;
 // numbers : numéro affiché de chaque action (actions en cours) ; sinon pas de numéro.
 function todoGrid(list, slots, numbers) {
   list.slice(0, TODO_ROWS * TODO_COLS).forEach((todo, i) => {
-    const lines = todo.texte.split('\n').map(l => l.trim()).filter(Boolean);
+    const desc = todo.description ? wrapText(todo.description, 180).map(l => '§7' + l) : [];
     const n = numbers ? numbers[i] : null;
     slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = {
       image: n ? todoImage(n) : (todo.image || todoImage(1)),
       count: n,
       tooltip: [
-        '§a' + (lines[0] || 'Action'), ...lines.slice(1).map(l => '§7' + l), '',
+        '§a' + (todo.titre || 'Action'), ...desc, '',
         `§8Ajoutée le ${todo.date}`,
         ...(todo.fini
           ? [`§cTerminée le ${todo.fini}`, `§8Supprimée le ${formatDate(addDays(todo.fini, TODO_KEEP_DAYS))}`]
@@ -380,17 +398,32 @@ function refreshTodo() {
   PAGES['todo-finies'].slots = doneTodoSlots();
   if (state.page === 'todo' || state.page === 'todo-finies') renderGui();
 }
-// Ajouter : panneau (texte de l'action) -> action ajoutée directement.
-function addTodo() {
+// Titre sur un panneau (une seule ligne), puis description dans un livre.
+// onSave(titre, description) ; le titre vide annule.
+function editTodoText(todo, onSave) {
   openSign({
-    title: "Écris l'action à faire",
-    lines: 4, fixed: [],
+    title: todo ? "Modifier le titre de l'action" : "Titre de l'action",
+    lines: 1, fixed: ['', '^^^^^^^^^^^^', "Titre de l'action", ''],
+    initial: todo ? todo.titre : '',
     onDone: text => {
-      if (!text.trim()) return;
-      todos.push({ texte: text, date: formatDate(new Date()) });
-      saveTodos();
-      refreshTodo();
+      const titre = text.trim();
+      if (!titre) return;
+      openSign({
+        book: true, noBullets: true, title: titre,
+        lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
+        initial: todo ? todo.description : '',
+        onDone: desc => onSave(titre, desc.trim()),
+        onCancel: () => onSave(titre, todo ? todo.description : ''),   // Échap : garde au moins le titre
+      });
     },
+  });
+}
+// Ajouter : titre (panneau) -> description (livre) -> action ajoutée.
+function addTodo() {
+  editTodoText(null, (titre, description) => {
+    todos.push({ titre, description, date: formatDate(new Date()) });
+    saveTodos();
+    refreshTodo();
   });
 }
 // Oui = terminée (passe dans « Actions terminées ») ; Non = en cours ; Supprimer = retirée.
@@ -398,7 +431,7 @@ function askTodoDone(todo) {
   const update = change => { change(); saveTodos(); refreshTodo(); };
   openConfirm({
     question: "L'objectif est-il terminé ?",
-    detail: todo.texte.split('\n').map(l => l.trim()).filter(Boolean),
+    detail: [todo.titre],
     onYes: () => update(() => {
       if (todo.fini) return;
       const active = todos.filter(t => !t.fini);
@@ -406,12 +439,7 @@ function askTodoDone(todo) {
       todo.fini = formatDate(new Date());
     }),
     onNo: () => update(() => { delete todo.fini; delete todo.image; }),
-    onEdit: () => openSign({   // modifier le texte de l'action sur un panneau
-      title: "Modifier l'action",
-      lines: 4, fixed: [],
-      initial: todo.texte,
-      onDone: text => { if (text.trim()) update(() => { todo.texte = text; }); },
-    }),
+    onEdit: () => editTodoText(todo, (titre, description) => update(() => Object.assign(todo, { titre, description }))),
     onDelete: () => update(() => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); }),
   });
 }
@@ -1212,10 +1240,10 @@ function renderBook() {
   // ligne affichée qui contient le curseur (la dernière qui commence avant lui)
   let active = 0;
   rows.forEach((r, i) => { if (r.start <= caret) active = i; });
-  const tx = left + 36 + 8;
+  const tx = left + 36 + (cfg.noBullets ? 0 : 8);
   rows.forEach((row, i) => {
     const y = top + 32 + i * 9;
-    if (row.bullet) {   // gros point à gauche de chaque objectif
+    if (row.bullet && !cfg.noBullets) {   // gros point à gauche de chaque objectif
       ctx.fillStyle = '#000000';
       ctx.fillRect((tx - 7) * S, (y + 2) * S, 3 * S, 3 * S);
     }
@@ -1228,12 +1256,12 @@ function renderBook() {
     }
   });
 
-  // Deux boutons côte à côte : « Terminé » à gauche, « Timeblock » à droite.
+  // « Terminé » ; avec cfg.onExtra, un 2e bouton « Timeblock » à droite.
   const btnW = 64, gap = 4, btnY = Math.min(H - 22, top + 196);
-  const btnX = Math.floor(W / 2) - btnW - gap / 2, btn2X = Math.floor(W / 2) + gap / 2;
+  const btnX = cfg.onExtra ? Math.floor(W / 2) - btnW - gap / 2 : Math.floor(W / 2) - btnW / 2, btn2X = Math.floor(W / 2) + gap / 2;
   drawButton(ctx, btnX, btnY, btnW, 'Terminé', sign.hoverDone, S);
-  drawButton(ctx, btn2X, btnY, btnW, 'Timeblock', sign.hoverExtra, S);
-  sign.layout = { S, board: [left + 36, top + 30, 118, BOOK_LINES * 9], button: [btnX, btnY, btnW, 20], button2: [btn2X, btnY, btnW, 20] };
+  if (cfg.onExtra) drawButton(ctx, btn2X, btnY, btnW, 'Timeblock', sign.hoverExtra, S);
+  sign.layout = { S, board: [left + 36, top + 30, 118, BOOK_LINES * 9], button: [btnX, btnY, btnW, 20], button2: cfg.onExtra ? [btn2X, btnY, btnW, 20] : null };
   Object.assign(signInput.style, { left: (left + 36) * S + 'px', top: (top + 30) * S + 'px', width: 118 * S + 'px', height: BOOK_LINES * 9 * S + 'px' });
 }
 
