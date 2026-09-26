@@ -684,7 +684,7 @@ const ACTION_KEY = 'objectifs-action';
 const actionGoals = loadJSON(ACTION_KEY);
 const actionGoalLines = id => {
   const lines = (actionGoals[id] || '').split('\n').map(l => l.trim()).filter(Boolean);
-  return lines.length ? ['', ...lines.flatMap(l => wrapText('- ' + l, 200).map(w => '§g' + w))] : [];
+  return lines.length ? ['', ...lines.flatMap(l => wrapText('• ' + l, 200).map(w => '§g' + w))] : [];
 };
 function editActionGoals(id) {
   openSign({
@@ -703,7 +703,7 @@ const IDENTITY_KEY = 'objectifs-identite';
 const identityGoals = loadJSON(IDENTITY_KEY);
 const identityGoalLines = id => {
   const lines = (identityGoals[id] || '').split('\n').map(l => l.trim()).filter(Boolean);
-  return lines.length ? ['', ...lines.flatMap(l => wrapText('- ' + l, 200).map(w => '§g' + w))] : [];
+  return lines.length ? ['', ...lines.flatMap(l => wrapText('• ' + l, 200).map(w => '§g' + w))] : [];
 };
 function editIdentityGoals(id) {
   openSign({
@@ -947,6 +947,11 @@ function buildFont(ascii, accented, accentedChars) {
     const sx = c * 9, sy = r * 12;
     glyphs.set(chr, { img: accented, sx, sy, sw: 9, sh: 12, dy: -3, adv: glyphWidth(b, accented.width, sx, sy, 9, 12) + 1 });
   }));
+  // « • » : gros point carré (3x3), le même que devant les lignes des livres.
+  const [dot, dctx] = makeCanvas(3, 8);
+  dctx.fillStyle = '#FFFFFF';
+  dctx.fillRect(0, 2, 3, 3);
+  glyphs.set('•', { img: dot, sx: 0, sy: 0, sw: 3, sh: 8, dy: 0, adv: 4 });
   return { glyphs, tinted: new Map() };
 }
 
