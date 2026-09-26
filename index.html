@@ -80,7 +80,7 @@ const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la c
 
 // Pages de l'interface. Chaque page : un titre + le contenu des cases (ligne, colonne) ;
 // les cases absentes = vitre teintée noire.
-//   item / block / head : l'item affiché ;  pane : vitre colorée décorative (pas un item, pas d'overlay)
+//   item / block / head / image : l'item affiché (image = fichier PNG utilisé tel quel) ;  pane : vitre colorée décorative (pas un item, pas d'overlay)
 //   tooltip : lignes de l'overlay au survol (1re ligne = nom). Codes couleur Minecraft : §a vert, §7 gris, §e jaune…
 //   open : page ouverte au clic ;  action : fonction appelée au clic (ex. ouvrir un panneau de saisie)
 //   tooltip peut aussi être une fonction qui renvoie les lignes (contenu dynamique)
@@ -326,7 +326,7 @@ const PAGES = {
   todo: {
     title: PAGE_TITLES.todo,
     slots: {
-      '4,7': { head: 'plus', tooltip: ['§aAjouter', ...LORE] },
+      '4,7': { image: 'tete_plus', tooltip: ['§aAjouter', ...LORE] },
       ...navSlots('main'),
     },
   },
@@ -372,7 +372,7 @@ function numberDuplicates(slots) {
   });
   for (const key of keys) {
     const slot = slots[key];
-    const type = slot.item || slot.block || slot.head;
+    const type = slot.item || slot.block || slot.head || slot.image;
     if (type) (groups[type] ||= []).push(slot);
   }
   for (const group of Object.values(groups))
@@ -433,7 +433,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -501,17 +501,6 @@ const HEADS = {
       top:   pixelTex(p, ['kbbbbbbk', 'bmbmmbmb', 'bbmbbmbb', 'bmbmmbmb', 'bmbmmbmb', 'bbmbbmbb', 'bmbmmbmb', 'kbbbbbbk']),
       front: pixelTex(p, ['kbbbbbbk', 'bbbwwbbb', 'bbwbbwbb', 'bbbwgwbb', 'bbwgwbbb', 'bbwbbwbb', 'bbbwwbbb', 'kbbbbbbk']),
       side:  pixelTex(p, ['kbbbbbbk', 'bbwbbbbb', 'bbbbgbbb', 'bgbbbbwb', 'bbbwbbbb', 'bbbbbgbb', 'bwbbbbbb', 'kbbbbbbk']),
-    };
-  })(),
-  // Tête verte avec un « + » vert clair sur le côté (bouton d'ajout).
-  plus: (() => {
-    const p = { a: '#57701d', b: '#546c1b', c: '#50681a', d: '#5b7520', P: '#acde37', s: '#7b9e2d' };
-    const base = ['abcbabdb', 'bdabcaba', 'cbabdbac', 'abcabbda', 'bdbacbab', 'acbdabcb', 'babcadba', 'cabbacbd'];
-    return {
-      top: pixelTex(p, base),
-      front: pixelTex(p, [...base].reverse()),
-      side: pixelTex(p, ['abcbabdb', 'bdaPPaba', 'cbaPPsac', 'aPPPPPPa', 'bPPPPPPs', 'acsPPscb', 'babPPsba', 'cabssacb']),
-      shade: [1.0, 0.85, 0.95],   // côté peu ombré pour que le « + » reste bien visible
     };
   })(),
   globe: (() => {
@@ -659,10 +648,9 @@ function drawCube(ctx, faces, px, py, S, scale = 1) {
   const P = (x, y) => [cx + x * k, cy + y * k];
   const L = P(-7, -4), T = P(0, -7.5), R = P(7, -4), C = P(0, -0.5), D = [0, 8 * k];
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
-  const [shTop, shFront, shSide] = faces.shade || [1.0, 0.8, 0.6];   // luminosité de chaque face
-  drawFace(ctx, faces.top,   L, sub(T, L), sub(C, L), shTop);
-  drawFace(ctx, faces.front, L, sub(C, L), D, shFront);
-  drawFace(ctx, faces.side,  C, sub(R, C), D, shSide);
+  drawFace(ctx, faces.top,   L, sub(T, L), sub(C, L), 1.0);
+  drawFace(ctx, faces.front, L, sub(C, L), D, 0.8);
+  drawFace(ctx, faces.side,  C, sub(R, C), D, 0.6);
 }
 
 function chestFaces(img) {
@@ -750,6 +738,14 @@ function renderGui() {
         }
         else if (look.block) drawCube(ctx, BLOCKS[look.block], px, py, S, (look.block === 'chest' ? 0.9 : 1) * ITEM_SCALE);
         else if (look.head) drawCube(ctx, HEADS[look.head], px, py, S, 0.85 * ITEM_SCALE);
+        else if (look.image) {
+          // Image fournie telle quelle (rendu déjà en 3D) : réduite pour tenir dans la case, proportions gardées.
+          const img = T[look.image], size = 16 * S * ITEM_SCALE * 0.9;
+          const k = size / Math.max(img.width, img.height), w = img.width * k, h = img.height * k;
+          ctx.imageSmoothingEnabled = true;
+          ctx.drawImage(img, px + (16 * S - w) / 2, py + (16 * S - h) / 2, w, h);
+          ctx.imageSmoothingEnabled = false;
+        }
       }
 
       // Nombre en bas à droite de la case (comme la taille d'une pile en jeu), en blanc avec ombre.
