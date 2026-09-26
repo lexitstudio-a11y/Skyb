@@ -53,6 +53,9 @@
     border: 0;
     padding: 0;
     caret-color: transparent;
+    resize: none;
+    color: transparent;
+    background: transparent;
   }
   canvas {
     image-rendering: pixelated;
@@ -65,7 +68,7 @@
 <canvas id="tooltip" hidden></canvas>
 <div id="signScreen" hidden>
   <canvas id="signCanvas"></canvas>
-  <input id="signInput" type="text" inputmode="numeric" autocomplete="off" maxlength="10" aria-label="Date (JJ/MM/AAAA)">
+  <textarea id="signInput" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Texte du panneau"></textarea>
 </div>
 <script>
 // Interface "Profil Joueur" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
@@ -79,7 +82,7 @@ const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la c
 // les cases absentes = vitre teintée noire.
 //   item / block / head : l'item affiché ;  pane : vitre colorée décorative (pas un item, pas d'overlay)
 //   tooltip : lignes de l'overlay au survol (1re ligne = nom). Codes couleur Minecraft : §a vert, §7 gris, §e jaune…
-//   open : page ouverte au clic ;  sign : ouvre le panneau de saisie de date (voir DATE_FIELDS)
+//   open : page ouverte au clic ;  action : fonction appelée au clic (ex. ouvrir un panneau de saisie)
 //   tooltip peut aussi être une fonction qui renvoie les lignes (contenu dynamique)
 //   look : fonction qui peut changer l'apparence ({ item/block : autre texture, dim : assombri }), sans toucher au numéro
 // Contenu provisoire, à remplacer par les vrais textes.
@@ -155,7 +158,7 @@ function dateSlot(field) {
   const f = DATE_FIELDS[field];
   return {
     item: 'clock_00',
-    sign: field,
+    action: () => openDateSign(field),
     tooltip: () => [f.name, dates[field] ? `§7Date : §e${dates[field]}` : '§7Date : §cnon définie', '', '§eClique pour modifier !'],
   };
 }
@@ -188,12 +191,41 @@ function endDateSlot() {
   };
 }
 
+// Titre et description de la tête « Ton profil », modifiables via deux panneaux successifs.
+const PROFILE_KEY = 'profil';
+const profile = (() => { try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || {}; } catch { return {}; } })();
+function saveProfile() {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch {}
+}
+function profileTooltip() {
+  const desc = (profile.description || '').split('\n');
+  while (desc.length && !desc[desc.length - 1].trim()) desc.pop();   // retire les lignes vides de la fin
+  return ['§a' + (profile.title || 'Ton profil'), ...(desc.length ? desc.map(l => '§7' + l) : ['§7Description à venir.'])];
+}
+function editProfile() {
+  openSign({
+    title: 'Modifier le titre',
+    lines: 1, fixed: ['', '^^^^^^^^^^^^', 'Titre du profil', ''],
+    initial: profile.title || '',
+    onDone: text => {
+      profile.title = text.trim();
+      saveProfile();
+      openSign({
+        title: 'Modifier la description',
+        lines: 4, fixed: [],
+        initial: profile.description || '',
+        onDone: desc => { profile.description = desc; saveProfile(); },
+      });
+    },
+  });
+}
+
 const PAGE_TITLES = { main: 'Profil Joueur', serments: 'Serments S', duree: 'Durée des Serments' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
     slots: {
-      '1,4': { head: 'profile', tooltip: ['§aTon profil', ...LORE] },
+      '1,4': { head: 'profile', tooltip: profileTooltip, action: editProfile },
       '2,1': { item: 'diamond_sword', tooltip: ['§aCompétences', ...LORE] },
       '2,4': { item: 'book', tooltip: ['§aSerments S', ...LORE], open: 'serments' },
       '2,5': { item: 'paper', tooltip: ['§aTo-Do', ...LORE] },
@@ -648,7 +680,7 @@ function hideTooltip() {
 
 // Navigation entre pages via l'ancre de l'URL (#serments), pour que "Précédent" du navigateur marche.
 function showPageFromHash() {
-  if (sign.field) closeSign();
+  if (sign.cfg) closeSign();
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
   hideTooltip();
@@ -669,31 +701,34 @@ function onClick(ev) {
   const slot = itemAt(slotAt(ev));
   if (!slot) return;
   playClick();
-  if (slot.sign) { openSign(slot.sign); return; }
+  if (slot.action) { slot.action(); return; }
   if (!slot.open) return;
   if (slot.open === 'main') history.pushState(null, '', location.pathname + location.search);
   else location.hash = slot.open;
   showPageFromHash();
 }
 
-// --- Panneau de saisie d'une date (comme l'écran d'édition de panneau de Minecraft) ---
+// --- Panneau de saisie (comme l'écran d'édition de panneau de Minecraft) ---
+// openSign(cfg) : cfg = {
+//   title   : titre affiché au-dessus du panneau,
+//   lines   : nombre de lignes modifiables (en haut du panneau, 1 à 4),
+//   fixed   : textes des lignes non modifiables (index 0 à 3),
+//   initial : texte de départ (lignes séparées par \n),
+//   numeric : clavier numérique + chiffres seulement,  transform(text) : mise en forme pendant la frappe,
+//   validate(text) : false = saisie refusée (affichée en rouge),  onDone(text) : appelé après « Terminé » }
 const signScreen = document.getElementById('signScreen');
 const signCanvas = document.getElementById('signCanvas');
 const signInput = document.getElementById('signInput');
-const sign = { field: null, error: false, hoverDone: false, blinkOn: true, timer: null, layout: null };
+const sign = { cfg: null, error: false, hoverDone: false, blinkOn: true, timer: null, layout: null };
+const SIGN_TEXT_W = 90;   // largeur max d'une ligne de texte sur le panneau (pixels GUI)
 
-// "12032026" -> "12/03/2026" (les / sont ajoutés au fil de la saisie).
-function formatDigits(d) {
-  return d.slice(0, 2) + (d.length > 2 ? '/' + d.slice(2, 4) : '') + (d.length > 4 ? '/' + d.slice(4, 8) : '');
-}
-function signDigits() {
-  return signInput.value.replace(/\D/g, '').slice(0, 8);
-}
-function isValidDate(d) {
-  if (d.length !== 8) return false;
-  const day = +d.slice(0, 2), month = +d.slice(2, 4), year = +d.slice(4);
-  const dt = new Date(year, month - 1, day);
-  return year >= 1900 && year <= 2100 && dt.getFullYear() === year && dt.getMonth() === month - 1 && dt.getDate() === day;
+// Coupe le texte au nombre de lignes et à la largeur du panneau.
+function fitSignText(text) {
+  const lines = text.split('\n').slice(0, sign.cfg.lines);
+  return lines.map(line => {
+    while (line && textWidth(font, line) > SIGN_TEXT_W) line = line.slice(0, -1);
+    return line;
+  }).join('\n');
 }
 
 function signScale() {
@@ -701,6 +736,7 @@ function signScale() {
 }
 
 function renderSign() {
+  const cfg = sign.cfg;
   const S = signScale();
   signCanvas.width = innerWidth;
   signCanvas.height = innerHeight;
@@ -711,19 +747,35 @@ function renderSign() {
   ctx.fillRect(0, 0, signCanvas.width, signCanvas.height);
   const centered = (text, y, color, shadow) => drawText(ctx, font, text, Math.floor(W / 2 - textWidth(font, text) / 2), y, color, S, shadow);
 
-  const f = DATE_FIELDS[sign.field];
   const top = Math.max(8, Math.floor((H - 200) / 2));
-  centered(f.title, top, '#FFFFFF', true);
+  centered(cfg.title, top, '#FFFFFF', true);
 
   // Panneau en chêne : face avant (24x12 texels) + poteau (2x14 texels), agrandis 4x.
   const bx = Math.floor(W / 2) - 48, by = top + 28;
   ctx.drawImage(T.oak, 2, 2, 24, 12, bx * S, by * S, 96 * S, 48 * S);
   ctx.drawImage(T.oak, 2, 16, 2, 14, (Math.floor(W / 2) - 4) * S, (by + 48) * S, 8 * S, 56 * S);
 
-  const text = formatDigits(signDigits());
-  const first = `> ${text}${sign.blinkOn ? '_' : ' '} <`;
-  const lines = [first, '^^^^^^^^^^^^', f.label, 'JJ/MM/AAAA'];
-  lines.forEach((line, i) => centered(line, by + 5 + i * 10, i === 0 && sign.error ? '#AA0000' : '#000000', false));
+  // Ligne active = celle du curseur, encadrée par > <, avec un curseur clignotant.
+  const text = signInput.value;
+  const caret = signInput.selectionStart ?? text.length;
+  const before = text.slice(0, caret).split('\n');
+  const activeLine = before.length - 1, col = before[activeLine].length;
+  const typed = text.split('\n');
+  for (let i = 0; i < 4; i++) {
+    const y = by + 5 + i * 10;
+    const color = sign.error && i < cfg.lines ? '#AA0000' : '#000000';
+    if (i >= cfg.lines) { if (cfg.fixed[i]) centered(cfg.fixed[i], y, '#000000', false); continue; }
+    const line = typed[i] || '';
+    if (i !== activeLine) { centered(line, y, color, false); continue; }
+    const atEnd = col === line.length;
+    const shown = `> ${line}${atEnd ? (sign.blinkOn ? '_' : ' ') : ''} <`;
+    centered(shown, y, color, false);
+    if (!atEnd && sign.blinkOn) {   // curseur au milieu du texte : barre verticale
+      const x = Math.floor(W / 2 - textWidth(font, shown) / 2) + textWidth(font, '> ' + line.slice(0, col)) - 1;
+      ctx.fillStyle = color;
+      ctx.fillRect(x * S, (y - 1) * S, S, 9 * S);
+    }
+  }
 
   // Bouton "Terminé" (texture de bouton Minecraft, 200x20) ; plus étroit sur petit écran :
   // on garde les deux bords de la texture (moitié gauche + moitié droite).
@@ -743,53 +795,61 @@ function inRect(ev, [x, y, w, h]) {
   return gx >= x && gx < x + w && gy >= y && gy < y + h;
 }
 
-function openSign(field) {
-  sign.field = field;
+function openSign(cfg) {
+  sign.cfg = { fixed: [], transform: t => t, validate: () => true, ...cfg };
   sign.error = false;
   sign.hoverDone = false;
-  signInput.value = dates[field] || '';
+  signInput.inputMode = cfg.numeric ? 'numeric' : 'text';
+  signInput.value = fitSignText(sign.cfg.transform(cfg.initial || ''));
   hideTooltip();
   canvas.hidden = true;
   signScreen.hidden = false;
   sign.blinkOn = true;
   clearInterval(sign.timer);
   sign.timer = setInterval(() => { sign.blinkOn = !sign.blinkOn; renderSign(); }, 300);
-  renderSign();
   signInput.focus();
+  signInput.setSelectionRange(signInput.value.length, signInput.value.length);
+  renderSign();
 }
 
 function closeSign() {
   clearInterval(sign.timer);
   signScreen.hidden = true;
   canvas.hidden = false;
-  sign.field = null;
+  sign.cfg = null;
   renderGui();
 }
 
-// Valide la saisie : date complète et réelle, ou vide pour effacer.
 function finishSign() {
-  const d = signDigits();
-  if (d.length && !isValidDate(d)) {
+  const cfg = sign.cfg, text = signInput.value;
+  if (!cfg.validate(text)) {
     sign.error = true;
     renderSign();
     signInput.focus();
     return;
   }
-  if (d.length) dates[sign.field] = formatDigits(d);
-  else delete dates[sign.field];
-  saveDates();
   closeSign();
+  cfg.onDone(text);   // peut ouvrir un autre panneau (ex. titre puis description)
 }
 
 signInput.addEventListener('input', () => {
-  signInput.value = formatDigits(signDigits());
+  const fitted = fitSignText(sign.cfg.transform(signInput.value));
+  if (fitted !== signInput.value) signInput.value = fitted;
   sign.error = false;
   sign.blinkOn = true;
   renderSign();
 });
+// Le curseur bouge (flèches, clic) : redessine la ligne active.
+document.addEventListener('selectionchange', () => { if (sign.cfg) { sign.blinkOn = true; renderSign(); } });
 signInput.addEventListener('keydown', ev => {
-  if (ev.key === 'Enter') { ev.preventDefault(); playClick(); finishSign(); }
-  else if (ev.key === 'Escape') { ev.preventDefault(); closeSign(); }
+  if (ev.key === 'Escape') { ev.preventDefault(); closeSign(); return; }
+  if (ev.key !== 'Enter') return;
+  // Entrée : ligne suivante s'il en reste, sinon « Terminé ».
+  const lineCount = signInput.value.split('\n').length;
+  if (lineCount < sign.cfg.lines && !ev.shiftKey) return;
+  ev.preventDefault();
+  playClick();
+  finishSign();
 });
 signCanvas.addEventListener('mousemove', ev => {
   if (!sign.layout) return;
@@ -802,6 +862,35 @@ signCanvas.addEventListener('click', ev => {
   else signInput.focus();
 });
 
+// Panneau de la date d'entrée : chiffres seulement, "12032026" -> "12/03/2026".
+function formatDigits(d) {
+  return d.slice(0, 2) + (d.length > 2 ? '/' + d.slice(2, 4) : '') + (d.length > 4 ? '/' + d.slice(4, 8) : '');
+}
+const onlyDigits = t => t.replace(/\D/g, '').slice(0, 8);
+function isValidDate(d) {
+  if (d.length !== 8) return false;
+  const day = +d.slice(0, 2), month = +d.slice(2, 4), year = +d.slice(4);
+  const dt = new Date(year, month - 1, day);
+  return year >= 1900 && year <= 2100 && dt.getFullYear() === year && dt.getMonth() === month - 1 && dt.getDate() === day;
+}
+function openDateSign(field) {
+  const f = DATE_FIELDS[field];
+  openSign({
+    title: f.title,
+    lines: 1, fixed: ['', '^^^^^^^^^^^^', f.label, 'JJ/MM/AAAA'],
+    numeric: true,
+    initial: dates[field] || '',
+    transform: t => formatDigits(onlyDigits(t)),
+    validate: t => !onlyDigits(t) || isValidDate(onlyDigits(t)),   // vide = effacer la date
+    onDone: t => {
+      const d = onlyDigits(t);
+      if (d) dates[field] = formatDigits(d);
+      else delete dates[field];
+      saveDates();
+    },
+  });
+}
+
 function resize() {
   state.S = Math.max(2, Math.min(5, Math.floor(Math.min(innerWidth / (GUI_W + 16), innerHeight / (GUI_H + 16)))));
   canvas.width = GUI_W * state.S;
@@ -809,7 +898,7 @@ function resize() {
   state.hovered = null;
   tip.hidden = true;
   renderGui();
-  if (sign.field) renderSign();
+  if (sign.cfg) renderSign();
 }
 
 async function main() {
