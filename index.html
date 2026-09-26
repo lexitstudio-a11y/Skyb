@@ -1433,8 +1433,14 @@ const timeblockCanvas = document.getElementById('timeblockCanvas');
 const tb = { date: null, onClose: null, layout: null, scroll: null, drag: null, hoverDone: false };
 const fmtMin = m => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
 const tbBlocks = () => timeblocks[tb.date] || [];
-// Chaque nouveau bloc prend la couleur suivante de la palette (gardée ensuite, même s'il est déplacé).
-const nextColor = () => tbBlocks().reduce((m, b, i) => Math.max(m, (b.couleur ?? i) + 1), 0);
+// Chaque nouveau bloc prend une couleur de la palette au hasard (différente de celle du dernier bloc créé),
+// gardée ensuite même s'il est déplacé.
+function randomColor() {
+  const blocks = tbBlocks(), last = blocks.length ? (blocks[blocks.length - 1].couleur ?? blocks.length - 1) % TB_COLORS.length : -1;
+  let c;
+  do c = Math.floor(Math.random() * TB_COLORS.length); while (c === last);
+  return c;
+}
 function saveTimeblocks() {
   for (const d of Object.keys(timeblocks)) if (!timeblocks[d].length) delete timeblocks[d];
   try { localStorage.setItem(TB_KEY, JSON.stringify(timeblocks)); } catch {}
@@ -1523,9 +1529,10 @@ function renderTimeblock() {
   const colorOf = (b, i) => TB_COLORS[(b.couleur ?? i) % TB_COLORS.length];
   tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, null, colorOf(b, i)); });
   const d = tb.drag;
+  if (d && d.mode === 'create' && d.color == null) d.color = randomColor();
   if (d && d.moved) {   // bloc en cours de création / déplacement : on affiche ses horaires
     const [a, z] = d.mode === 'create' ? [Math.min(d.start, d.end), Math.max(d.start, d.end)] : [d.debut, d.fin];
-    const color = d.mode === 'create' ? TB_COLORS[nextColor() % TB_COLORS.length] : colorOf(d.block, tbBlocks().indexOf(d.block));
+    const color = d.mode === 'create' ? TB_COLORS[d.color] : colorOf(d.block, tbBlocks().indexOf(d.block));
     drawBlock(a, z, d.mode === 'create' ? 'Nouveau bloc' : d.block.titre, `${fmtMin(a)} - ${fmtMin(z)}`, color);
   }
   if (tb.date === formatDate(new Date())) {   // heure actuelle
@@ -1665,7 +1672,7 @@ timeblockCanvas.addEventListener('pointerup', () => {
     let [debut, fin] = [Math.min(d.start, d.end), Math.max(d.start, d.end)];
     if (!d.moved) fin = Math.min(TB_END, debut + 60);   // simple clic : bloc d'une heure
     playClick();
-    editBlockTitle({ debut, fin, titre: '', couleur: nextColor() }, true);
+    editBlockTitle({ debut, fin, titre: '', couleur: d.color ?? randomColor() }, true);
   } else if (!d.moved) {
     playClick();
     blockMenu(d.block);
