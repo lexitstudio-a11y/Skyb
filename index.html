@@ -362,13 +362,14 @@ const todoImage = n => `actions/${(n - 1) % TODO_IMAGES + 1}`;
 // numbers : numéro affiché de chaque action (actions en cours) ; sinon pas de numéro.
 function todoGrid(list, slots, numbers) {
   list.slice(0, TODO_ROWS * TODO_COLS).forEach((todo, i) => {
-    const desc = todo.description ? wrapText(todo.description, 180).map(l => '§7' + l) : [];
     const n = numbers ? numbers[i] : null;
     slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = {
       image: n ? todoImage(n) : (todo.image || todoImage(1)),
       count: n,
-      tooltip: [
-        '§a' + (todo.titre || 'Action'), ...desc, '',
+      // Fonction : la description est découpée à l'affichage (la police n'est pas encore chargée au démarrage).
+      tooltip: () => [
+        '§a' + (todo.titre || 'Action'),
+        ...(todo.description ? wrapText(todo.description, 180).map(l => '§7' + l) : []), '',
         `§8Ajoutée le ${todo.date}`,
         ...(todo.fini
           ? [`§cTerminée le ${todo.fini}`, `§8Supprimée le ${formatDate(addDays(todo.fini, TODO_KEEP_DAYS))}`]
