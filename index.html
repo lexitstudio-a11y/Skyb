@@ -1865,18 +1865,20 @@ function renderTimeblock() {
   tb.layout = { S, grid, btn, photo, yOf };
 }
 
-// --- « Photo » : image 1080 x 1920 (9:16) des blocs de la journée, pour un fond d'écran de téléphone ---
-// Dessinée en pixels GUI (216 x 384) puis agrandie x5 ; toute la journée de 6 h à minuit tient dans l'image.
+// --- « Photo » : image 1179 x 2556 (format d'écran d'iPhone) des blocs de la journée, pour un fond d'écran ---
+// Dessinée en pixels GUI (196 x 426) puis agrandie x6 ; toute la journée de 6 h à minuit tient dans l'image.
+// Le panneau reste dans la zone visible de l'écran verrouillé : sous la date et l'heure (~25 % du haut),
+// au-dessus des boutons lampe / appareil photo (~13 % du bas).
 let photoBackground = null;
 function loadPhotoBackground() {
   photoBackground ||= new Promise(res => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = 'assets/background.webp'; });
   return photoBackground;
 }
 async function timeblockPhoto() {
-  const S = 5, W = 216, H = 384;
+  const S = 6, W = 196, H = 426;
   const cv = document.createElement('canvas');
-  cv.width = W * S;
-  cv.height = H * S;
+  cv.width = 1179;
+  cv.height = 2556;
   const ctx = cv.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   // Fond : l'image du site, assombrie
@@ -1894,10 +1896,10 @@ async function timeblockPhoto() {
   const blocks = tbBlocks();
   const start = TB_START, end = TB_END;   // toute la journée (6 h - minuit), resserrée pour tenir en hauteur
 
-  const px = 8, py = 18, pw = W - 16, ph = H - 30;   // marges pour les zones système du téléphone
+  const px = 6, py = Math.round(H * 0.25), pw = W - 12, ph = Math.round(H * 0.865) - py;   // zone visible de l'écran verrouillé
   drawPanel(ctx, px, py, pw, ph, S);
-  drawText(ctx, font, 'Timeblock ' + tb.date, px + 8, py + 7, '#404040', S);
-  const grid = { x: px + 38, y: py + 26, w: pw - 38 - 8, h: ph - 26 - 16 };
+  drawText(ctx, font, 'Timeblock ' + tb.date, px + 8, py + 6, '#404040', S);
+  const grid = { x: px + 36, y: py + 19, w: pw - 36 - 7, h: ph - 19 - 8 };
   const hourH = grid.h * 60 / (end - start);
   const yOf = m => grid.y + (m - start) * hourH / 60;
   const fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
@@ -1917,9 +1919,9 @@ async function timeblockPhoto() {
     if (h >= 26) {
       drawText(ctx, font, fitText(b.titre, maxW), tx, y1 + 5, '#FFFFFF', S, true);
       drawText(ctx, font, hours, tx, y1 + 15, '#E8E8E8', S, true);
-    } else {   // bloc court : titre et horaires sur une ligne, centrés ; texte plus petit si le bloc est très fin
-      const s2 = h >= 10 ? S : 3, k = S / s2;   // k : pixels GUI de la photo -> pixels du texte réduit
-      const ty = (y1 + (h - 8 / k) / 2) * k, hw = textWidth(font, hours);
+    } else {   // bloc court : titre et horaires sur une ligne, centrés ; texte réduit pour tenir dans le bloc
+      const s2 = Math.max(2, Math.min(S, Math.floor((h - 3) * S / 8))), k = S / s2;   // k : pixels GUI de la photo -> pixels du texte réduit
+      const ty = Math.round((y1 + 0.5 + (h - 8 / k) / 2) * k), hw = textWidth(font, hours);
       drawText(ctx, font, fitText(b.titre, maxW * k - hw - 6), tx * k, ty, '#FFFFFF', s2, true);
       drawText(ctx, font, hours, (tx + maxW) * k - hw, ty, '#E8E8E8', s2, true);
     }
