@@ -517,7 +517,8 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'creatif/tab_item_search', 'creatif/scroller', 'creatif/scroller_disabled', 'creatif/tab_top_selected_7', 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'creatif/tab_item_search', 'creatif/tab_items', 'creatif/scroller', 'creatif/scroller_disabled',
+  ...[1, 2, 3, 4, 5, 7].flatMap(n => ['top', 'bottom'].flatMap(side => [`creatif/tab_${side}_selected_${n}`, `creatif/tab_${side}_unselected_${n}`])), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -806,6 +807,7 @@ function renderGui() {
   ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
 
   drawText(ctx, font, pageTitle(state.page), 8, 6, '#404040', S);
+  if (state.page === 'todo') loadCreative();   // icônes de l'inventaire créatif chargées seulement ici
 
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
@@ -1196,33 +1198,70 @@ function drawIcon(ctx, id, x, y, size) {
 const creativeScreen = document.getElementById('creativeScreen');
 const creativeCanvas = document.getElementById('creativeCanvas');
 const creativeSearch = document.getElementById('creativeSearch');
-const creative = { onPick: null, list: [], scroll: 0, hovered: -1, dragging: false, blinkOn: true, timer: null, layout: null };
+const creative = { onPick: null, tab: 'construction', list: [], scroll: 0, hovered: -1, hoverTab: null, dragging: false, blinkOn: true, timer: null, layout: null };
+// Onglets comme en jeu : 5 en haut à gauche + « Rechercher » en haut à droite, 5 en bas à gauche.
+// (Les onglets « Barres d'action sauvegardées » et « Inventaire du mode Survie » ne sont pas repris.)
+const CREATIVE_TABS = [
+  { id: 'construction', nom: 'Blocs de construction', icon: 'bricks', side: 'top', col: 0 },
+  { id: 'colores', nom: 'Blocs colorés', icon: 'cyan_wool', side: 'top', col: 1 },
+  { id: 'naturels', nom: 'Blocs naturels', icon: 'grass_block', side: 'top', col: 2 },
+  { id: 'fonctionnels', nom: 'Blocs fonctionnels', icon: 'oak_sign', side: 'top', col: 3 },
+  { id: 'redstone', nom: 'Redstone', icon: 'redstone', side: 'top', col: 4 },
+  { id: 'search', nom: 'Rechercher', icon: 'compass', side: 'top', col: 6 },
+  { id: 'outils', nom: 'Outils et utilitaires', icon: 'diamond_pickaxe', side: 'bottom', col: 0 },
+  { id: 'combat', nom: 'Combat', icon: 'netherite_sword', side: 'bottom', col: 1 },
+  { id: 'nourriture', nom: 'Nourriture et boissons', icon: 'golden_apple', side: 'bottom', col: 2 },
+  { id: 'ingredients', nom: 'Ingrédients', icon: 'iron_ingot', side: 'bottom', col: 3 },
+  { id: 'oeufs', nom: "Œufs d'apparition", icon: 'creeper_spawn_egg', side: 'bottom', col: 4 },
+];
+// Position d'un onglet (pixels GUI, relatifs au coin de l'écran créatif) ; la dernière colonne est calée à droite.
+function tabRect(t) {
+  const x = t.col === 6 ? C_W - 27 + 1 : 27 * t.col;
+  return [x, t.side === 'top' ? -28 : C_H - 4, 26, 32];
+}
 const normalize = t => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const C_W = 195, C_H = 136;   // taille de l'écran créatif (texture tab_item_search)
 
 function creativeScale() {
-  return Math.max(1, Math.min(5, Math.floor(innerWidth / C_W), Math.floor(innerHeight / (C_H + 36))));
+  return Math.max(1, Math.min(5, Math.floor(innerWidth / C_W), Math.floor(innerHeight / (C_H + 64))));
 }
 function filterCreative() {
-  const q = normalize(creativeSearch.value.trim());
-  creative.list = q ? CREATIVE.items.filter(it => normalize(it.nom).includes(q) || it.id.includes(q.replace(/ /g, '_'))) : CREATIVE.items;
+  if (creative.tab !== 'search') {
+    creative.list = CREATIVE.items.filter(it => it.o === creative.tab);
+  } else {
+    const q = normalize(creativeSearch.value.trim());
+    creative.list = q ? CREATIVE.items.filter(it => normalize(it.nom).includes(q) || it.id.includes(q.replace(/ /g, '_'))) : CREATIVE.items;
+  }
   creative.scroll = 0;
+}
+function selectTab(id) {
+  creative.tab = id;
+  filterCreative();
+  renderCreative();
 }
 const creativeMaxScroll = () => Math.max(0, Math.ceil(creative.list.length / 9) - 5);
 
 function renderCreative() {
   const S = creativeScale();
   const { ctx, W, H } = prepareScreen(creativeCanvas, S);
-  const left = Math.floor((W - C_W) / 2), top = Math.floor((H - C_H + 28) / 2);
-  const tabX = left + 169, tabY = top - 28;
-  ctx.drawImage(T.tab_item_search, 0, 0, C_W, C_H, left * S, top * S, C_W * S, C_H * S);
-  ctx.drawImage(T.tab_top_selected_7, tabX * S, tabY * S, 26 * S, 32 * S);   // onglet « Rechercher »
-  drawIcon(ctx, 'compass', (tabX + 5) * S, (tabY + 9) * S, 16 * S);
-  drawText(ctx, font, 'Rechercher', left + 8, top + 6, '#404040', S);
-  // Champ de recherche
-  let q = creativeSearch.value;
-  while (q && textWidth(font, q + '_') > 86) q = q.slice(1);
-  drawText(ctx, font, q + (creative.blinkOn ? '_' : ''), left + 82, top + 6, '#FFFFFF', S, true);
+  const left = Math.floor((W - C_W) / 2), top = Math.floor((H - C_H) / 2);
+  const isSearch = creative.tab === 'search';
+  const drawTab = t => {
+    const [x, y] = tabRect(t), sel = t.id === creative.tab;
+    ctx.drawImage(T[`tab_${t.side}_${sel ? 'selected' : 'unselected'}_${t.col + 1}`], (left + x) * S, (top + y) * S, 26 * S, 32 * S);
+    drawIcon(ctx, t.icon, (left + x + 5) * S, (top + y + (t.side === 'top' ? 9 : 7)) * S, 16 * S);
+  };
+  // onglets non sélectionnés derrière le fond, l'onglet sélectionné par-dessus
+  CREATIVE_TABS.filter(t => t.id !== creative.tab).forEach(drawTab);
+  ctx.drawImage(isSearch ? T.tab_item_search : T.tab_items, 0, 0, C_W, C_H, left * S, top * S, C_W * S, C_H * S);
+  drawTab(CREATIVE_TABS.find(t => t.id === creative.tab));
+  drawText(ctx, font, CREATIVE_TABS.find(t => t.id === creative.tab).nom, left + 8, top + 6, '#404040', S);
+  // Champ de recherche (onglet « Rechercher » seulement)
+  if (isSearch) {
+    let q = creativeSearch.value;
+    while (q && textWidth(font, q + '_') > 86) q = q.slice(1);
+    drawText(ctx, font, q + (creative.blinkOn ? '_' : ''), left + 82, top + 6, '#FFFFFF', S, true);
+  }
   // Grille 9x5
   for (let r = 0; r < 5; r++)
     for (let c = 0; c < 9; c++) {
@@ -1267,6 +1306,7 @@ async function openCreative(onPick) {
   creative.onPick = onPick;
   creative.hovered = -1;
   creativeSearch.value = '';
+  creative.tab = 'construction';
   filterCreative();
   hideTooltip();
   canvas.hidden = true;
@@ -1285,7 +1325,15 @@ function closeCreative() {
   renderGui();
 }
 
-creativeSearch.addEventListener('input', () => { filterCreative(); creative.blinkOn = true; renderCreative(); });
+// Taper au clavier bascule sur l'onglet « Rechercher », comme en jeu.
+creativeSearch.addEventListener('input', () => { creative.tab = 'search'; filterCreative(); creative.blinkOn = true; renderCreative(); });
+function tabAt(ev) {
+  const { S, left, top } = creative.layout;
+  return CREATIVE_TABS.find(t => {
+    const [x, y, w, h] = tabRect(t);
+    return inRect(ev, [left + x, top + y + (t.side === 'top' ? 0 : 4), w, h - 4], S);
+  });
+}
 creativeSearch.addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.preventDefault(); closeCreative(); } });
 creativeCanvas.addEventListener('wheel', ev => {
   ev.preventDefault();
@@ -1302,20 +1350,29 @@ creativeCanvas.addEventListener('mousedown', ev => {
 addEventListener('mouseup', () => { creative.dragging = false; });
 creativeCanvas.addEventListener('mousemove', ev => {
   if (creative.dragging) { creativeScrollTo(ev); renderCreative(); return; }
-  const idx = creativeSlotAt(ev);
-  if (idx !== creative.hovered) {
+  const idx = creativeSlotAt(ev), tab = tabAt(ev);
+  const tabId = tab ? tab.id : null;
+  if (idx !== creative.hovered || tabId !== creative.hoverTab) {
     creative.hovered = idx;
+    creative.hoverTab = tabId;
     renderCreative();
-    if (idx >= 0) {
-      renderTooltip(tip, font, ['§f' + creative.list[idx].nom], tooltipScale(creative.layout.S));
+    const name = idx >= 0 ? creative.list[idx].nom : tab ? tab.nom : null;
+    if (name) {
+      renderTooltip(tip, font, ['§f' + name], tooltipScale(creative.layout.S));
       tip.hidden = false;
     } else tip.hidden = true;
-    creativeCanvas.style.cursor = idx >= 0 ? 'pointer' : '';
+    creativeCanvas.style.cursor = idx >= 0 || tab ? 'pointer' : '';
   }
   if (!tip.hidden) placeTooltip(ev);
 });
 creativeCanvas.addEventListener('mouseleave', () => { creative.hovered = -1; tip.hidden = true; renderCreative(); });
 creativeCanvas.addEventListener('click', ev => {
+  const tab = tabAt(ev);
+  if (tab) {
+    if (tab.id !== creative.tab) { playClick(); selectTab(tab.id); }
+    creativeSearch.focus();
+    return;
+  }
   const idx = creativeSlotAt(ev);
   if (idx < 0) { creativeSearch.focus(); return; }
   playClick();
@@ -1403,7 +1460,6 @@ async function main() {
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
   resize();
-  loadCreative();
   addEventListener('resize', resize);
   addEventListener('popstate', showPageFromHash);
   canvas.addEventListener('click', onClick);

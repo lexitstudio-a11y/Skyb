@@ -2,8 +2,13 @@
 """Génère les icônes de l'inventaire créatif (Minecraft 26.3) pour index.html.
 
 Sortie :
-  assets/creatif/atlas.png  : toutes les icônes (32x32 px chacune), rangées en grille
-  assets/creatif/items.json : [{ "id", "nom" (français), "i" (index dans l'atlas) }], trié par nom
+  assets/creatif/atlas.png  : toutes les icônes (16x16 px, la résolution du jeu), rangées en grille
+  assets/creatif/items.json : [{ "id", "nom" (français), "i" (index dans l'atlas), "o" (onglet) }]
+
+Les items « plats » (épées, nourriture…) sont les textures du jeu telles quelles. Les blocs n'existent
+pas en image dans les fichiers du jeu (il les dessine en 3D à partir de leurs modèles) : on fait le même
+rendu ici. Les onglets du mode créatif ne sont pas décrits dans les fichiers du jeu : l'onglet de chaque
+item est déduit de son identifiant (fonction onglet).
 
 Source : un clone (sparse) de https://github.com/InventivetalentDev/minecraft-assets, branche 26.3,
 avec assets/minecraft/{items,models}/_all.json, lang/fr_fr.json et les textures item/, block/,
@@ -17,8 +22,8 @@ from PIL import Image, ImageDraw
 SRC, JSONS = sys.argv[1], sys.argv[2]
 TEX = os.path.join(SRC, 'assets/minecraft/textures')
 OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'creatif')
-ICON = 32          # taille d'une icône dans l'atlas (px)
-SS = 4             # sur-échantillonnage du rendu 3D
+ICON = 16          # taille d'une icône dans l'atlas (px) = résolution des icônes en jeu
+SS = 8             # sur-échantillonnage du rendu 3D
 COLS = 40
 
 items = json.load(open(os.path.join(JSONS, 'items__all.json')))
@@ -358,6 +363,73 @@ def icon_for(item, node):
         return render_elements(els_all, lambda t: texture(t) if t else None, {'rotation': [30, 160, 0], 'translation': [0, 0, 0], 'scale': [0.5] * 3}, offset=off)
     return None
 
+COLORS = ['white', 'light_gray', 'gray', 'black', 'brown', 'red', 'orange', 'yellow', 'lime', 'green', 'cyan',
+          'light_blue', 'blue', 'purple', 'magenta', 'pink']
+ONGLETS = ['construction', 'colores', 'naturels', 'fonctionnels', 'redstone', 'outils', 'combat', 'nourriture', 'ingredients', 'oeufs']
+
+def has(item, *parts):
+    return any(p in item for p in parts)
+
+def onglet(item):
+    """Onglet du mode créatif (approximation à partir de l'identifiant)."""
+    is_block = f'block.minecraft.{item}' in lang
+    if item.endswith('_spawn_egg'):
+        return 'oeufs'
+    if item in {'apple', 'golden_apple', 'enchanted_golden_apple', 'melon_slice', 'sweet_berries', 'glow_berries', 'chorus_fruit',
+                'carrot', 'golden_carrot', 'potato', 'baked_potato', 'poisonous_potato', 'beetroot', 'dried_kelp', 'beef', 'cooked_beef',
+                'porkchop', 'cooked_porkchop', 'mutton', 'cooked_mutton', 'chicken', 'cooked_chicken', 'rabbit', 'cooked_rabbit', 'cod',
+                'cooked_cod', 'salmon', 'cooked_salmon', 'tropical_fish', 'pufferfish', 'bread', 'cookie', 'cake', 'pumpkin_pie',
+                'rotten_flesh', 'spider_eye', 'mushroom_stew', 'beetroot_soup', 'rabbit_stew', 'suspicious_stew', 'milk_bucket',
+                'honey_bottle', 'potion', 'splash_potion', 'lingering_potion', 'ominous_bottle'}:
+        return 'nourriture'
+    if has(item, '_sword', '_helmet', '_chestplate', '_leggings', '_boots', '_horse_armor', '_spear') or item in {
+            'bow', 'crossbow', 'arrow', 'spectral_arrow', 'tipped_arrow', 'trident', 'mace', 'shield', 'totem_of_undying', 'snowball',
+            'egg', 'blue_egg', 'brown_egg', 'wind_charge', 'end_crystal', 'wolf_armor', 'elytra'}:
+        return 'combat'
+    if has(item, '_pickaxe', '_shovel', '_hoe', '_boat', '_raft', 'minecart', 'music_disc_', '_bucket', 'bundle', '_harness') or item.endswith('_axe') or item in {
+            'shears', 'flint_and_steel', 'fishing_rod', 'carrot_on_a_stick', 'warped_fungus_on_a_stick', 'bucket', 'compass',
+            'recovery_compass', 'clock', 'spyglass', 'brush', 'lead', 'name_tag', 'map', 'filled_map', 'writable_book', 'written_book',
+            'saddle', 'goat_horn', 'ender_pearl', 'ender_eye', 'firework_rocket', 'experience_bottle', 'debug_stick', 'knowledge_book'}:
+        return 'outils'
+    if item.endswith('_banner_pattern'):
+        return 'ingredients'
+    if (has(item, '_button', '_pressure_plate', 'rail', 'piston', 'redstone', 'copper_bulb', 'sculk_sensor') and not has(item, '_ore')) or item in {
+            'repeater', 'comparator', 'lever', 'observer', 'dispenser', 'dropper', 'hopper', 'target', 'daylight_detector',
+            'tripwire_hook', 'trapped_chest', 'tnt', 'note_block', 'crafter', 'lightning_rod', 'slime_block', 'honey_block'}:
+        return 'redstone'
+    color = next((c for c in COLORS if item.startswith(c + '_')), None)
+    if (color and is_block and not has(item, 'orchid', '_ice', 'tulip')) or item in {'terracotta', 'glass', 'glass_pane', 'tinted_glass', 'shulker_box', 'candle'}:
+        return 'colores'
+    if has(item, 'shulker_box', '_bed', '_sign', '_hanging_sign', 'banner', 'torch', 'lantern', 'campfire', 'anvil', '_head', '_skull',
+           'chest', 'bookshelf', 'shelf', 'copper_golem_statue') or item in {
+            'crafting_table', 'furnace', 'blast_furnace', 'smoker', 'barrel', 'grindstone', 'stonecutter', 'loom', 'cartography_table',
+            'fletching_table', 'smithing_table', 'enchanting_table', 'brewing_stand', 'cauldron', 'composter', 'beacon', 'conduit',
+            'lodestone', 'respawn_anchor', 'bell', 'jukebox', 'lectern', 'flower_pot', 'decorated_pot', 'scaffolding', 'ladder',
+            'item_frame', 'glow_item_frame', 'painting', 'armor_stand', 'end_portal_frame', 'spawner', 'trial_spawner', 'vault',
+            'chain', 'iron_chain', 'end_rod', 'ender_chest', 'suspicious_sand', 'suspicious_gravel', 'dragon_egg', 'heavy_core',
+            'infested_stone', 'sponge', 'wet_sponge', 'creaking_heart', 'command_block', 'chain_command_block',
+            'repeating_command_block', 'structure_block', 'jigsaw', 'structure_void', 'barrier', 'light', 'test_block',
+            'test_instance_block'}:
+        return 'fonctionnels'
+    if is_block:
+        natural = ('grass', 'dirt', 'podzol', 'mycelium', 'mud', 'sand', 'gravel', '_ore', 'raw_', 'sapling', 'leaves', 'flower', 'tulip',
+                   'orchid', 'allium', 'bluet', 'daisy', 'poppy', 'dandelion', 'cornflower', 'lily', 'rose', 'peony', 'lilac', 'mushroom',
+                   'fungus', 'roots', 'vine', 'kelp', 'seagrass', 'coral', 'ice', 'snow', 'clay', 'netherrack', 'soul_s', 'nylium', 'wart',
+                   'cactus', 'sugar_cane', 'bamboo', 'moss', 'azalea', 'dripleaf', 'sculk', 'amethyst', 'dripstone', 'bee_nest',
+                   'fern', 'bush', 'pumpkin', 'melon', 'hay_block', 'sea_pickle', 'frogspawn', 'turtle_egg', 'sniffer_egg', 'spore',
+                   'lichen', 'hanging_roots', 'petals', 'pitcher', 'torchflower', 'eyeblossom', 'shroomlight', 'magma', 'obsidian',
+                   'bedrock', 'mangrove_propagule', 'cocoa', 'chorus', 'firefly', 'cactus_flower', 'leaf_litter', 'grass_block',
+                   'end_stone', 'basalt', 'blackstone', 'calcite', 'tuff', 'deepslate', 'bone_block', 'honeycomb_block', 'resin_clump')
+        building = ('_planks', '_stairs', '_slab', '_wall', '_fence', '_door', '_trapdoor', 'bricks', 'polished', 'chiseled', 'smooth',
+                    'cut_', 'pillar', '_tiles', 'copper', 'quartz', 'prismarine', 'purpur', '_block', 'glass')
+        if (item.endswith(('_log', '_wood', '_stem', '_hyphae')) or has(item, *building, 'bamboo_mosaic')) and not has(item, '_ore', 'sapling'):
+            return 'construction'
+        if has(item, *natural) or item in {'stone', 'granite', 'diorite', 'andesite', 'cobblestone'}:
+            return 'naturels' if item not in {'stone', 'cobblestone', 'granite', 'diorite', 'andesite', 'deepslate', 'tuff', 'calcite',
+                                              'blackstone', 'basalt', 'end_stone'} or item in {'calcite'} else 'construction'
+        return 'construction'
+    return 'ingredients'
+
 def french_name(item):
     return lang.get(f'item.minecraft.{item}') or lang.get(f'block.minecraft.{item}') or item.replace('_', ' ')
 
@@ -375,15 +447,16 @@ def main():
         if im is None:
             missing.append(item)
             continue
-        entries.append({'id': item, 'nom': french_name(item), 'i': len(icons)})
+        entries.append({'id': item, 'nom': french_name(item), 'i': len(icons), 'o': onglet(item)})
         icons.append(im)
     rows = math.ceil(len(icons) / COLS)
     atlas = Image.new('RGBA', (COLS * ICON, rows * ICON))
     for i, im in enumerate(icons):
         atlas.alpha_composite(im, ((i % COLS) * ICON, (i // COLS) * ICON))
     atlas.save(os.path.join(OUT, 'atlas.png'), optimize=True)
-    entries.sort(key=lambda e: e['nom'].lower())
-    json.dump({'taille': ICON, 'colonnes': COLS, 'items': entries}, open(os.path.join(OUT, 'items.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
+    # Ordre : par onglet, puis par identifiant (regroupe les matériaux : acacia_*, birch_*…)
+    entries.sort(key=lambda e: (ONGLETS.index(e['o']), e['id']))
+    json.dump({'taille': ICON, 'colonnes': COLS, 'onglets': ONGLETS, 'items': entries}, open(os.path.join(OUT, 'items.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
     print(len(entries), 'icônes ;', len(missing), 'sans icône :', ' '.join(missing))
 
 main()
