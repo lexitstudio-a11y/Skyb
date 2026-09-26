@@ -837,7 +837,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -1301,7 +1301,7 @@ const SIGN_W = 90;   // largeur max d'une ligne de texte sur le panneau (pixels 
 // caret = position du curseur, ajustée si des caractères sont ajoutés ou retirés avant lui.
 function fitSignText(text, caret = text.length) {
   if (sign.cfg.book) {   // livre : retour à la ligne visuel seulement ; au-delà de la page, on coupe la fin
-    while (bookRows(text).length > sign.cfg.lines) text = text.slice(0, -1);
+    while (bookRows(text).length > bookCapacity(sign.cfg)) text = text.slice(0, -1);
     return { text, caret: Math.min(caret, text.length) };
   }
   const max = sign.cfg.lines, SIGN_TEXT_W = sign.cfg.width || SIGN_W;
@@ -1385,6 +1385,8 @@ function renderSign() {
 // --- Livre (comme l'écran d'écriture d'un livre de Minecraft) ---
 // Même saisie que le panneau (cfg.book = true) ; un gros point est dessiné devant chaque ligne écrite.
 const BOOK_LINES = 14, BOOK_TEXT_W = 104;
+const BOOK_PAGES = 50;   // quand une page est pleine, le texte continue sur la suivante (flèches pour naviguer)
+const bookCapacity = cfg => cfg.lines * BOOK_PAGES;
 // Lignes d'écriture disponibles sous un titre (un titre sur plusieurs lignes en prend).
 const bookLinesFor = title => BOOK_LINES - (wrapText(title, 118).length - 1);
 // Découpe le texte en lignes affichées : un objectif (ligne du texte) trop long continue sur la ligne
@@ -1428,6 +1430,10 @@ function renderBook() {
   let active = 0;
   rows.forEach((r, i) => { if (r.start <= caret) active = i; });
   const tx = left + 36 + (cfg.noBullets ? 0 : 8);
+  // Pages : la page affichée est celle du curseur ; ligne i -> page floor(i / lignes par page).
+  const per = cfg.lines, page = Math.floor(active / per), pages = Math.max(1, Math.ceil(rows.length / per));
+  const onPage = i => i >= page * per && i < (page + 1) * per;
+  const rowY = i => textTop + (i - page * per) * 9;
   // Exemples en filigrane (cfg.placeholders) : l'exemple n°k est affiché tant que la ligne n°k n'est pas écrite ;
   // les exemples restants se placent sous le texte déjà écrit.
   if (cfg.placeholders) {
@@ -1436,15 +1442,17 @@ function renderBook() {
     const written = lines.filter(l => l.trim()).length;   // les lignes sautées (Maj + Entrée) ne consomment pas d'exemple
     const firstRow = lastEmpty ? rows.length - 1 : rows.length;
     const ph = cfg.placeholders.slice(written).flatMap(ex => wrapText(ex, BOOK_TEXT_W).map((t, j) => ({ t, bullet: j === 0 })));
-    ph.slice(0, Math.max(0, cfg.lines - firstRow)).forEach((p, j) => {
+    ph.forEach((p, j) => {
       const i = firstRow + j;
-      const y = textTop + i * 9, faded = 'rgba(0, 0, 0, 0.22)';
+      if (!onPage(i)) return;
+      const y = rowY(i), faded = 'rgba(0, 0, 0, 0.22)';
       if (p.bullet && !cfg.noBullets) { ctx.fillStyle = faded; ctx.fillRect((tx - 7) * S, (y + 2) * S, 3 * S, 3 * S); }
       drawText(ctx, font, p.t, tx, y, faded, S);
     });
   }
   rows.forEach((row, i) => {
-    const y = textTop + i * 9;
+    if (!onPage(i)) return;
+    const y = rowY(i);
     if (row.bullet && !cfg.noBullets) {   // gros point à gauche de chaque objectif
       ctx.fillStyle = '#000000';
       ctx.fillRect((tx - 7) * S, (y + 2) * S, 3 * S, 3 * S);
@@ -1457,6 +1465,17 @@ function renderBook() {
       else { ctx.fillStyle = '#000000'; ctx.fillRect((tx + textWidth(font, row.text.slice(0, col)) - 1) * S, (y - 1) * S, S, 9 * S); }
     }
   });
+
+  // Flèches de page (textures du jeu) et numéro de page, comme dans l'écran d'un livre de Minecraft.
+  const back = page > 0 ? [left + 43, top + 159, 23, 13] : null;
+  const fwd = page < pages - 1 ? [left + 116, top + 159, 23, 13] : null;
+  if (back) ctx.drawImage(sign.hoverBack ? T.page_backward_highlighted : T.page_backward, back[0] * S, back[1] * S, 23 * S, 13 * S);
+  if (fwd) ctx.drawImage(sign.hoverFwd ? T.page_forward_highlighted : T.page_forward, fwd[0] * S, fwd[1] * S, 23 * S, 13 * S);
+  if (pages > 1) {
+    const label = `${page + 1}/${pages}`;
+    drawText(ctx, font, label, left + 91 - Math.floor(textWidth(font, label) / 2), top + 162, '#000000', S);
+  }
+  sign.pages = { rows, per, page, back, fwd };
 
   // « Terminé » ; avec cfg.onExtra, un 2e bouton « Timeblock » à droite.
   const btnW = 64, gap = 4, btnY = Math.min(H - 22, top + 196);
@@ -1550,7 +1569,7 @@ signInput.addEventListener('keydown', ev => {
     ev.preventDefault();
     const v = signInput.value, a = signInput.selectionStart, b = signInput.selectionEnd;
     const next = v.slice(0, a) + '\n' + v.slice(b);
-    if (bookRows(next).length <= sign.cfg.lines) {
+    if (bookRows(next).length <= bookCapacity(sign.cfg)) {
       signInput.value = next;
       signInput.setSelectionRange(a + 1, a + 1);
       sign.blinkOn = true;
@@ -1560,7 +1579,7 @@ signInput.addEventListener('keydown', ev => {
   }
   // Entrée : ligne suivante s'il en reste, sinon « Terminé ».
   const lineCount = sign.cfg.book ? bookRows(signInput.value).length : signInput.value.split('\n').length;
-  if (lineCount < sign.cfg.lines && !ev.shiftKey) return;
+  if (lineCount < (sign.cfg.book ? bookCapacity(sign.cfg) : sign.cfg.lines) && !ev.shiftKey) return;
   ev.preventDefault();
   playClick();
   finishSign();
@@ -1569,10 +1588,24 @@ signCanvas.addEventListener('mousemove', ev => {
   if (!sign.layout) return;
   const hover = inRect(ev, sign.layout.button);
   const hover2 = !!sign.layout.button2 && inRect(ev, sign.layout.button2);
-  signCanvas.style.cursor = hover || hover2 ? 'pointer' : '';
+  const pg = sign.cfg && sign.cfg.book && sign.pages;
+  const hb = !!(pg && pg.back && inRect(ev, pg.back)), hf = !!(pg && pg.fwd && inRect(ev, pg.fwd));
+  if (hb !== !!sign.hoverBack || hf !== !!sign.hoverFwd) { sign.hoverBack = hb; sign.hoverFwd = hf; renderSign(); }
+  signCanvas.style.cursor = hover || hover2 || hb || hf ? 'pointer' : '';
   if (hover !== sign.hoverDone || hover2 !== !!sign.hoverExtra) { sign.hoverDone = hover; sign.hoverExtra = hover2; renderSign(); }
 });
 signCanvas.addEventListener('click', ev => {
+  const pg = sign.cfg && sign.cfg.book && sign.pages;
+  const turn = pg && (pg.back && inRect(ev, pg.back) ? -1 : pg.fwd && inRect(ev, pg.fwd) ? 1 : 0);
+  if (turn) {   // changer de page : le curseur va au début de la page visée
+    playClick();
+    const row = pg.rows[(pg.page + turn) * pg.per];
+    signInput.focus();
+    if (row) signInput.setSelectionRange(row.start, row.start);
+    sign.blinkOn = true;
+    renderSign();
+    return;
+  }
   if (sign.layout && inRect(ev, sign.layout.button)) { playClick(); finishSign(); }
   else if (sign.layout && sign.layout.button2 && inRect(ev, sign.layout.button2)) {
     playClick();
