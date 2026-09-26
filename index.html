@@ -1476,9 +1476,10 @@ function tbScale() {
 function renderTimeblock() {
   const S = tbScale();
   const { ctx, W, H } = prepareScreen(timeblockCanvas, S);
-  const pw = 220, ph = Math.min(H - 8, 18 + TB_CONTENT + 36);
+  const TB_TOP = 28;   // hauteur du bandeau de titre au-dessus de la journée
+  const pw = 220, ph = Math.min(H - 8, TB_TOP + TB_CONTENT + 36);
   const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph) / 2));
-  const grid = { x: px + 38, y: py + 18, w: pw - 38 - 8, h: ph - 18 - 34 };
+  const grid = { x: px + 38, y: py + TB_TOP, w: pw - 38 - 8, h: ph - TB_TOP - 34 };
   const maxScroll = Math.max(0, TB_CONTENT - grid.h);
   if (tb.scroll == null) {   // premier affichage : on se place sur le premier bloc (ou 8h)
     const first = Math.min(8 * 60, ...tbBlocks().map(b => b.debut));
