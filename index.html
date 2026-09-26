@@ -108,11 +108,11 @@ function sermentSlots() {
   }
   return slots;
 }
-// Dates de début / fin des serments, saisies sur un panneau et gardées dans ce navigateur.
+// Date d'entrée des serments, saisie sur un panneau et gardée dans ce navigateur ;
+// la date de fin en est déduite (date d'entrée + 1 an).
 const DATES_KEY = 'serments-dates';
 const DATE_FIELDS = {
   start: { name: "§aDate d'entrée", title: "Modifier la date d'entrée", label: "Date d'entrée" },
-  end:   { name: '§cDate de fin',   title: 'Modifier la date de fin',   label: 'Date de fin' },
 };
 function loadDates() {
   try { return JSON.parse(localStorage.getItem(DATES_KEY)) || {}; } catch { return {}; }
@@ -127,6 +127,24 @@ function dateSlot(field) {
     item: 'clock_00',
     sign: field,
     tooltip: () => [f.name, dates[field] ? `§7Date : §e${dates[field]}` : '§7Date : §cnon définie', '', '§eClique pour modifier !'],
+  };
+}
+
+// "12/03/2026" -> "12/03/2027". Un 29/02 donne le 28/02 de l'année suivante.
+function plusOneYear(date) {
+  const [d, m, y] = date.split('/').map(Number);
+  const lastDay = new Date(y + 1, m, 0).getDate();
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(Math.min(d, lastDay))}/${pad(m)}/${y + 1}`;
+}
+function endDateSlot() {
+  return {
+    item: 'clock_00',
+    tooltip: () => [
+      '§cDate de fin',
+      dates.start ? `§7Date : §e${plusOneYear(dates.start)}` : '§7Date : §cnon définie',
+      "§8Date d'entrée + 1 an",
+    ],
   };
 }
 
@@ -165,7 +183,7 @@ const PAGES = {
     title: PAGE_TITLES.duree,
     slots: {
       '2,2': dateSlot('start'),
-      '2,6': dateSlot('end'),
+      '2,6': endDateSlot(),
       ...navSlots('serments'),
     },
   },
