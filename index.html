@@ -1469,16 +1469,23 @@ function shade(hex, k) {
   const f = v => Math.max(0, Math.min(255, Math.round(k > 1 ? v + (255 - v) * (k - 1) : v * k)));
   return `rgb(${f(n >> 16)}, ${f((n >> 8) & 255)}, ${f(n & 255)})`;
 }
-// Bloc coloré en relief, comme un bouton Minecraft : contour sombre, reflet en haut à gauche, ombre en bas à droite.
+// Bloc coloré dans le style des bulles d'info Minecraft : contour externe sombre aux coins coupés,
+// contour interne clair en dégradé (du haut vers le bas), fond de la couleur du bloc.
 function drawColorBlock(ctx, x, y, w, h, color, S) {
   const r = (rx, ry, rw, rh, fill) => { if (rw > 0 && rh > 0) { ctx.fillStyle = fill; ctx.fillRect(rx * S, ry * S, rw * S, rh * S); } };
-  r(x, y, w, h, '#000000');
-  r(x + 1, y + 1, w - 2, h - 2, color);
+  const outer = shade(color, 0.25);
+  r(x + 1, y, w - 2, h, outer);          // contour externe (coins coupés)
+  r(x, y + 1, w, h - 2, outer);
+  r(x + 1, y + 1, w - 2, h - 2, color);  // fond
   if (h < 5) return;
-  r(x + 1, y + 1, w - 2, 1, shade(color, 1.35));
-  r(x + 1, y + 2, 1, h - 3, shade(color, 1.35));
-  r(x + 1, y + h - 2, w - 2, 1, shade(color, 0.6));
-  r(x + w - 2, y + 1, 1, h - 3, shade(color, 0.6));
+  const top = shade(color, 1.55), bottom = shade(color, 1.15);
+  const grad = ctx.createLinearGradient(0, (y + 1) * S, 0, (y + h - 1) * S);
+  grad.addColorStop(0, top);
+  grad.addColorStop(1, bottom);
+  r(x + 1, y + 1, w - 2, 1, top);        // contour interne en dégradé
+  r(x + 1, y + h - 2, w - 2, 1, bottom);
+  r(x + 1, y + 2, 1, h - 4, grad);
+  r(x + w - 2, y + 2, 1, h - 4, grad);
 }
 function fitText(text, w) {
   if (textWidth(font, text) <= w) return text;
