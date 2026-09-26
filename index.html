@@ -1508,9 +1508,10 @@ function renderTimeblock() {
     ctx.beginPath();
     ctx.rect((grid.x + 3) * S, (y1 + 2) * S, (grid.w - 6) * S, (h - 3) * S);
     ctx.clip();
-    const ty = h >= 14 ? y1 + 4 : y1 + Math.floor((h - 8) / 2) + 1;
-    drawText(ctx, font, '§a' + fitText(title, grid.w - 14), grid.x + 6, ty, '#55FF55', S, true);
-    if (sub && h >= 24) drawText(ctx, font, sub, grid.x + 6, ty + 10, '#AAAAAA', S, true);
+    // Marge intérieure : 4 px sous la bordure (moins pour un bloc trop petit, texte alors centré)
+    const ty = h >= 20 ? y1 + 7 : y1 + Math.floor((h - 8) / 2) + 1;
+    drawText(ctx, font, '§a' + fitText(title, grid.w - 22), grid.x + 10, ty, '#55FF55', S, true);
+    if (sub && h >= 30) drawText(ctx, font, sub, grid.x + 10, ty + 10, '#AAAAAA', S, true);
     ctx.restore();
   };
   for (const b of tbBlocks()) if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre);
