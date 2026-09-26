@@ -472,10 +472,55 @@ function agendaSlot(agenda, n, image) {
     action: () => editAgenda(agenda.date),
   };
 }
-// Place les agendas (le premier en haut à gauche) dans la zone 4x7.
+// Bilan de la journée : bloc de terre cuite sous l'agenda (blanche tant qu'il n'est pas fait,
+// puis rouge / verte / jaune selon la journée) ; agenda.bilan = { note, texte }.
+const BILANS = {
+  mauvaise: { label: '§cMauvaise journée', image: 'journee/rouge', question: 'Pourquoi la journée a été mauvaise ?' },
+  bonne: { label: '§aBonne journée', image: 'journee/verte', question: "Décris ce qui a marché aujourd'hui et ce que tu aurais pu mieux faire" },
+  tres_bonne: { label: '§eTrès bonne journée', image: 'journee/jaune', question: "Les résultats d'une journée idéale" },
+};
+function bilanSlot(agenda, n) {
+  const b = agenda.bilan && BILANS[agenda.bilan.note];
+  return {
+    image: b ? b.image : 'journee/blanche', count: n,
+    tooltip: () => [
+      '§aDécris ta journée', '§7Agenda ' + agenda.date,
+      ...(b ? ['', b.label, ...(agenda.bilan.texte ? wrapText(agenda.bilan.texte, 180).map(l => '§7' + l) : [])] : []),
+      '', b ? '§eClique pour modifier !' : '§eClique pour décrire !',
+    ],
+    action: () => reviewDay(agenda),
+  };
+}
+// « Comment s'est passé ta journée ? » -> choix -> livre avec la question correspondante.
+function reviewDay(agenda) {
+  const pick = note => {
+    const previous = agenda.bilan || {};
+    agenda.bilan = { note, texte: previous.texte || '' };   // la couleur change tout de suite
+    saveAgendas();
+    refreshAgenda();
+    const q = BILANS[note].question;
+    openSign({
+      book: true, noBullets: true, title: q,
+      lines: bookLinesFor(q), width: BOOK_TEXT_W, fixed: [],
+      initial: agenda.bilan.texte,
+      onDone: text => { agenda.bilan.texte = text.trim(); saveAgendas(); refreshAgenda(); },
+    });
+  };
+  openConfirm({
+    question: "Comment s'est passé ta journée ?",
+    detail: ['Agenda ' + agenda.date],
+    buttonWidth: 110,
+    noLabel: '§cMauvaise journée', yesLabel: '§aBonne journée', editLabel: '§eTrès bonne journée',
+    onNo: () => pick('mauvaise'), onYes: () => pick('bonne'), onEdit: () => pick('tres_bonne'),
+  });
+}
+// Place les agendas (le premier en haut à gauche) dans la zone verte, avec leur bilan juste en dessous :
+// agendas sur les rangées 1 et 3, bilans sur les rangées 2 et 4 (7 journées par paire de rangées).
 function agendaGrid(list, slots, numbered) {
-  list.slice(0, TODO_ROWS * TODO_COLS).forEach((a, i) => {
-    slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = agendaSlot(a, numbered ? i + 1 : null, numbered ? 'papier_agenda' : 'carte_vide');
+  list.slice(0, 2 * TODO_COLS).forEach((a, i) => {
+    const row = 1 + 2 * Math.floor(i / TODO_COLS), col = 1 + i % TODO_COLS, n = numbered ? i + 1 : null;
+    slots[`${row},${col}`] = agendaSlot(a, n, numbered ? 'papier_agenda' : 'carte_vide');
+    slots[`${row + 1},${col}`] = bilanSlot(a, n);
   });
   return slots;
 }
@@ -688,7 +733,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'carte_vide', 'papier_agenda', 'book_gui', ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'carte_vide', 'papier_agenda', 'book_gui', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -1230,6 +1275,8 @@ function renderSign() {
 // --- Livre (comme l'écran d'écriture d'un livre de Minecraft) ---
 // Même saisie que le panneau (cfg.book = true) ; un gros point est dessiné devant chaque ligne écrite.
 const BOOK_LINES = 14, BOOK_TEXT_W = 104;
+// Lignes d'écriture disponibles sous un titre (un titre sur plusieurs lignes en prend).
+const bookLinesFor = title => BOOK_LINES - (wrapText(title, 118).length - 1);
 // Découpe le texte en lignes affichées : un objectif (ligne du texte) trop long continue sur la ligne
 // suivante (coupure entre les mots), sans nouveau point. Renvoie [{ text, start, bullet }].
 function bookRows(text) {
@@ -1259,8 +1306,11 @@ function renderBook() {
   const { ctx, W, H } = prepareScreen(signCanvas, S);
   const left = Math.floor((W - 192) / 2), top = Math.max(2, Math.floor((H - 222) / 2));
   ctx.drawImage(T.book_gui, 0, 0, 192, 192, left * S, top * S, 192 * S, 192 * S);
-  // Titre en haut de la page (à la place de « Page 1 of 1 »), centré sur la page
-  drawText(ctx, font, cfg.title, left + 94 - Math.floor(textWidth(font, cfg.title) / 2), top + 16, '#000000', S);
+  // Titre en haut de la page (à la place de « Page 1 of 1 »), centré ; un titre long passe sur plusieurs lignes
+  // et le texte commence d'autant plus bas.
+  const titleLines = wrapText(cfg.title, 118);
+  titleLines.forEach((l, i) => drawText(ctx, font, l, left + 94 - Math.floor(textWidth(font, l) / 2), top + 16 + i * 9, '#000000', S));
+  const textTop = top + 32 + (titleLines.length - 1) * 9;
 
   const text = signInput.value, rows = bookRows(text);
   const caret = signInput.selectionStart ?? text.length;
@@ -1269,7 +1319,7 @@ function renderBook() {
   rows.forEach((r, i) => { if (r.start <= caret) active = i; });
   const tx = left + 36 + (cfg.noBullets ? 0 : 8);
   rows.forEach((row, i) => {
-    const y = top + 32 + i * 9;
+    const y = textTop + i * 9;
     if (row.bullet && !cfg.noBullets) {   // gros point à gauche de chaque objectif
       ctx.fillStyle = '#000000';
       ctx.fillRect((tx - 7) * S, (y + 2) * S, 3 * S, 3 * S);
@@ -1288,8 +1338,8 @@ function renderBook() {
   const btnX = cfg.onExtra ? Math.floor(W / 2) - btnW - gap / 2 : Math.floor(W / 2) - btnW / 2, btn2X = Math.floor(W / 2) + gap / 2;
   drawButton(ctx, btnX, btnY, btnW, 'Terminé', sign.hoverDone, S);
   if (cfg.onExtra) drawButton(ctx, btn2X, btnY, btnW, 'Timeblock', sign.hoverExtra, S);
-  sign.layout = { S, board: [left + 36, top + 30, 118, BOOK_LINES * 9], button: [btnX, btnY, btnW, 20], button2: cfg.onExtra ? [btn2X, btnY, btnW, 20] : null };
-  Object.assign(signInput.style, { left: (left + 36) * S + 'px', top: (top + 30) * S + 'px', width: 118 * S + 'px', height: BOOK_LINES * 9 * S + 'px' });
+  sign.layout = { S, board: [left + 36, textTop - 2, 118, cfg.lines * 9], button: [btnX, btnY, btnW, 20], button2: cfg.onExtra ? [btn2X, btnY, btnW, 20] : null };
+  Object.assign(signInput.style, { left: (left + 36) * S + 'px', top: (textTop - 2) * S + 'px', width: 118 * S + 'px', height: cfg.lines * 9 * S + 'px' });
 }
 
 function inRect(ev, [x, y, w, h], S = sign.layout.S) {
@@ -1451,7 +1501,7 @@ function renderConfirm() {
   centered(dialog.cfg.question, y, '#FFFFFF');
   y += 16;
   for (const line of lines) { centered(line, y, '#AAAAAA'); y += 10; }
-  const bw = Math.min(90, Math.floor((W - 20) / 2)), by = y + 14;
+  const bw = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2)), by = y + 14;
   const no = [Math.floor(W / 2) - bw - 4, by, bw, 20], yes = [Math.floor(W / 2) + 4, by, bw, 20];
   // Sous Non / Oui, sur toute leur largeur : « Modifier » (si prévu) puis « Supprimer ».
   let rowY = by + 24;
