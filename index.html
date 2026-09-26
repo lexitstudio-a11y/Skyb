@@ -678,21 +678,42 @@ function editResultGoal(id) {
     },
   });
 }
+// Objectifs d'Action : écrits dans un livre (un objectif par ligne), propres à chaque saison et à chaque round ;
+// affichés dans l'overlay de la TNT, entre la description et les exemples, en gris plus clair.
+const ACTION_KEY = 'objectifs-action';
+const actionGoals = loadJSON(ACTION_KEY);
+const actionGoalLines = id => {
+  const lines = (actionGoals[id] || '').split('\n').map(l => l.trim()).filter(Boolean);
+  return lines.length ? ['', ...lines.flatMap(l => wrapText('- ' + l, 200).map(w => '§g' + w))] : [];
+};
+function editActionGoals(id) {
+  openSign({
+    book: true, title: "Objectifs d'Action",
+    lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
+    initial: actionGoals[id] || '',
+    onDone: text => {
+      const clean = text.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+      if (clean) actionGoals[id] = clean; else delete actionGoals[id];
+      saveJSON(ACTION_KEY, actionGoals);
+    },
+  });
+}
 // id = identifiant de la page « Les 3 Frères » (ex. freres-1-saison3), pour ouvrir ses sous-pages.
 function freresSlots(n, id) {
   return {
     '2,2': { item: 'gold_ingot', count: 1, action: () => editResultGoal(id), tooltip: () => ['§aObjectif de Résultat', '§7Ce que je veux atteindre', '§7émotionnellement.', '', resultGoal(id) ? '§f' + resultGoal(id) : '§8Pas encore défini.', '', '§eClique pour modifier !'] },
-    '2,4': { block: 'tnt', count: 2, open: `${id}-actions`, tooltip: [
+    '2,4': { block: 'tnt', count: 2, action: () => editActionGoals(id), tooltip: () => [
       "§aObjectifs d'Action",
       "§7Les actions à faire pour réussir",
       "§7l'Objectif de Résultat.",
+      ...actionGoalLines(id),
       '',
       '§fEx :',
       '§7- Réviser 1 Chapitre/J',
       '§7- Poster 1 Vidéo/J',
       '§7- Envoyer 10 Mails de prospection/Semaine',
       '§7- 10K Steps/J',
-      '', '§eClique pour voir !',
+      '', '§eClique pour écrire !',
     ] },
     '2,6': { item: 'name_tag', count: 3, open: `${id}-identite`, tooltip: [
       "§aObjectifs d'Identité",
@@ -758,7 +779,7 @@ function seasonGoals(n, season) {
       image: 'lingot_netherite', count: 1,
       tooltip: () => ['§aObjectif de Résultat', tag, '', resultGoal(`freres-${n}-saison${season}`) ? '§f' + resultGoal(`freres-${n}-saison${season}`) : '§8Pas encore défini.', '', readOnly],
     },
-    '3,4': { image: 'minecart_tnt', count: 2, tooltip: ["§aObjectifs d'Action", tag, '', readOnly] },
+    '3,4': { image: 'minecart_tnt', count: 2, tooltip: () => ["§aObjectifs d'Action", tag, ...actionGoalLines(`freres-${n}-saison${season}`), '', readOnly] },
     '3,6': { image: 'laisse', count: 3, tooltip: ["§aObjectifs d'Identité", tag, '', readOnly] },
   };
 }
@@ -876,6 +897,7 @@ const HEADS = {
 const MC_COLORS = {
   0: '#000000', 1: '#0000AA', 2: '#00AA00', 3: '#00AAAA', 4: '#AA0000', 5: '#AA00AA', 6: '#FFAA00', 7: '#AAAAAA',
   8: '#555555', 9: '#5555FF', a: '#55FF55', b: '#55FFFF', c: '#FF5555', d: '#FF55FF', e: '#FFFF55', f: '#FFFFFF',
+  g: '#D4D4D4',   // (propre au site) gris un peu plus clair que §7, pour le texte saisi dans les descriptions
 };
 
 // Largeur réelle d'un glyphe = dernière colonne non transparente + 1.
