@@ -81,6 +81,7 @@ const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la c
 //   tooltip : lignes de l'overlay au survol (1re ligne = nom). Codes couleur Minecraft : §a vert, §7 gris, §e jaune…
 //   open : page ouverte au clic ;  sign : ouvre le panneau de saisie de date (voir DATE_FIELDS)
 //   tooltip peut aussi être une fonction qui renvoie les lignes (contenu dynamique)
+//   look : fonction qui peut changer l'apparence ({ item/block : autre texture, dim : assombri }), sans toucher au numéro
 // Contenu provisoire, à remplacer par les vrais textes.
 const LORE = ['§7Description à venir.', '', '§eClique pour voir !'];
 
@@ -98,24 +99,42 @@ function navSlots(previous) {
 //   numérotés de gauche à droite puis de haut en bas (numéros ajoutés automatiquement, voir numberDuplicates).
 // Une saison = 3 mois, un round = 1 mois, comptés à partir de la date d'entrée (page « Durée des Serments »).
 // Ex. saison 3 = mois 7 à 9 du serment, round 11 = mois 11.
+// Une période est terminée quand on a atteint le jour qui suit sa fin.
+function toDate(date) {
+  const [d, m, y] = date.split('/').map(Number);
+  return new Date(y, m - 1, d);
+}
+function periodDone(lastMonth) {
+  if (!dates.start) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today >= toDate(addMonths(dates.start, lastMonth));
+}
 function periodTooltip(name, firstMonth, lastMonth) {
   return () => {
     const months = firstMonth === lastMonth ? `§8Mois ${firstMonth} du serment` : `§8Mois ${firstMonth} à ${lastMonth} du serment`;
     const period = dates.start
       ? [`§7Du §e${addMonths(dates.start, firstMonth - 1)}`, `§7au §e${dayBefore(addMonths(dates.start, lastMonth))}`]
       : ["§7Dates : §cdate d'entrée non définie"];
-    return [name, ...period, months, '', '§eClique pour voir !'];
+    const status = periodDone(lastMonth) ? ['§cTerminé'] : [];
+    return [name, ...period, months, ...status, '', '§eClique pour voir !'];
   };
 }
 function sermentSlots() {
   const slots = {};
   for (let i = 0; i < 4; i++) {
     const n = i + 1;
-    slots[`${2 + Math.floor(i / 2)},${1 + i % 2}`] = { item: 'painting', tooltip: periodTooltip(`§aSaison ${n}`, 3 * i + 1, 3 * n) };
+    slots[`${2 + Math.floor(i / 2)},${1 + i % 2}`] = {
+      item: 'painting', tooltip: periodTooltip(`§aSaison ${n}`, 3 * i + 1, 3 * n),
+      look: () => periodDone(3 * n) ? { dim: true } : null,   // saison terminée : tableau assombri
+    };
   }
   for (let i = 0; i < 12; i++) {
     const n = i + 1;
-    slots[`${Math.floor(i / 2)},${6 + i % 2}`] = { block: 'blue_terracotta', tooltip: periodTooltip(`§aRound ${n}`, n, n) };
+    slots[`${Math.floor(i / 2)},${6 + i % 2}`] = {
+      block: 'blue_terracotta', tooltip: periodTooltip(`§aRound ${n}`, n, n),
+      look: () => periodDone(n) ? { block: 'black_terracotta' } : null,   // round terminé : terre cuite noire
+    };
   }
   return slots;
 }
@@ -241,7 +260,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'blue_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'blue_terracotta', 'black_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -538,12 +557,15 @@ function renderGui() {
       const slot = currentSlots()[key];
       if (!slot) ctx.drawImage(T.black_stained_glass, px, py, 16 * S, 16 * S);
       else if (slot.pane) ctx.drawImage(T[slot.pane], px, py, 16 * S, 16 * S);
-      else if (slot.item) {
-        const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
-        ctx.drawImage(T[slot.item], px + off, py + off, size, size);
+      else {
+        const look = { ...slot, ...(slot.look && slot.look()) };
+        if (look.item) {
+          const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
+          ctx.drawImage(look.dim ? dimmed(T[look.item]) : T[look.item], px + off, py + off, size, size);
+        }
+        else if (look.block) drawCube(ctx, BLOCKS[look.block], px, py, S, (look.block === 'chest' ? 0.9 : 1) * ITEM_SCALE);
+        else if (look.head) drawCube(ctx, HEADS[look.head], px, py, S, 0.85 * ITEM_SCALE);
       }
-      else if (slot.block) drawCube(ctx, BLOCKS[slot.block], px, py, S, (slot.block === 'chest' ? 0.9 : 1) * ITEM_SCALE);
-      else if (slot.head) drawCube(ctx, HEADS[slot.head], px, py, S, 0.85 * ITEM_SCALE);
 
       // Nombre en bas à droite de la case (comme la taille d'une pile en jeu), en blanc avec ombre.
       if (slot && slot.count != null) {
@@ -558,6 +580,22 @@ function renderGui() {
       }
     }
   }
+}
+
+// Version assombrie d'une texture (seuls ses pixels visibles sont foncés), mise en cache.
+const dimCache = new Map();
+function dimmed(img) {
+  let c = dimCache.get(img);
+  if (!c) {
+    let ctx;
+    [c, ctx] = makeCanvas(img.width, img.height);
+    ctx.drawImage(img, 0, 0);
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 0, img.width, img.height);
+    dimCache.set(img, c);
+  }
+  return c;
 }
 
 // Case (ligne, colonne) sous la souris, ou null.
@@ -786,6 +824,7 @@ async function main() {
     crafting_table: { top: T.crafting_table_top, front: T.crafting_table_front, side: T.crafting_table_side },
     barrel: { top: T.barrel_top, front: T.barrel_side, side: T.barrel_side },
     blue_terracotta: { top: T.blue_terracotta, front: T.blue_terracotta, side: T.blue_terracotta },
+    black_terracotta: { top: T.black_terracotta, front: T.black_terracotta, side: T.black_terracotta },
   };
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
