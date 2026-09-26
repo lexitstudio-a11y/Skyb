@@ -684,7 +684,7 @@ const ACTION_KEY = 'objectifs-action';
 const actionGoals = loadJSON(ACTION_KEY);
 const actionGoalLines = id => {
   const lines = (actionGoals[id] || '').split('\n').map(l => l.trim()).filter(Boolean);
-  return lines.length ? ['', ...lines.flatMap(l => wrapText('• ' + l, 200).map(w => '§g' + w))] : [];
+  return lines.length ? ['', ...lines.flatMap(l => wrapText('• ' + l, 200).map(w => '§f' + w))] : [];
 };
 function editActionGoals(id) {
   openSign({
@@ -703,7 +703,7 @@ const IDENTITY_KEY = 'objectifs-identite';
 const identityGoals = loadJSON(IDENTITY_KEY);
 const identityGoalLines = id => {
   const lines = (identityGoals[id] || '').split('\n').map(l => l.trim()).filter(Boolean);
-  return lines.length ? ['', ...lines.flatMap(l => wrapText('• ' + l, 200).map(w => '§g' + w))] : [];
+  return lines.length ? ['', ...lines.flatMap(l => wrapText('• ' + l, 200).map(w => '§f' + w))] : [];
 };
 function editIdentityGoals(id) {
   openSign({
@@ -727,7 +727,7 @@ function freresSlots(n, id) {
       "§7l'Objectif de Résultat.",
       ...actionGoalLines(id),
       '',
-      '§fEx :',
+      '§gEx :',
       '§7- Réviser 1 Chapitre/J',
       '§7- Poster 1 Vidéo/J',
       '§7- Envoyer 10 Mails de prospection/Semaine',
@@ -740,7 +740,7 @@ function freresSlots(n, id) {
       "§7pour que je puisse réussir les Objectifs d'Action.",
       ...identityGoalLines(id),
       '',
-      '§fEx :',
+      '§gEx :',
       '§7- À Quelle heure je dois me coucher ?',
       "§7- M'Entraîner ?",
       '§7- Manger ?',
