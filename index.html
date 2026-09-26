@@ -86,6 +86,9 @@
 <div id="timeblockScreen" class="screen" hidden>
   <canvas id="timeblockCanvas"></canvas>
 </div>
+<div id="photoScreen" class="screen" hidden>
+  <canvas id="photoCanvas"></canvas>
+</div>
 <div id="dialogScreen" class="screen" hidden>
   <canvas id="dialogCanvas"></canvas>
 </div>
@@ -1874,19 +1877,13 @@ function loadPhotoBackground() {
   photoBackground ||= new Promise(res => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = 'assets/background.webp'; });
   return photoBackground;
 }
+// « Photo » -> aperçu de l'image en fond d'écran d'iPhone -> « Télécharger l'image » -> choix du dossier.
 async function timeblockPhoto() {
-  // Ordinateur (Chrome, Edge…) : on demande d'abord où enregistrer l'image, tant que le clic est encore « frais ».
-  const name = `timeblock-${tb.date.split('/').reverse().join('-')}.png`;
-  const touch = navigator.maxTouchPoints > 0;
-  let handle = null;
-  if (!touch && window.showSaveFilePicker) {
-    try {
-      handle = await window.showSaveFilePicker({
-        suggestedName: name, startIn: 'pictures',
-        types: [{ description: 'Image PNG', accept: { 'image/png': ['.png'] } }],
-      });
-    } catch (e) { if (e.name === 'AbortError') return; }   // fenêtre fermée : on n'enregistre rien
-  }
+  const cv = await drawTimeblockPhoto();
+  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  openPhotoPreview(cv, blob, `timeblock-${tb.date.split('/').reverse().join('-')}.png`);
+}
+async function drawTimeblockPhoto() {
   const S = 6, W = 196, H = 426;
   const cv = document.createElement('canvas');
   cv.width = 1179;
@@ -1940,20 +1937,33 @@ async function timeblockPhoto() {
     ctx.restore();
   });
 
-  // Enregistrement : dans le dossier choisi (ordinateur), menu de partage (téléphone : « Enregistrer dans Fichiers »
-  // permet de choisir le dossier), sinon téléchargement classique.
-  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
-  if (handle) {
+  return cv;
+}
+
+// Enregistrement : fenêtre « Enregistrer sous » pour choisir le dossier (Chrome, Edge…), menu de partage sur
+// téléphone (« Enregistrer dans Fichiers » permet de choisir le dossier), sinon téléchargement classique.
+async function savePhoto(blob, name) {
+  const touch = navigator.maxTouchPoints > 0;
+  if (!touch && window.showSaveFilePicker) {
+    let handle;
     try {
-      const out = await handle.createWritable();
-      await out.write(blob);
-      await out.close();
-      return;
-    } catch {}
+      handle = await window.showSaveFilePicker({
+        suggestedName: name, startIn: 'pictures',
+        types: [{ description: 'Image PNG', accept: { 'image/png': ['.png'] } }],
+      });
+    } catch (e) { if (e.name === 'AbortError') return false; }   // fenêtre fermée : on n'enregistre rien
+    if (handle) {
+      try {
+        const out = await handle.createWritable();
+        await out.write(blob);
+        await out.close();
+        return true;
+      } catch {}
+    }
   }
   const file = new File([blob], name, { type: 'image/png' });
   if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ files: [file] }); return true; } catch (e) { if (e.name === 'AbortError') return false; }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1962,7 +1972,86 @@ async function timeblockPhoto() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return true;
 }
+
+// --- Aperçu : l'image dans un iPhone, avec la date, l'heure et les boutons de l'écran verrouillé par-dessus ---
+const photoScreen = document.getElementById('photoScreen');
+const photoCanvas = document.getElementById('photoCanvas');
+const pv = { img: null, blob: null, name: '', layout: null, hover: null };
+const pvOpen = () => !photoScreen.hidden;
+function openPhotoPreview(img, blob, name) {
+  Object.assign(pv, { img, blob, name, hover: null });
+  timeblockScreen.hidden = true;
+  photoScreen.hidden = false;
+  renderPhotoPreview();
+}
+function closePhotoPreview() {
+  photoScreen.hidden = true;
+  pv.img = pv.blob = null;
+  showTimeblock();
+}
+function renderPhotoPreview() {
+  const S = tbScale();
+  const { ctx, W, H } = prepareScreen(photoCanvas, S);
+  // Boutons en bas (pixels GUI), téléphone au-dessus (pixels écran)
+  const dlW = 120, backW = 60, gap = 6, by = H - 26;
+  const bx = Math.floor((W - dlW - gap - backW) / 2);
+  const dl = [bx, by, dlW, 20], back = [bx + dlW + gap, by, backW, 20];
+  drawButton(ctx, dl[0], dl[1], dl[2], "Télécharger l'image", pv.hover === 'dl', S);
+  drawButton(ctx, back[0], back[1], back[2], 'Retour', pv.hover === 'back', S);
+  pv.layout = { S, dl, back };
+
+  const avail = (by - 6) * S - 12;   // hauteur libre au-dessus des boutons, bordure du téléphone comprise
+  const ph = Math.min(avail / 1.05, 2556 / 2.4), pw = ph * 1179 / 2556;   // écran du téléphone
+  const bez = Math.round(ph * 0.022), x = Math.round((innerWidth - pw) / 2), y = Math.round(6 + (avail - ph) / 2);
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); };
+  rr(x - bez - 2, y - bez - 2, pw + 2 * bez + 4, ph + 2 * bez + 4, pw * 0.16 + bez); ctx.fillStyle = '#3A3A3C'; ctx.fill();   // tranche
+  rr(x - bez, y - bez, pw + 2 * bez, ph + 2 * bez, pw * 0.16 + bez); ctx.fillStyle = '#000'; ctx.fill();                      // bordure
+  ctx.save();
+  rr(x, y, pw, ph, pw * 0.14); ctx.clip();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(pv.img, x, y, pw, ph);
+  // Éléments de l'écran verrouillé (positions relevées sur une capture d'iPhone)
+  const U = pw / 100, sys = '-apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
+  ctx.fillStyle = '#000';
+  rr(x + pw * 0.34, y + ph * 0.012, pw * 0.32, ph * 0.043, ph * 0.022); ctx.fill();   // Dynamic Island
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  const [d, m, yy] = tb.date.split('/').map(Number);
+  const day = new Date(yy, m - 1, d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  ctx.font = `600 ${5.2 * U}px ${sys}`;
+  ctx.fillText(day.charAt(0).toUpperCase() + day.slice(1), x + pw / 2, y + ph * 0.118);
+  const now = new Date();
+  ctx.font = `700 ${24 * U}px ${sys}`;
+  ctx.fillText(`${pad2(now.getHours())}:${pad2(now.getMinutes())}`, x + pw / 2, y + ph * 0.232);
+  [0.19, 0.81].forEach(cx => {   // lampe torche / appareil photo
+    ctx.beginPath(); ctx.arc(x + pw * cx, y + ph * 0.906, 7.3 * U, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(40, 40, 40, 0.45)'; ctx.fill();
+  });
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  rr(x + pw * 0.32, y + ph * 0.973, pw * 0.36, ph * 0.0065, ph * 0.004); ctx.fill();   // barre d'accueil
+  ctx.restore();
+}
+photoCanvas.addEventListener('pointermove', ev => {
+  if (!pv.layout) return;
+  const h = inRect(ev, pv.layout.dl, pv.layout.S) ? 'dl' : inRect(ev, pv.layout.back, pv.layout.S) ? 'back' : null;
+  photoCanvas.style.cursor = h ? 'pointer' : '';
+  if (h !== pv.hover) { pv.hover = h; renderPhotoPreview(); }
+});
+photoCanvas.addEventListener('click', async ev => {
+  if (!pv.layout) return;
+  if (inRect(ev, pv.layout.back, pv.layout.S)) { playClick(); closePhotoPreview(); return; }
+  if (inRect(ev, pv.layout.dl, pv.layout.S)) {
+    playClick();
+    if (await savePhoto(pv.blob, pv.name)) closePhotoPreview();
+  }
+});
+addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && pvOpen()) { ev.preventDefault(); closePhotoPreview(); }
+});
 
 function openTimeblock(date, onClose) {
   tb.date = date;
@@ -2117,6 +2206,7 @@ function resize() {
   if (sign.cfg) renderSign();
   if (dialog.cfg) renderConfirm();
   if (tbOpen()) renderTimeblock();
+  if (pvOpen()) renderPhotoPreview();
 }
 
 async function main() {
