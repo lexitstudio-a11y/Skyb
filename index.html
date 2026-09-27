@@ -395,6 +395,11 @@ function sermentBookTooltip(n) {
 const TODO_KEY = 'todo-actions';
 const TODO_KEEP_DAYS = 30;
 const todos = (() => { try { return JSON.parse(localStorage.getItem(TODO_KEY)) || []; } catch { return []; } })();
+// Nombre total d'actions terminées depuis le début (les terminées sont effacées après TODO_KEEP_DAYS jours,
+// donc on le compte à part) ; au premier lancement, on part des terminées encore présentes.
+const TODO_STATS_KEY = 'todo-stats';
+const todoStats = loadJSON(TODO_STATS_KEY);
+todoStats.finies ??= todos.filter(t => t.fini).length;
 // Anciennes actions (un seul texte) : le texte devient le titre.
 for (const t of todos) if (t.titre == null) {
   t.titre = (t.texte || '').split('\n').map(l => l.trim()).filter(Boolean).join(' ');
@@ -525,6 +530,8 @@ function askTodoDone(todo) {
       const active = todos.filter(t => !t.fini);
       todo.image = todoImage(active.indexOf(todo) + 1);   // garde l'image qu'elle avait
       todo.fini = formatDate(new Date());
+      todoStats.finies++;
+      saveJSON(TODO_STATS_KEY, todoStats);
       playSound(doneSound);
     }),
     onNo: () => update(() => { delete todo.fini; delete todo.image; }),
@@ -668,7 +675,15 @@ const PAGES = {
       '1,4': { head: 'profile', tooltip: profileTooltip, action: editProfile },
       '2,1': { item: 'diamond_sword', tooltip: ['§aCompétences', ...LORE] },
       '2,4': { item: 'book', tooltip: ['§aLes Pilliers Temporels', ...LORE], open: 'serments' },
-      '2,5': { item: 'paper', tooltip: ['§aListe de choses à faire', '§7Je note ici les choses que je dois faire', '§7hors Serment S.', '', '§eClique pour voir !'], open: 'todo' },
+      '2,5': {
+        item: 'paper', open: 'todo',
+        tooltip: () => [
+          '§aListe de choses à faire', '§7Je note ici les choses que je dois faire', '§7hors Serment S.', '',
+          `§7Actions terminées au total : §a${todoStats.finies}`,
+          `§7Actions en cours : §e${todos.filter(t => !t.fini).length}`,
+          '', '§eClique pour voir !',
+        ],
+      },
       '2,6': { item: 'clock_00', tooltip: ['§aAgenda de la journée', ...LORE], open: 'agenda' },
       '5,8': { item: 'ender_pearl', tooltip: () => accountTooltip(), action: () => openAccount() },
       '5,0': { image: 'jukebox', tooltip: ['§aJukebox', '§7Lance la musique.', '', '§eClique pour écouter !'], action: () => window.open('https://www.youtube.com/watch?v=x3bBQasjbfs', '_blank', 'noopener') },
@@ -2396,7 +2411,7 @@ addEventListener('keydown', ev => {
 const SUPABASE_URL = 'https://hzgtnstmmbmmubvzxhas.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_HhqBiNcmR0j0doZ_esJrbA_znOLL7Nw';
 const SESSION_KEY = 'compte-session', SYNC_STATE_KEY = 'compte-sync';   // pas synchronisées elles-mêmes
-const SYNC_KEYS = [DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
+const SYNC_KEYS = [DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
 let session = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } })();
 // sync.at : version (updated_at) du compte déjà présente ici ; sync.dirty : modifications locales pas encore envoyées
 const sync = (() => { try { return JSON.parse(localStorage.getItem(SYNC_STATE_KEY)) || {}; } catch { return {}; } })();
