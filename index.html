@@ -2402,8 +2402,9 @@ function openLogin() {
   hideTooltip();
   canvas.hidden = true;
   loginScreen.hidden = false;
-  Object.assign(login, { message: '', busy: false, hover: null });
+  Object.assign(login, { message: '', busy: false, hover: null, showPassword: false });
   loginPassword.value = '';
+  loginPassword.type = 'password';
   clearInterval(login.timer);
   login.timer = setInterval(() => { login.blink = !login.blink; renderLogin(); }, 300);
   renderLogin();
@@ -2427,6 +2428,7 @@ function renderLogin() {
   centered('Sauvegarde tes données en ligne', y + 14, '#A0A0A0');
   y += 34;
   const fields = [];
+  let eye = null;
   for (const [input, label, secret] of [[loginEmail, 'E-mail', false], [loginPassword, 'Mot de passe', true]]) {
     drawText(ctx, font, label, fx, y, '#A0A0A0', S);
     const box = [fx, y + 11, fw, 20];
@@ -2434,8 +2436,13 @@ function renderLogin() {
     const focused = document.activeElement === input;
     fr(...box, focused ? '#FFFFFF' : '#A0A0A0');   // champ de texte de Minecraft : bord clair, fond noir
     fr(box[0] + 1, box[1] + 1, fw - 2, 18, '#000000');
-    let text = secret ? '*'.repeat(input.value.length) : input.value;
-    while (text && textWidth(font, text + '_') > fw - 8) text = text.slice(1);   // on garde la fin visible
+    let text = secret && !login.showPassword ? '*'.repeat(input.value.length) : input.value;
+    const room = fw - 8 - (secret ? 16 : 0);   // place du texte (moins le bouton œil)
+    while (text && textWidth(font, text + '_') > room) text = text.slice(1);   // on garde la fin visible
+    if (secret) {   // bouton œil au bout du champ : barré quand le mot de passe est caché
+      eye = [fx + fw - 18, box[1] + 1, 17, 18];
+      drawEye(ctx, eye[0] + 2, eye[1] + 5, !login.showPassword, login.hover === 'eye' ? '#FFFFFF' : '#A0A0A0', S);
+    }
     drawText(ctx, font, text + (focused && login.blink ? '_' : ''), fx + 4, y + 17, '#E0E0E0', S, true);
     fields.push([input, box]);
     y += 38;
@@ -2447,8 +2454,33 @@ function renderLogin() {
   drawButton(ctx, ...btns.in.slice(0, 3), 'Se connecter', login.hover === 'in', S);
   drawButton(ctx, ...btns.up.slice(0, 3), 'Créer un compte', login.hover === 'up', S);
   drawButton(ctx, ...btns.cancel.slice(0, 3), 'Annuler', login.hover === 'cancel', S);
-  login.layout = { S, btns };
-  for (const [input, [x, y, w, h]] of fields) Object.assign(input.style, { left: `${x * S}px`, top: `${y * S}px`, width: `${w * S}px`, height: `${h * S}px` });
+  login.layout = { S, btns, eye };
+  for (const [input, [x, y, w, h]] of fields) {   // le champ du mot de passe s'arrête avant l'œil (clic sur le canvas)
+    const iw = input === loginPassword ? w - 18 : w;
+    Object.assign(input.style, { left: `${x * S}px`, top: `${y * S}px`, width: `${iw * S}px`, height: `${h * S}px` });
+  }
+}
+// Œil en pixels (13 x 7), barré en diagonale si « crossed »
+const EYE_PIXELS = [
+  '....#####....',
+  '..##.....##..',
+  '.#...###...#.',
+  '#...#####...#',
+  '.#...###...#.',
+  '..##.....##..',
+  '....#####....',
+];
+function drawEye(ctx, x, y, crossed, color, S) {
+  ctx.fillStyle = color;
+  EYE_PIXELS.forEach((row, j) => [...row].forEach((c, i) => { if (c === '#') ctx.fillRect((x + i) * S, (y + j) * S, S, S); }));
+  if (!crossed) return;
+  for (let i = 0; i <= 10; i++) {   // trait en diagonale, détouré de noir pour se détacher de l'œil
+    const px = x + 1 + i, py = y + 7 - Math.round(i * 0.8);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(px * S, (py + 1) * S, S, S);
+    ctx.fillStyle = color;
+    ctx.fillRect(px * S, py * S, S, S);
+  }
 }
 const LOGIN_ERRORS = [
   [/invalid login credentials|invalid_credentials/i, 'E-mail ou mot de passe incorrect'],
@@ -2502,14 +2534,22 @@ for (const input of [loginEmail, loginPassword]) {
 loginCanvas.addEventListener('mousemove', ev => {
   if (!login.layout) return;
   const { S, btns } = login.layout;
-  const hover = Object.keys(btns).find(k => inRect(ev, btns[k], S)) || null;
+  const eye = login.layout.eye && inRect(ev, login.layout.eye, S);
+  const hover = eye ? 'eye' : Object.keys(btns).find(k => inRect(ev, btns[k], S)) || null;
   loginCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== login.hover) { login.hover = hover; renderLogin(); }
 });
 loginCanvas.addEventListener('click', ev => {
   if (!login.layout) return;
-  const { S, btns } = login.layout;
-  if (inRect(ev, btns.cancel, S)) { playClick(); closeLogin(); }
+  const { S, btns, eye } = login.layout;
+  if (eye && inRect(ev, eye, S)) {   // afficher / cacher le mot de passe
+    playClick();
+    login.showPassword = !login.showPassword;
+    loginPassword.type = login.showPassword ? 'text' : 'password';
+    loginPassword.focus();
+    renderLogin();
+  }
+  else if (inRect(ev, btns.cancel, S)) { playClick(); closeLogin(); }
   else if (inRect(ev, btns.in, S)) { playClick(); submitLogin('in'); }
   else if (inRect(ev, btns.up, S)) { playClick(); submitLogin('up'); }
 });
