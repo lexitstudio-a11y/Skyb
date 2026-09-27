@@ -2132,7 +2132,10 @@ function renderConfirm() {
   const { ctx, W, H } = prepareScreen(dialogCanvas, S);
   const centered = (text, y, color) => drawText(ctx, font, text, Math.floor(W / 2 - textWidth(font, text) / 2), y, color, S, true);
   const lines = dialog.cfg.detail || [];
-  let y = Math.floor(H / 2) - 30 - lines.length * 5;
+  // Hauteur totale (question, détails, nuancier, boutons) pour centrer le tout verticalement
+  const total = 16 + lines.length * 10 + (dialog.cfg.colors ? 36 : 0) + 14 + 20
+    + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
+  let y = Math.max(4, Math.floor((H - total) / 2));
   centered(dialog.cfg.question, y, '#FFFFFF');
   y += 16;
   for (const line of lines) { centered(line, y, '#AAAAAA'); y += 10; }
