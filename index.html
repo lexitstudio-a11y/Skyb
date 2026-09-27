@@ -1124,6 +1124,29 @@ function originBook(a) {
     tooltip: () => ['§aOrigine', `§7${pageTitle(origin)}`, '', '§eClique pour y aller !'],
   } };
 }
+// Renommer un arbre : titre (panneau, 2 lignes) puis description (livre, comme à la création).
+// Un arbre d'Objectif d'Action / d'Identité garde sa phrase d'origine (ligne) pour ne pas être recréé par la pousse.
+function renameArbre(a) {
+  openSign({
+    title: "Renommer l'arbre",
+    lines: 2, fixed: ['', '', '^^^^^^^^^^^^', "Titre de l'arbre"],
+    initial: wrapForSign(a.titre, 2),
+    onDone: text => {
+      const titre = text.split('\n').map(l => l.trim()).filter(Boolean).join(' ');
+      if (!titre) return;
+      if (a.groupe && a.ligne == null) a.ligne = a.titre;
+      a.titre = titre;
+      saveArbres();
+      refreshArbres();
+      openSign({
+        book: true, noBullets: true, title: titre,
+        lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
+        initial: a.description || '',
+        onDone: description => { a.description = description.trim(); saveArbres(); refreshArbres(); },
+      });
+    },
+  });
+}
 // Pages d'un arbre (n = sa place dans « arbres », à partir de 1) : l'arbre, sa configuration, son historique.
 function buildArbrePages(a, n) {
   const pct = arbreProgress(a);
@@ -1155,6 +1178,7 @@ function buildArbrePages(a, n) {
   };
   const arbreSlots = {
     '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
+    '0,4': { item: 'name_tag', tooltip: ['§aRenommer', "§7Modifie le titre et la description", "§7de l'arbre.", '', '§eClique pour modifier !'], action: () => renameArbre(a) },
     '1,4': {
       item: 'writable_book', action: () => addArbreValue(a, n),
       tooltip: () => ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
@@ -1264,7 +1288,7 @@ function goalsSprout(id, kind, count) {
     },
     action: () => {
       const lines = goalLines(text());
-      const existing = new Set(arbres.filter(a => a.groupe === groupe).map(a => a.titre));
+      const existing = new Set(arbres.filter(a => a.groupe === groupe).map(a => a.ligne ?? a.titre));
       if (!lines.length && !existing.size) { askGoalFirst(`tes Objectifs ${label}`, () => (kind === 'action' ? editActionGoals : editIdentityGoals)(id)); return; }
       for (const titre of lines) if (!existing.has(titre)) arbres.push({ titre, icone: randomArbreIcon(), progression: 0, groupe });
       saveArbres();
