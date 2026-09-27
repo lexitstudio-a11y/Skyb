@@ -126,6 +126,10 @@
   <input id="loginEmail" class="loginInput" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" aria-label="E-mail">
   <input id="loginPassword" class="loginInput" type="password" autocomplete="current-password" aria-label="Mot de passe">
 </div>
+<div id="headScreen" class="screen" hidden>
+  <canvas id="headCanvas"></canvas>
+  <input id="headInput" class="loginInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Commande de la tête">
+</div>
 <div id="dialogScreen" class="screen" hidden>
   <canvas id="dialogCanvas"></canvas>
 </div>
@@ -328,7 +332,7 @@ function editTitleAndDescription(target) {
         title: `Modifier la description ${target.label}`,
         lines: 4, fixed: [],
         initial: current.description || '',
-        onDone: desc => target.save(title, desc),
+        onDone: desc => { target.save(title, desc); if (target.after) target.after(); },
       });
     },
   });
@@ -353,6 +357,7 @@ function editProfile() {
     label: 'du profil',
     get: () => profile,
     save: (title, description) => { Object.assign(profile, { title, description }); saveJSON(PROFILE_KEY, profile); },
+    after: openHeadImport,   // puis : importer une tête (commande Minecraft)
   });
 }
 
@@ -943,7 +948,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -984,14 +989,7 @@ function pixelTex(palette, rows) {
 
 // Faces des têtes personnalisées (top / front / side).
 const HEADS = {
-  profile: (() => {
-    const p = { k: '#0d0f1c', n: '#1b2140', b: '#2a3566', g: '#3fd13f', G: '#1f8a2a', s: '#10131f' };
-    return {
-      top:   pixelTex(p, ['kknnnnkk', 'knnbbnnk', 'nnbbbbnn', 'nbbnnbbn', 'nbbnnbbn', 'nnbbbbnn', 'knnbbnnk', 'kknnnnkk']),
-      front: pixelTex(p, ['kknnnnkk', 'knbbbbnk', 'nsssssbn', 'nsgssgsn', 'nsGssGsn', 'nsssssbn', 'knsGGsnk', 'kknnnnkk']),
-      side:  pixelTex(p, ['kknnnnkk', 'knnbbnnk', 'nnbbbnnn', 'nbbnnnbn', 'nbnnnnbn', 'nnbbnnnn', 'knnnnnnk', 'kknnnnkk']),
-    };
-  })(),
+  profile: null,   // tête de Steve ou tête importée (voir headFaces), posée au chargement
   emerald: (() => {
     const p = { d: '#1f5a19', m: '#3f8f23', l: '#6cc43a', y: '#d7d23c', o: '#8f6a1f' };
     const f = ['dmmlmmmd', 'mlldmylm', 'mlmmlmmm', 'lmyomldm', 'mmomlmml', 'mdlmmlom', 'mlmydmlm', 'dmmmmmmd'];
@@ -1167,6 +1165,20 @@ function drawCube(ctx, faces, px, py, S, scale = 1) {
   drawFace(ctx, faces.top,   L, sub(T, L), sub(C, L), 1.0);
   drawFace(ctx, faces.front, L, sub(C, L), D, 0.8);
   drawFace(ctx, faces.side,  C, sub(R, C), D, 0.6);
+}
+
+// Faces d'une tête à partir d'un skin de joueur (64x64 ou 64x32, ou multiple) : tête + calque du chapeau.
+// Le dessus est tourné d'un quart de tour pour que son bord avant touche la face avant du cube.
+function headFaces(skin) {
+  const k = skin.width / 64;
+  const face = (bx, by, hx, hy, rotate) => {
+    const [c, ctx] = makeCanvas(8, 8);
+    if (rotate) ctx.setTransform(0, 1, -1, 0, 8, 0);   // (x, y) -> (8 - y, x)
+    ctx.drawImage(skin, bx * k, by * k, 8 * k, 8 * k, 0, 0, 8, 8);
+    ctx.drawImage(skin, hx * k, hy * k, 8 * k, 8 * k, 0, 0, 8, 8);   // chapeau / cheveux par-dessus
+    return c;
+  };
+  return { top: face(8, 0, 40, 0, true), front: face(8, 8, 40, 8), side: face(16, 8, 48, 8) };
 }
 
 function chestFaces(img) {
@@ -2743,6 +2755,128 @@ addEventListener('keydown', ev => {
   if (ev.key === 'Escape' && loginOpen() && !ev.defaultPrevented) closeLogin();
 });
 
+// --- Importer une tête : champ façon bloc de commande où l'on colle une commande Minecraft ---
+// Commandes acceptées (on y cherche le skin) :
+//   /give @p player_head{SkullOwner:{…Properties:{textures:[{Value:"eyJ0…"}]}}}   (jusqu'à la 1.20.4)
+//   /give @p player_head[profile={properties:[{name:"textures",value:"eyJ0…"}]}]  (1.20.5 et plus)
+//   /give @p player_head{SkullOwner:"Pseudo"} ou [profile="Pseudo"] / [profile={name:"Pseudo"}]
+//   ou directement un lien textures.minecraft.net / un pseudo seul.
+function skinFromCommand(cmd) {
+  const text = cmd.trim();
+  const url = s => { const m = s.match(/textures\.minecraft\.net\/texture\/([0-9a-f]{20,})/i); return m && `https://textures.minecraft.net/texture/${m[1]}`; };
+  if (url(text)) return url(text);
+  for (const [, b64] of text.matchAll(/[Vv]alue\s*[:=]\s*["']?([A-Za-z0-9+/=_-]{20,})/g)) {
+    try { const u = url(atob(b64.replace(/-/g, '+').replace(/_/g, '/'))); if (u) return u; } catch {}
+  }
+  const name = (text.match(/SkullOwner\s*:\s*"?([A-Za-z0-9_]{2,16})\b/)
+    || text.match(/profile\s*=\s*"?([A-Za-z0-9_]{2,16})"?\s*[\],]/)
+    || text.match(/\bname\s*:\s*"([A-Za-z0-9_]{2,16})"/)
+    || text.match(/^([A-Za-z0-9_]{2,16})$/));
+  return name ? `https://mc-heads.net/skin/${name[1]}` : null;
+}
+function loadSkin(src) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => (img.width >= 64 && img.height >= 32 ? res(img) : rej());
+    img.onerror = rej;
+    img.src = src;
+  });
+}
+const headScreen = document.getElementById('headScreen');
+const headCanvas = document.getElementById('headCanvas');
+const headInput = document.getElementById('headInput');
+const headImport = { layout: null, hover: null, message: '', busy: false, blink: true, timer: null };
+const headOpen = () => !headScreen.hidden;
+function openHeadImport() {
+  hideTooltip();
+  canvas.hidden = true;
+  headScreen.hidden = false;
+  Object.assign(headImport, { message: '', busy: false, hover: null });
+  headInput.value = '';
+  clearInterval(headImport.timer);
+  headImport.timer = setInterval(() => { headImport.blink = !headImport.blink; renderHeadImport(); }, 300);
+  renderHeadImport();
+  headInput.focus();
+}
+function closeHeadImport() {
+  clearInterval(headImport.timer);
+  headScreen.hidden = true;
+  canvas.hidden = false;
+  headInput.blur();
+  renderGui();
+}
+function renderHeadImport() {
+  const S = signScale();
+  const { ctx, W, H } = prepareScreen(headCanvas, S);
+  const fw = Math.min(300, W - 16), fx = Math.floor((W - fw) / 2);
+  let y = Math.max(4, Math.floor(H / 2) - 40);
+  drawText(ctx, font, 'Importe une tête minecraft', fx, y, '#A0A0A0', S);
+  const box = [fx, y + 11, fw, 20];
+  const fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
+  fr(...box, '#FFFFFF');   // champ du bloc de commande : bord blanc, fond noir
+  fr(fx + 1, y + 12, fw - 2, 18, '#000000');
+  let text = headInput.value;
+  while (text && textWidth(font, text + '_') > fw - 8) text = text.slice(1);   // on garde la fin visible
+  drawText(ctx, font, text + (headImport.blink ? '_' : ''), fx + 4, y + 17, '#E0E0E0', S, true);
+  y += 36;
+  if (headImport.message) drawText(ctx, font, headImport.message, fx, y, headImport.message.startsWith('§a') ? '#55FF55' : '#FF5555', S, true);
+  y += 14;
+  const half = Math.floor((fw - 4) / 2);
+  const btns = { done: [fx, y, half, 20], steve: [fx + fw - half, y, half, 20] };
+  drawButton(ctx, ...btns.done.slice(0, 3), 'Terminé', headImport.hover === 'done', S);
+  drawButton(ctx, ...btns.steve.slice(0, 3), 'Tête de Steve', headImport.hover === 'steve', S);
+  headImport.layout = { S, btns };
+  Object.assign(headInput.style, { left: `${box[0] * S}px`, top: `${box[1] * S}px`, width: `${box[2] * S}px`, height: `${box[3] * S}px` });
+}
+// Terminé : champ vide = on garde la tête actuelle ; sinon on charge le skin trouvé dans la commande.
+async function submitHeadImport() {
+  if (headImport.busy) return;
+  const cmd = headInput.value.trim();
+  if (!cmd) { closeHeadImport(); return; }
+  const src = skinFromCommand(cmd);
+  if (!src) { headImport.message = 'Aucune tête trouvée dans cette commande'; renderHeadImport(); return; }
+  headImport.busy = true;
+  headImport.message = '§aChargement de la tête…';
+  renderHeadImport();
+  try {
+    const img = await loadSkin(src);
+    HEADS.profile = headFaces(img);
+    profile.skin = src;
+    saveJSON(PROFILE_KEY, profile);
+    closeHeadImport();
+  } catch {
+    headImport.message = 'Impossible de charger cette tête';
+  } finally {
+    headImport.busy = false;
+    if (headOpen()) renderHeadImport();
+  }
+}
+function resetHead() {
+  HEADS.profile = headFaces(T.steve);
+  delete profile.skin;
+  saveJSON(PROFILE_KEY, profile);
+  closeHeadImport();
+}
+headInput.addEventListener('input', () => { headImport.message = ''; renderHeadImport(); });
+headInput.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter') { ev.preventDefault(); submitHeadImport(); }
+  else if (ev.key === 'Escape') { ev.preventDefault(); closeHeadImport(); }
+});
+headCanvas.addEventListener('mousemove', ev => {
+  if (!headImport.layout) return;
+  const { S, btns } = headImport.layout;
+  const hover = Object.keys(btns).find(k => inRect(ev, btns[k], S)) || null;
+  headCanvas.style.cursor = hover ? 'pointer' : '';
+  if (hover !== headImport.hover) { headImport.hover = hover; renderHeadImport(); }
+});
+headCanvas.addEventListener('click', ev => {
+  if (!headImport.layout) return;
+  const { S, btns } = headImport.layout;
+  if (inRect(ev, btns.done, S)) { playClick(); submitHeadImport(); }
+  else if (inRect(ev, btns.steve, S)) { playClick(); resetHead(); }
+  else headInput.focus();
+});
+
 function resize() {
   applyOrientation();
   state.S = Math.max(2, Math.min(5, Math.floor(Math.min(viewW() / (GUI_W + 16), viewH() / (GUI_H + 16)))));
@@ -2756,6 +2890,7 @@ function resize() {
   if (tbOpen()) renderTimeblock();
   if (pvOpen()) renderPhotoPreview();
   if (loginOpen()) renderLogin();
+  if (headOpen()) renderHeadImport();
 }
 
 async function main() {
@@ -2775,6 +2910,8 @@ async function main() {
     cyan_terracotta: { top: T.cyan_terracotta, front: T.cyan_terracotta, side: T.cyan_terracotta },
     tnt: { top: T.tnt_top, front: T.tnt_side, side: T.tnt_side },
   };
+  HEADS.profile = headFaces(T.steve);
+  if (profile.skin) loadSkin(profile.skin).then(img => { HEADS.profile = headFaces(img); renderGui(); }, () => {});
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
   resize();
