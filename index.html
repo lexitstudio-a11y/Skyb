@@ -1027,7 +1027,24 @@ function editArbreValue(a, field, label) {
     },
   });
 }
+// Suppression d'un arbre (tête rouge en haut à gauche de sa page), après confirmation.
+function deleteArbre(a) {
+  openConfirm({
+    question: 'Supprimer cet arbre ?',
+    detail: [a.titre, '', 'Sa configuration et sa progression seront perdues.'],
+    noLabel: 'Retour', yesLabel: '§cSupprimer',
+    onYes: () => {
+      const i = arbres.indexOf(a);
+      if (i >= 0) arbres.splice(i, 1);
+      saveArbres();
+      refreshArbres();
+      location.hash = arbresPageId(Math.max(1, Math.ceil(i / ARBRES_PER_PAGE)));   // page où il était (ou la précédente)
+    },
+  });
+}
 function refreshArbres() {
+  // les numéros changent après une suppression : on reconstruit toutes les pages des arbres
+  for (const id of Object.keys(PAGES)) if (/^arbres?-/.test(id)) delete PAGES[id];
   const pages = Math.max(1, Math.ceil(arbres.length / ARBRES_PER_PAGE));
   for (let k = 1; k <= pages; k++) {
     const slots = {
@@ -1063,6 +1080,7 @@ function refreshArbres() {
         },
       };
       const arbreSlots = {
+        '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
         '1,4': {
           item: 'writable_book', open: `arbre-${n}-type`,
           tooltip: () => ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
@@ -1079,14 +1097,14 @@ function refreshArbres() {
     });
     PAGES[arbresPageId(k)] = { title: PAGE_TITLES.arbres, slots };
   }
-  if (state.page.startsWith('arbre')) renderGui();
+  if (state.page.startsWith('arbre') && PAGES[state.page]) renderGui();   // page supprimée : la navigation s'en charge
 }
 
 const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
