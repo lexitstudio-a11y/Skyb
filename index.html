@@ -991,8 +991,9 @@ function addArbreValue(a, n) {
   });
 }
 // État d'un niveau (1 à 5) : terminé si la progression a dépassé sa fin, en cours si elle est dedans.
-function levelState(a, level) {
-  const done = Math.floor(arbreProgress(a) / 20);
+function levelState(a, level) { return levelAt(arbreProgress(a), level); }
+function levelAt(pct, level) {   // même chose pour une progression donnée (historique)
+  const done = Math.floor(pct / 20);
   return level <= done ? 'done' : level === done + 1 ? 'current' : 'todo';
 }
 // Icônes possibles d'un arbre, tirées au hasard à la création (images fournies).
@@ -1172,17 +1173,32 @@ function buildArbrePages(a, n) {
     arbreSlots[`3,${level + 1}`] = { pane: LEVEL_PANES[st], count: level, tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
   }
   PAGES[`arbre-${n}`] = { title: fitText(a.titre, 160), slots: arbreSlots };   // titre coupé s'il dépasse de la fenêtre
-  // Historique : les valeurs entrées, la plus récente en haut à gauche (4 rangées de 7, comme la liste d'actions)
-  const histo = [...(a.historique || [])].reverse().slice(0, TODO_ROWS * TODO_COLS);
-  const histoSlots = { ...navSlots(`arbre-${n}`) };
-  histo.forEach((h, j) => {
-    const p = a.depart != null && a.cible != null && a.cible !== a.depart
-      ? Math.floor(Math.max(0, Math.min(100, (h.valeur - a.depart) / (a.cible - a.depart) * 100))) : 0;
-    histoSlots[`${1 + Math.floor(j / TODO_COLS)},${1 + j % TODO_COLS}`] = {
-      item: 'paper', tooltip: [`§a${h.date}`, `§7Valeur : ${fmtNumber(h.valeur, a.unite)}`, `§7Progression : §e${p}%`],
+  // Historique : une rangée par valeur entrée (la plus récente en haut), avec l'icône et les 5 niveaux
+  // tels qu'ils étaient à ce moment-là ; 4 rangées par page, flèche en bas à droite vers la suite.
+  const histo = [...(a.historique || [])].reverse();
+  const histoPages = Math.max(1, Math.ceil(histo.length / 4));
+  const histoId = k => `arbre-${n}-historique${k > 1 ? `-p${k}` : ''}`;
+  for (let k = 1; k <= histoPages; k++) {
+    const histoSlots = {
+      ...navSlots(k === 1 ? `arbre-${n}` : histoId(k - 1)),
+      '5,5': { item: 'writable_book', tooltip: ['§aNouvelle valeur', "§7Actualise la progression de l'arbre.", '', '§eClique pour ajouter !'], action: () => addArbreValue(a, n) },
     };
-  });
-  PAGES[`arbre-${n}-historique`] = { title: 'Historique des valeurs', slots: histoSlots };
+    if (k < histoPages) histoSlots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: histoId(k + 1) };
+    histo.slice((k - 1) * 4, k * 4).forEach((h, j) => {
+      const p = a.depart != null && a.cible != null && a.cible !== a.depart
+        ? Math.floor(Math.max(0, Math.min(100, (h.valeur - a.depart) / (a.cible - a.depart) * 100))) : 0;
+      const row = 1 + j;
+      histoSlots[`${row},2`] = {
+        ...arbreIcon(a), count: 1,
+        tooltip: [`§a${a.titre}`, `§8${h.date}`, ...originLines(a), `§7Valeur : ${fmtNumber(h.valeur, a.unite)}`, `§7Progression : §e${p}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelAt(p, 1)]}`],
+      };
+      for (let level = 2; level <= 5; level++) {
+        const st = levelAt(p, level);
+        histoSlots[`${row},${level + 1}`] = { pane: LEVEL_PANES[st], count: level, tooltip: [`§aNiveau ${level}`, `§8${h.date}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
+      }
+    });
+    PAGES[histoId(k)] = { title: 'Historique des valeurs', slots: histoSlots };
+  }
 }
 function refreshArbres() {
   // les numéros changent après une suppression : on reconstruit toutes les pages des arbres
