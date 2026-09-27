@@ -919,6 +919,10 @@ function seasonGoals(n, season) {
     '3,6': { image: 'laisse', count: 3, tooltip: () => ["§aObjectifs d'Identité", tag, ...identityGoalLines(`freres-${n}-saison${season}`), '', readOnly] },
   };
 }
+// Page d'un round : une pousse numérotée 1 à 3 au-dessus de chacun des 3 objectifs (usage à venir).
+function roundSprouts() {
+  return Object.fromEntries([2, 4, 6].map((col, i) => [`1,${col}`, { image: 'pousse', count: i + 1, tooltip: [`§aPousse ${i + 1}`, '§7Description à venir.'] }]));
+}
 // Page d'un round : œil de l'Ender en bas à gauche qui mène à la saison de ce round (numéroté avec la saison).
 function seasonEye(n, season) {
   return {
@@ -935,7 +939,7 @@ for (const n of [1, 2, 3]) {
     const label = period.replace(/^saison/, 'Saison ').replace(/^round/, 'Round ');   // « saison2 » -> « Saison 2 »
     const k = +period.replace(/\D/g, '');
     const [first, last] = period.startsWith('saison') ? [3 * k - 2, 3 * k] : [k, k];   // mois du serment couverts
-    PAGES[id] = { title: `${label} - Serment S ${n}`, slots: { ...freresSlots(n, id), ...(period.startsWith('round') ? tomorrowClock(first, last, '5,8') : {}), ...(period.startsWith('saison') ? roundCompass(n, k) : { ...seasonEye(n, Math.ceil(k / 3)), ...seasonGoals(n, Math.ceil(k / 3)) }), ...navSlots(`serment${n}`) } };
+    PAGES[id] = { title: `${label} - Serment S ${n}`, slots: { ...freresSlots(n, id), ...(period.startsWith('round') ? tomorrowClock(first, last, '5,8') : {}), ...(period.startsWith('saison') ? roundCompass(n, k) : { ...seasonEye(n, Math.ceil(k / 3)), ...seasonGoals(n, Math.ceil(k / 3)), ...roundSprouts() }), ...navSlots(`serment${n}`) } };
     // Sous-pages (vides pour l'instant) ouvertes par la TNT et l'étiquette.
     PAGES[`${id}-actions`] = { title: "Objectifs d'Action", slots: navSlots(id) };
     PAGES[`${id}-identite`] = { title: "Objectifs d'Identité", slots: navSlots(id) };
@@ -1168,7 +1172,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'panneau', 'livre_historique', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'panneau', 'livre_historique', 'pousse', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
