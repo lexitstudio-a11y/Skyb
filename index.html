@@ -513,6 +513,7 @@ function askTodoDone(todo) {
       const active = todos.filter(t => !t.fini);
       todo.image = todoImage(active.indexOf(todo) + 1);   // garde l'image qu'elle avait
       todo.fini = formatDate(new Date());
+      playSound(doneSound);
     }),
     onNo: () => update(() => { delete todo.fini; delete todo.image; }),
     onEdit: () => editTodoText(todo, (titre, description) => update(() => Object.assign(todo, { titre, description }))),
@@ -1342,11 +1343,16 @@ function showPageFromHash() {
 const clickSound = new Audio('assets/sounds/button.mp3');
 clickSound.preload = 'auto';
 clickSound.volume = 0.25;
-function playClick() {
-  const s = clickSound.cloneNode();   // clone : permet des clics rapprochés qui se chevauchent
-  s.volume = clickSound.volume;
+// Son joué quand une action de la liste de choses à faire est terminée.
+const doneSound = new Audio('assets/sounds/action-terminee.mp3');
+doneSound.preload = 'auto';
+doneSound.volume = 0.6;
+function playSound(sound) {
+  const s = sound.cloneNode();   // clone : permet des sons rapprochés qui se chevauchent
+  s.volume = sound.volume;
   s.play().catch(() => {});
 }
+const playClick = () => playSound(clickSound);
 
 function onClick(ev) {
   const slot = itemAt(slotAt(ev));
