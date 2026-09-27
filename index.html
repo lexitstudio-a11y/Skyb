@@ -1100,13 +1100,14 @@ function deleteArbre(a) {
   });
 }
 // Livre en haut à droite de la page d'un arbre : page de round d'où il vient (pousses), numéroté avec le serment.
+// Arbre créé à la main : pas de livre.
 function originBook(a) {
   const origin = a.source ? a.source.replace(/-resultat$/, '') : a.groupe ? groupBack(a.groupe) : null;
-  if (!origin || !PAGES[origin]) return { item: 'book', tooltip: ['§aOrigine', '§7Arbre créé depuis la page', '§7Arbres de Progression.'] };
-  return {
+  if (!origin || !PAGES[origin]) return {};
+  return { '0,8': {
     item: 'book', count: Number(origin.split('-')[1]), open: origin,
     tooltip: () => ['§aOrigine', `§7${pageTitle(origin)}`, '', '§eClique pour y aller !'],
-  };
+  } };
 }
 // Pages d'un arbre (n = sa place dans « arbres », à partir de 1) : l'arbre, sa configuration, son historique.
 function buildArbrePages(a, n, back) {
@@ -1150,7 +1151,7 @@ function buildArbrePages(a, n, back) {
       item: 'paper', open: `arbre-${n}-historique`,
       tooltip: () => ['§aHistorique', `§7${(a.historique || []).length} valeur${(a.historique || []).length > 1 ? 's' : ''} enregistrée${(a.historique || []).length > 1 ? 's' : ''}`, '', '§eClique pour voir !'],
     },
-    '0,8': originBook(a),
+    ...originBook(a),
     '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
     ...navSlots(back),
   };
