@@ -1072,6 +1072,9 @@ function editArbreValue(a, field, label) {
     },
   });
 }
+// Pages 2 et plus d'une liste : flèche en bas à gauche vers la page précédente (celle à gauche de la barrière
+// fait sortir de la liste).
+const prevPageSlot = (k, pageId) => k > 1 ? { '5,0': { item: 'arrow', tooltip: ['§aPage précédente', `§7Page ${k - 1}`], open: pageId(k - 1) } } : {};
 // Listes d'arbres : la liste principale (« arbres », « arbres-2 »…) et les listes créées depuis une page de round
 // (groupe « <round>-action » ou « <round>-identite » : un arbre par phrase des Objectifs d'Action / d'Identité).
 const groupPageId = (groupe, k) => `arbres-g-${groupe}${k > 1 ? `-p${k}` : ''}`;
@@ -1180,7 +1183,7 @@ function buildArbrePages(a, n) {
   const histoId = k => `arbre-${n}-historique${k > 1 ? `-p${k}` : ''}`;
   for (let k = 1; k <= histoPages; k++) {
     const histoSlots = {
-      ...navSlots(k === 1 ? `arbre-${n}` : histoId(k - 1)),
+      ...navSlots(`arbre-${n}`), ...prevPageSlot(k, histoId),
       '5,5': { item: 'writable_book', tooltip: ['§aNouvelle valeur', "§7Actualise la progression de l'arbre.", '', '§eClique pour ajouter !'], action: () => addArbreValue(a, n) },
     };
     if (k < histoPages) histoSlots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: histoId(k + 1) };
@@ -1206,7 +1209,7 @@ function refreshArbres() {
   for (const list of arbreLists()) {
     const pages = Math.max(1, Math.ceil(list.trees.length / ARBRES_PER_PAGE));
     for (let k = 1; k <= pages; k++) {
-      const slots = { ...navSlots(k === 1 ? list.back : list.pageId(k - 1)) };
+      const slots = { ...navSlots(list.back), ...prevPageSlot(k, list.pageId) };
       if (list.add) slots['0,8'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
       if (k < pages) slots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: list.pageId(k + 1) };
       list.trees.slice((k - 1) * ARBRES_PER_PAGE, k * ARBRES_PER_PAGE).forEach((a, i) => {
