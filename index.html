@@ -1014,11 +1014,11 @@ function randomArbreIcon() {
   return k;
 }
 // « Progression : 40% - 12/30J » : valeur actuelle (ou de départ) / valeur ciblée, colorée selon la progression
-// (0-9 % rouge, 10-33 % orange, 34-66 % jaune, 67-99 % lime, 100 % vert + « Complété »).
+// (0-9 % rouge, 10-49 % orange, 50-99 % jaune, 100 % vert + « Complété »).
 function progressLine(a, pct, valeur = a.valeur ?? a.depart) {
   let line = `§7Progression : §e${pct}%`;
   if (valeur != null && a.cible != null) {
-    const color = pct >= 100 ? '§2' : pct >= 67 ? '§a' : pct >= 34 ? '§e' : pct >= 10 ? '§6' : '§c';
+    const color = pct >= 100 ? '§2' : pct >= 50 ? '§e' : pct >= 10 ? '§6' : '§c';
     const num = v => String(v).replace('.', ',');
     line += ` §7- ${color}${num(valeur)}/${num(a.cible)}${a.unite || ''}`;
     if (pct >= 100) line += ' §a§lComplété';
