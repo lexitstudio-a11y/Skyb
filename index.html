@@ -1013,6 +1013,18 @@ function randomArbreIcon() {
   do k = keys[Math.floor(Math.random() * keys.length)]; while (k === last && keys.length > 1);   // pas deux fois de suite la même
   return k;
 }
+// « Progression : 40% - 12/30J » : valeur actuelle (ou de départ) / valeur ciblée, colorée selon la progression
+// (0-9 % rouge, 10-33 % orange, 34-66 % jaune, 67-99 % lime, 100 % vert + « Complété »).
+function progressLine(a, pct, valeur = a.valeur ?? a.depart) {
+  let line = `§7Progression : §e${pct}%`;
+  if (valeur != null && a.cible != null) {
+    const color = pct >= 100 ? '§2' : pct >= 67 ? '§a' : pct >= 34 ? '§e' : pct >= 10 ? '§6' : '§c';
+    const num = v => String(v).replace('.', ',');
+    line += ` §7- ${color}${num(valeur)}/${num(a.cible)}${a.unite || ''}`;
+    if (pct >= 100) line += ' §a§lComplété';
+  }
+  return line;
+}
 const LEVEL_LABELS = { done: '§aTerminé', current: '§6En cours', todo: '§cPas commencé' };
 const LEVEL_PANES = { done: 'lime_stained_glass', current: 'orange_stained_glass', todo: 'red_stained_glass' };
 // Ajout d'un arbre : titre (panneau) -> description (livre) -> type de progression -> valeurs de départ / ciblée.
@@ -1193,7 +1205,7 @@ function buildArbrePages(a, n) {
       tooltip: () => ['§aHistorique', `§7${(a.historique || []).length} valeur${(a.historique || []).length > 1 ? 's' : ''} enregistrée${(a.historique || []).length > 1 ? 's' : ''}`, '', '§eClique pour voir !'],
     },
     ...originBook(a),
-    '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, ...originLines(a), `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
+    '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, ...originLines(a), progressLine(a, pct), '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
     ...navSlots('main'),
     '5,3': { item: 'arrow', tooltip: () => ['§aRetour', `§7Vers ${pageTitle(arbreBackPage(n))}`], action: () => { location.hash = arbreBackPage(n); } },
   };
@@ -1219,7 +1231,7 @@ function buildArbrePages(a, n) {
       const row = 1 + j;
       histoSlots[`${row},2`] = {
         ...arbreIcon(a), count: 1,
-        tooltip: [`§a${a.titre}`, `§8${h.date}`, ...originLines(a), `§7Valeur : ${fmtNumber(h.valeur, a.unite)}`, `§7Progression : §e${p}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelAt(p, 1)]}`],
+        tooltip: [`§a${a.titre}`, `§8${h.date}`, ...originLines(a), progressLine(a, p, h.valeur), '', `§7Niveau 1 : ${LEVEL_LABELS[levelAt(p, 1)]}`],
       };
       for (let level = 2; level <= 5; level++) {
         const st = levelAt(p, level);
@@ -1243,7 +1255,7 @@ function refreshArbres() {
         const from = list.pageId(k);
         slots[ARBRE_CELLS[i]] = {
           ...arbreIcon(a), count: Math.floor(pct / 10) || null,
-          tooltip: () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? wrapText(a.description, 180).map(l => '§7' + l) : []), `§7Progression : §e${pct}%`, '', '§eClique pour voir !'],
+          tooltip: () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? [...wrapText(a.description, 180).map(l => '§7' + l), ''] : []), progressLine(a, pct), '', '§eClique pour voir !'],
           action: () => { arbreFrom[n] = from; location.hash = `arbre-${n}`; },
         };
         if (list.add) buildArbrePages(a, n);   // une seule fois par arbre (la liste principale les contient tous)
