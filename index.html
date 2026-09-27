@@ -510,7 +510,7 @@ function askTodoDelete(todo) {
   const days = Math.max(1, Math.round((addDays(todo.fini, TODO_KEEP_DAYS) - today) / 864e5));
   openConfirm({
     question: 'Supprimer cette action ?',
-    detail: [todo.titre, `Elle sera supprimée automatiquement dans ${days} jour${days > 1 ? 's' : ''}.`],
+    detail: [todo.titre, '', `Elle sera supprimée automatiquement dans ${days} jour${days > 1 ? 's' : ''}.`],
     noLabel: 'Retour', yesLabel: '§cSupprimer',
     onYes: () => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); saveTodos(); refreshTodo(); },
   });
