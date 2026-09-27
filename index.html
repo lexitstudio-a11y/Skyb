@@ -86,6 +86,22 @@
     padding: 0;
     margin: 0;
   }
+  /* Pop-up Timer : vidéo cachée (source du mode image dans l'image) et timer flottant de secours. */
+  #timerVideo {
+    position: fixed;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #timerCanvas {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    width: 240px;
+    z-index: 40;
+    cursor: pointer;
+  }
   canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -2167,10 +2183,13 @@ function editBlockTitle(block, isNew) {
 }
 function blockMenu(block) {
   hideTimeblock();
+  prepareTimer(block);   // la vidéo du timer doit déjà tourner au moment du clic (exigence du navigateur)
   openConfirm({
     question: block.titre,
     detail: [`De ${fmtMin(block.debut)} à ${fmtMin(block.fin)}`],
     noLabel: 'Renommer', yesLabel: 'Retour',
+    editLabel: 'Pop-up Timer',
+    onEdit: () => { openTimer(); showTimeblock(); },
     onNo: () => editBlockTitle(block, false),
     onYes: showTimeblock,
     onCancel: showTimeblock,
@@ -2181,6 +2200,82 @@ function blockMenu(block) {
       showTimeblock();
     },
   });
+}
+
+// --- Pop-up Timer : compte à rebours jusqu'à la fin d'un bloc, dans une petite fenêtre qui reste au-dessus
+// des autres apps (mode « image dans l'image » : le timer est dessiné sur un canvas filmé en vidéo).
+// Sans ce mode (Firefox…), le timer flotte en haut à droite de l'app ; un clic dessus le ferme.
+const TIMER_W = 120, TIMER_H = 50, TIMER_S = 4;
+const timer = { canvas: null, video: null, block: null, color: null, end: 0, loop: null, rang: false, floating: false };
+function prepareTimer(block) {
+  if (!timer.canvas) {
+    timer.canvas = document.createElement('canvas');
+    timer.canvas.width = TIMER_W * TIMER_S;
+    timer.canvas.height = TIMER_H * TIMER_S;
+    timer.canvas.id = 'timerCanvas';
+    timer.canvas.addEventListener('click', closeTimer);
+    const video = timer.video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.id = 'timerVideo';
+    video.addEventListener('leavepictureinpicture', closeTimer);
+    document.body.append(video);
+  }
+  const list = timeblocks[tb.date] || [];
+  const color = TB_COLORS[(block.couleur ?? list.indexOf(block)) % TB_COLORS.length];
+  Object.assign(timer, { next: { block, color, date: tb.date } });
+  if (!timer.block) {   // aucun timer ouvert : on prépare l'image de celui-ci
+    Object.assign(timer, timer.next);
+    drawTimer();
+  }
+  if (timer.canvas.captureStream && !timer.video.srcObject) {
+    timer.video.srcObject = timer.canvas.captureStream();
+    timer.video.play().catch(() => {});
+  }
+}
+function openTimer() {
+  const { block, color, date } = timer.next;
+  Object.assign(timer, { block, color, rang: false, end: toDate(date).getTime() + block.fin * 60000 });
+  clearInterval(timer.loop);
+  timer.loop = setInterval(drawTimer, 250);
+  drawTimer();
+  const pip = document.pictureInPictureEnabled && timer.video.srcObject && timer.video.requestPictureInPicture;
+  if (pip) timer.video.requestPictureInPicture().catch(floatTimer);
+  else floatTimer();
+}
+function floatTimer() {
+  timer.floating = true;
+  document.body.append(timer.canvas);
+}
+function closeTimer() {
+  clearInterval(timer.loop);
+  timer.loop = null;
+  timer.block = null;
+  if (timer.floating) { timer.canvas.remove(); timer.floating = false; }
+  if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
+}
+const fmtDuration = ms => {
+  const t = Math.ceil(ms / 1000), h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = t % 60;
+  return h ? `${h}:${pad2(m)}:${pad2(sec)}` : `${pad2(m)}:${pad2(sec)}`;
+};
+function drawTimer() {
+  if (!timer.block || !font) return;
+  const ctx = timer.canvas.getContext('2d'), S = TIMER_S, W = TIMER_W, H = TIMER_H;
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W * S, H * S);
+  drawColorBlock(ctx, 0, 0, W, H, timer.color, S);
+  const left = timer.end ? timer.end - Date.now() : (timer.block.fin - timer.block.debut) * 60000;
+  const done = left <= 0;
+  drawText(ctx, font, fitText(timer.block.titre, W - 12), 6, 5, '#FFFFFF', S, true);
+  // Temps restant en grand (texte x2) au centre
+  const big = done ? 'Terminé !' : fmtDuration(left), S2 = S * 2;
+  drawText(ctx, font, big, (W - textWidth(font, big) * 2) / 4, 17 / 2, done ? '#FFFF55' : '#FFFFFF', S2, true);
+  drawText(ctx, font, `Fin à ${fmtMin(timer.block.fin)}`, 6, H - 13, '#E8E8E8', S, true);
+  if (done && timer.end && !timer.rang) {   // fin du bloc : trois clics
+    timer.rang = true;
+    [0, 250, 500].forEach(d => setTimeout(playClick, d));
+  }
 }
 
 timeblockCanvas.addEventListener('pointerdown', ev => {
