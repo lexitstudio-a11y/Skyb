@@ -1107,9 +1107,14 @@ function deleteArbre(a) {
 }
 // Livre en haut à droite de la page d'un arbre : page de round d'où il vient (pousses), numéroté avec le serment.
 // Arbre créé à la main : pas de livre.
-function originBook(a) {
+const arbreOrigin = a => {
   const origin = a.source ? a.source.replace(/-resultat$/, '') : a.groupe ? groupBack(a.groupe) : null;
-  if (!origin || !PAGES[origin]) return {};
+  return origin && PAGES[origin] ? origin : null;
+};
+const originLines = a => arbreOrigin(a) ? ['§8' + pageTitle(arbreOrigin(a))] : [];   // ligne sous le titre des bulles
+function originBook(a) {
+  const origin = arbreOrigin(a);
+  if (!origin) return {};
   return { '0,8': {
     item: 'book', count: Number(origin.split('-')[1]), open: origin,
     tooltip: () => ['§aOrigine', `§7${pageTitle(origin)}`, '', '§eClique pour y aller !'],
@@ -1158,7 +1163,7 @@ function buildArbrePages(a, n) {
       tooltip: () => ['§aHistorique', `§7${(a.historique || []).length} valeur${(a.historique || []).length > 1 ? 's' : ''} enregistrée${(a.historique || []).length > 1 ? 's' : ''}`, '', '§eClique pour voir !'],
     },
     ...originBook(a),
-    '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
+    '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, ...originLines(a), `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
     ...navSlots('main'),
     '5,3': { item: 'arrow', tooltip: () => ['§aRetour', `§7Vers ${pageTitle(arbreBackPage(n))}`], action: () => { location.hash = arbreBackPage(n); } },
   };
@@ -1193,7 +1198,7 @@ function refreshArbres() {
         const from = list.pageId(k);
         slots[ARBRE_CELLS[i]] = {
           ...arbreIcon(a), count: Math.floor(pct / 10) || null,
-          tooltip: () => [`§a${a.titre}`, ...(a.description ? wrapText(a.description, 180).map(l => '§7' + l) : []), `§7Progression : §e${pct}%`, '', '§eClique pour voir !'],
+          tooltip: () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? wrapText(a.description, 180).map(l => '§7' + l) : []), `§7Progression : §e${pct}%`, '', '§eClique pour voir !'],
           action: () => { arbreFrom[n] = from; location.hash = `arbre-${n}`; },
         };
         if (list.add) buildArbrePages(a, n);   // une seule fois par arbre (la liste principale les contient tous)
