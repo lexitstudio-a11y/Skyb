@@ -1076,12 +1076,16 @@ function editArbreValue(a, field, label) {
 const groupPageId = (groupe, k) => `arbres-g-${groupe}${k > 1 ? `-p${k}` : ''}`;
 const groupBack = groupe => groupe.replace(/-(action|identite)$/, '');
 const groupTitle = groupe => groupe.endsWith('-action') ? "Arbres d'Action" : "Arbres d'Identité";
+// La liste principale montre tous les arbres ; ceux d'un round sont aussi dans leur liste à part.
 function arbreLists() {
-  const lists = [{ trees: arbres.filter(a => !a.groupe), pageId: arbresPageId, title: PAGE_TITLES.arbres, back: 'main', add: true }];
+  const lists = [{ trees: arbres, pageId: arbresPageId, title: PAGE_TITLES.arbres, back: 'main', add: true }];
   for (const groupe of new Set(arbres.map(a => a.groupe).filter(Boolean)))
     lists.push({ trees: arbres.filter(a => a.groupe === groupe), pageId: k => groupPageId(groupe, k), title: groupTitle(groupe), back: groupBack(groupe) });
   return lists;
 }
+// Page de liste d'où l'on a ouvert chaque arbre (clé : n) : la flèche de retour et la suppression y ramènent.
+const arbreFrom = {};
+const arbreBackPage = n => arbreFrom[n] && PAGES[arbreFrom[n]] ? arbreFrom[n] : arbresPageId(Math.ceil(n / ARBRES_PER_PAGE));
 // Suppression d'un arbre (tête rouge en haut à gauche de sa page), après confirmation ; retour à sa liste.
 function deleteArbre(a) {
   openConfirm({
@@ -1089,7 +1093,9 @@ function deleteArbre(a) {
     detail: [a.titre, '', 'Sa configuration et sa progression seront perdues.'],
     noLabel: 'Retour', yesLabel: '§cSupprimer',
     onYes: () => {
-      const list = arbreLists().find(l => l.trees.includes(a));
+      const from = arbreBackPage(arbres.indexOf(a) + 1);
+      const pagesOf = l => Array.from({ length: Math.max(1, Math.ceil(l.trees.length / ARBRES_PER_PAGE)) }, (_, j) => l.pageId(j + 1));
+      const list = arbreLists().find(l => pagesOf(l).includes(from)) || arbreLists()[0];
       const pos = list.trees.indexOf(a);
       arbres.splice(arbres.indexOf(a), 1);
       saveArbres();
@@ -1110,7 +1116,7 @@ function originBook(a) {
   } };
 }
 // Pages d'un arbre (n = sa place dans « arbres », à partir de 1) : l'arbre, sa configuration, son historique.
-function buildArbrePages(a, n, back) {
+function buildArbrePages(a, n) {
   const pct = arbreProgress(a);
   PAGES[`arbre-${n}-type`] = {
     title: 'Type de progression',
@@ -1153,7 +1159,8 @@ function buildArbrePages(a, n, back) {
     },
     ...originBook(a),
     '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
-    ...navSlots(back),
+    ...navSlots('main'),
+    '5,3': { item: 'arrow', tooltip: () => ['§aRetour', `§7Vers ${pageTitle(arbreBackPage(n))}`], action: () => { location.hash = arbreBackPage(n); } },
   };
   for (let level = 2; level <= 5; level++) {
     const st = levelState(a, level);
@@ -1183,12 +1190,13 @@ function refreshArbres() {
       if (k < pages) slots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: list.pageId(k + 1) };
       list.trees.slice((k - 1) * ARBRES_PER_PAGE, k * ARBRES_PER_PAGE).forEach((a, i) => {
         const n = arbres.indexOf(a) + 1, pct = arbreProgress(a);
+        const from = list.pageId(k);
         slots[ARBRE_CELLS[i]] = {
           ...arbreIcon(a), count: Math.floor(pct / 10) || null,
           tooltip: () => [`§a${a.titre}`, ...(a.description ? wrapText(a.description, 180).map(l => '§7' + l) : []), `§7Progression : §e${pct}%`, '', '§eClique pour voir !'],
-          open: `arbre-${n}`,
+          action: () => { arbreFrom[n] = from; location.hash = `arbre-${n}`; },
         };
-        buildArbrePages(a, n, list.pageId(k));
+        if (list.add) buildArbrePages(a, n);   // une seule fois par arbre (la liste principale les contient tous)
       });
       PAGES[list.pageId(k)] = { title: list.title, slots };
     }
@@ -1215,7 +1223,9 @@ function resultSprout(id) {
         saveArbres();
         refreshArbres();
       }
-      location.hash = `arbre-${arbres.indexOf(tree()) + 1}`;
+      const n = arbres.indexOf(tree()) + 1;
+      arbreFrom[n] = id;   // retour : la page du round
+      location.hash = `arbre-${n}`;
     },
   };
 }
