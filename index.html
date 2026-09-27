@@ -965,17 +965,17 @@ function levelState(a, level) {
   const done = Math.floor(arbreProgress(a) / 20);
   return level <= done ? 'done' : level === done + 1 ? 'current' : 'todo';
 }
-// Icônes possibles d'un arbre, tirées au hasard à la création (images fournies ; la neige est un bloc en 3D).
+// Icônes possibles d'un arbre, tirées au hasard à la création (images fournies).
 const ARBRE_ICONS = {
   tournesol: { image: 'tournesol' },
-  neige: { block: 'neige' },
+  toile: { image: 'arbres/toile' },
   enclume: { image: 'arbres/enclume' },
   pot: { image: 'arbres/pot' },
   pepite: { image: 'arbres/pepite' },
   bloc_commande: { image: 'arbres/bloc_commande' },
   minecart_tnt: { image: 'arbres/minecart_tnt' },
 };
-const arbreIcon = a => ARBRE_ICONS[a.icone] || { image: a.image || 'tournesol' };
+const arbreIcon = a => ARBRE_ICONS[a.icone === 'neige' ? 'toile' : a.icone] || { image: a.image || 'tournesol' };   // « neige » : ancien nom de la toile
 function randomArbreIcon() {
   const keys = Object.keys(ARBRE_ICONS), last = arbres.length ? arbres[arbres.length - 1].icone : null;
   let k;
@@ -1024,7 +1024,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tournesol', ...['neige', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -2982,7 +2982,6 @@ async function main() {
     crafting_table: { top: T.crafting_table_top, front: T.crafting_table_front, side: T.crafting_table_side },
     barrel: { top: T.barrel_top, front: T.barrel_side, side: T.barrel_side },
     blue_terracotta: { top: T.blue_terracotta, front: T.blue_terracotta, side: T.blue_terracotta },
-    neige: { top: T['arbres/neige'], front: T['arbres/neige'], side: T['arbres/neige'] },
     green_terracotta: { top: T.green_terracotta, front: T.green_terracotta, side: T.green_terracotta },
     black_terracotta: { top: T.black_terracotta, front: T.black_terracotta, side: T.black_terracotta },
     cyan_terracotta: { top: T.cyan_terracotta, front: T.cyan_terracotta, side: T.cyan_terracotta },
