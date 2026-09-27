@@ -984,10 +984,48 @@ function randomArbreIcon() {
 }
 const LEVEL_LABELS = { done: '§aTerminé', current: '§6En cours', todo: '§cPas commencé' };
 const LEVEL_PANES = { done: 'lime_stained_glass', current: 'orange_stained_glass', todo: 'red_stained_glass' };
+// Ajout d'un arbre : titre (panneau) -> description (livre) -> type de progression -> valeurs de départ / ciblée.
 function addArbre() {
-  arbres.push({ titre: `Arbre de progression ${arbres.length + 1}`, icone: randomArbreIcon(), progression: 0 });
-  saveArbres();
-  refreshArbres();
+  openSign({
+    title: "Titre de l'arbre",
+    lines: 1, fixed: ['', '^^^^^^^^^^^^', "Titre de l'arbre", ''],
+    onDone: text => {
+      const titre = text.trim();
+      if (!titre) return;
+      openSign({
+        book: true, noBullets: true, title: titre,
+        lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
+        onDone: description => {
+          arbres.push({ titre, description: description.trim(), icone: randomArbreIcon(), progression: 0 });
+          saveArbres();
+          refreshArbres();
+          location.hash = `arbre-${arbres.length}-type`;
+        },
+      });
+    },
+  });
+}
+const SENS = {
+  croissant: { head: 'tete_plus_verte', label: '§aProgression croissante', lore: ['§7La valeur doit augmenter', '§7pour atteindre la cible.'] },
+  decroissant: { head: 'tete_plus_rouge', label: '§cProgression décroissante', lore: ['§7La valeur doit diminuer', '§7pour atteindre la cible.'] },
+};
+const fmtNumber = v => v == null ? '§cnon définie' : '§e' + String(v).replace('.', ',');
+// Valeur de départ / ciblée d'un arbre, saisie sur un panneau (nombre, virgule acceptée ; vide = effacer).
+function editArbreValue(a, field, label) {
+  openSign({
+    title: label,
+    lines: 1, fixed: ['', '^^^^^^^^^^^^', label, ''],
+    numeric: 'decimal',
+    initial: a[field] == null ? '' : String(a[field]).replace('.', ','),
+    transform: t => t.replace(/[^0-9,.-]/g, ''),
+    validate: t => !t.trim() || !isNaN(parseFloat(t.replace(',', '.'))),
+    onDone: t => {
+      if (t.trim()) a[field] = parseFloat(t.replace(',', '.'));
+      else delete a[field];
+      saveArbres();
+      refreshArbres();
+    },
+  });
 }
 function refreshArbres() {
   const pages = Math.max(1, Math.ceil(arbres.length / ARBRES_PER_PAGE));
@@ -1001,11 +1039,35 @@ function refreshArbres() {
       const n = (k - 1) * ARBRES_PER_PAGE + i + 1, pct = arbreProgress(a);
       slots[ARBRE_CELLS[i]] = {
         ...arbreIcon(a), count: Math.floor(pct / 10) || null,
-        tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', '§eClique pour voir !'],
+        tooltip: () => [`§a${a.titre}`, ...(a.description ? wrapText(a.description, 180).map(l => '§7' + l) : []), `§7Progression : §e${pct}%`, '', '§eClique pour voir !'],
         open: `arbre-${n}`,
       };
+      // Configuration : type de progression puis valeurs (pages « arbre-n-type » et « arbre-n-valeurs »)
+      PAGES[`arbre-${n}-type`] = {
+        title: 'Type de progression',
+        slots: {
+          ...Object.fromEntries(Object.entries(SENS).map(([sens, cfg], j) => [`2,${3 + 2 * j}`, {
+            image: cfg.head,
+            tooltip: () => [cfg.label, ...cfg.lore, ...(a.sens === sens ? ['', '§aChoix actuel'] : []), '', '§eClique pour choisir !'],
+            action: () => { a.sens = sens; saveArbres(); location.hash = `arbre-${n}-valeurs`; },
+          }])),
+          ...navSlots(`arbre-${n}`),
+        },
+      };
+      PAGES[`arbre-${n}-valeurs`] = {
+        title: 'Valeurs de la progression',
+        slots: {
+          '2,3': { item: 'clock_00', tooltip: () => ['§aValeur de départ', `§7Valeur : ${fmtNumber(a.depart)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'depart', 'Valeur de départ') },
+          '2,5': { item: 'clock_00', tooltip: () => ['§aValeur ciblée', `§7Valeur : ${fmtNumber(a.cible)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'cible', 'Valeur ciblée') },
+          ...navSlots(`arbre-${n}-type`),
+        },
+      };
       const arbreSlots = {
-        '1,4': { item: 'writable_book', tooltip: ['§aConfiguration', '§7Configuration à venir.'] },
+        '1,4': {
+          item: 'writable_book', open: `arbre-${n}-type`,
+          tooltip: () => ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
+            `§7Départ : ${fmtNumber(a.depart)}`, `§7Cible : ${fmtNumber(a.cible)}`, '', '§eClique pour modifier !'],
+        },
         '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
         ...navSlots(arbresPageId(k)),
       };
@@ -1024,7 +1086,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -1714,7 +1776,7 @@ function openSign(cfg) {
   sign.error = false;
   sign.hoverDone = false;
   sign.hoverExtra = false;
-  signInput.inputMode = cfg.numeric ? 'numeric' : 'text';
+  signInput.inputMode = cfg.numeric === true ? 'numeric' : cfg.numeric || 'text';   // 'decimal' : chiffres + virgule
   signInput.value = fitSignText(sign.cfg.transform(cfg.initial || '')).text;
   hideTooltip();
   canvas.hidden = true;
