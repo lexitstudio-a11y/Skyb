@@ -569,7 +569,7 @@ function agendaSlot(agenda, n, image) {
   const lines = agenda.texte.split('\n').map(l => l.trim()).filter(Boolean);
   return {
     image, count: n,
-    tooltip: ['§aAgenda ' + agenda.date, ...(lines.length ? lines.map(l => '§7- ' + l) : ['§7Aucun objectif.']), '', '§eClique pour voir !'],
+    tooltip: ['§aAgenda ' + agenda.date, ...(lines.length ? lines.map(l => '§g- ' + l) : ['§7Aucun objectif.']), '', '§eClique pour voir !'],
     action: () => editAgenda(agenda.date),
   };
 }
