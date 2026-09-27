@@ -149,13 +149,20 @@ function periodDone(lastMonth) {
   today.setHours(0, 0, 0, 0);
   return today >= toDate(addMonths(dates.start, lastMonth));
 }
+// Période en cours : aujourd'hui est entre le début du mois firstMonth et la fin du mois lastMonth.
+function periodCurrent(firstMonth, lastMonth) {
+  if (!dates.start) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today >= toDate(addMonths(dates.start, firstMonth - 1)) && today < toDate(addMonths(dates.start, lastMonth));
+}
 function periodTooltip(name, firstMonth, lastMonth) {
   return () => {
     const months = firstMonth === lastMonth ? `§8Mois ${firstMonth} du serment` : `§8Mois ${firstMonth} à ${lastMonth} du serment`;
     const period = dates.start
       ? [`§7Du §e${addMonths(dates.start, firstMonth - 1)}`, `§7au §e${dayBefore(addMonths(dates.start, lastMonth))}`]
       : ["§7Dates : §cdate d'entrée non définie"];
-    const status = periodDone(lastMonth) ? ['§cTerminé'] : [];
+    const status = periodDone(lastMonth) ? ['§cTerminé'] : periodCurrent(firstMonth, lastMonth) ? ['§aEn cours'] : [];
     return [name, ...period, months, ...status, '', '§eClique pour voir !'];
   };
 }
@@ -166,14 +173,16 @@ function sermentSlots(n) {
     const k = i + 1;
     slots[`${2 + Math.floor(i / 2)},${1 + i % 2}`] = {
       item: 'painting', tooltip: periodTooltip(`§aSaison ${k}`, 3 * i + 1, 3 * k), open: `freres-${n}-saison${k}`,
-      look: () => periodDone(3 * k) ? { dim: true } : null,   // saison terminée : tableau assombri
+      // saison terminée : tableau assombri ; saison en cours : numéro « +k » en vert
+      look: () => periodDone(3 * k) ? { dim: true } : periodCurrent(3 * i + 1, 3 * k) ? { count: `+${k}`, countColor: '#55FF55' } : null,
     };
   }
   for (let i = 0; i < 12; i++) {
     const k = i + 1;
     slots[`${Math.floor(i / 2)},${6 + i % 2}`] = {
       block: 'blue_terracotta', tooltip: periodTooltip(`§aRound ${k}`, k, k), open: `freres-${n}-round${k}`,
-      look: () => periodDone(k) ? { block: 'black_terracotta' } : null,   // round terminé : terre cuite noire
+      // round terminé : terre cuite noire ; round en cours : terre cuite verte
+      look: () => periodDone(k) ? { block: 'black_terracotta' } : periodCurrent(k, k) ? { block: 'green_terracotta' } : null,
     };
   }
   return slots;
@@ -866,7 +875,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -1172,10 +1181,10 @@ function renderGui() {
       const px = (8 + c * 18) * S, py = (18 + r * 18) * S;
       const key = `${r},${c}`;
       const slot = currentSlots()[key];
+      const look = slot && { ...slot, ...(slot.look && slot.look()) };   // apparence du moment (période en cours…)
       if (!slot) ctx.drawImage(T.black_stained_glass, px, py, 16 * S, 16 * S);
       else if (slot.pane) ctx.drawImage(T[slot.pane], px, py, 16 * S, 16 * S);
       else {
-        const look = { ...slot, ...(slot.look && slot.look()) };
         if (look.item) {
           const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
           ctx.drawImage(look.dim ? dimmed(T[look.item]) : T[look.item], px + off, py + off, size, size);
@@ -1193,10 +1202,10 @@ function renderGui() {
       }
 
       // Nombre en bas à droite de la case (comme la taille d'une pile en jeu), en blanc avec ombre.
-      const count = slot && (typeof slot.count === 'function' ? slot.count() : slot.count);
+      const count = look && (typeof look.count === 'function' ? look.count() : look.count);
       if (count != null) {
         const txt = String(count);
-        drawText(ctx, font, txt, 8 + c * 18 + 17 - textWidth(font, txt), 18 + r * 18 + 9, '#FFFFFF', S, true);
+        drawText(ctx, font, txt, 8 + c * 18 + 17 - textWidth(font, txt), 18 + r * 18 + 9, look.countColor || '#FFFFFF', S, true);
       }
 
       // Surbrillance blanche de la case survolée, comme en jeu.
@@ -2583,6 +2592,7 @@ async function main() {
     crafting_table: { top: T.crafting_table_top, front: T.crafting_table_front, side: T.crafting_table_side },
     barrel: { top: T.barrel_top, front: T.barrel_side, side: T.barrel_side },
     blue_terracotta: { top: T.blue_terracotta, front: T.blue_terracotta, side: T.blue_terracotta },
+    green_terracotta: { top: T.green_terracotta, front: T.green_terracotta, side: T.green_terracotta },
     black_terracotta: { top: T.black_terracotta, front: T.black_terracotta, side: T.black_terracotta },
     cyan_terracotta: { top: T.cyan_terracotta, front: T.cyan_terracotta, side: T.cyan_terracotta },
     tnt: { top: T.tnt_top, front: T.tnt_side, side: T.tnt_side },
