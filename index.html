@@ -70,6 +70,15 @@
     color: transparent;
     background: transparent;
   }
+  /* Champs invisibles posés sur les cases de l'écran de connexion (le texte est dessiné sur le canvas). */
+  .loginInput {
+    position: absolute;
+    opacity: 0;
+    font-size: 16px;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
   canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -88,6 +97,11 @@
 </div>
 <div id="photoScreen" class="screen" hidden>
   <canvas id="photoCanvas"></canvas>
+</div>
+<div id="loginScreen" class="screen" hidden>
+  <canvas id="loginCanvas"></canvas>
+  <input id="loginEmail" class="loginInput" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" aria-label="E-mail">
+  <input id="loginPassword" class="loginInput" type="password" autocomplete="current-password" aria-label="Mot de passe">
 </div>
 <div id="dialogScreen" class="screen" hidden>
   <canvas id="dialogCanvas"></canvas>
@@ -190,6 +204,7 @@ function loadDates() {
 const dates = loadDates();
 function saveDates() {
   try { localStorage.setItem(DATES_KEY, JSON.stringify(dates)); } catch {}
+  cloudChanged();
 }
 function dateSlot(field) {
   const f = DATE_FIELDS[field];
@@ -274,6 +289,7 @@ function loadJSON(key) {
 }
 function saveJSON(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  cloudChanged();
 }
 
 // Tête « Ton profil ».
@@ -351,6 +367,7 @@ function wrapText(text, w) {
 const TODO_ROWS = 4, TODO_COLS = 7;
 function saveTodos() {
   try { localStorage.setItem(TODO_KEY, JSON.stringify(todos)); } catch {}
+  cloudChanged();
 }
 const addDays = (date, n) => { const d = toDate(date); d.setDate(d.getDate() + n); return d; };
 // Supprime les actions terminées depuis 30 jours ou plus.
@@ -462,6 +479,7 @@ const AGENDA_KEY = 'agendas';
 const agendas = (() => { try { return JSON.parse(localStorage.getItem(AGENDA_KEY)) || []; } catch { return []; } })();
 function saveAgendas() {
   try { localStorage.setItem(AGENDA_KEY, JSON.stringify(agendas)); } catch {}
+  cloudChanged();
 }
 const tomorrow = () => formatDate(new Date(Date.now() + 864e5));
 function splitAgendas() {
@@ -590,6 +608,7 @@ const PAGES = {
       '2,4': { item: 'book', tooltip: ['§aLes Pilliers Temporels', ...LORE], open: 'serments' },
       '2,5': { item: 'paper', tooltip: ['§aListe de choses à faire', '§7Je note ici les choses que je dois faire', '§7hors Serment S.', '', '§eClique pour voir !'], open: 'todo' },
       '2,6': { item: 'clock_00', tooltip: ['§aAgenda de la journée', ...LORE], open: 'agenda' },
+      '5,8': { item: 'ender_pearl', tooltip: () => accountTooltip(), action: () => openAccount() },
       '5,0': { image: 'jukebox', tooltip: ['§aJukebox', '§7Lance la musique.', '', '§eClique pour écouter !'], action: () => window.open('https://www.youtube.com/watch?v=x3bBQasjbfs', '_blank', 'noopener') },
     },
   },
@@ -847,7 +866,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -1742,6 +1761,7 @@ function randomColor() {
 function saveTimeblocks() {
   for (const d of Object.keys(timeblocks)) if (!timeblocks[d].length) delete timeblocks[d];
   try { localStorage.setItem(TB_KEY, JSON.stringify(timeblocks)); } catch {}
+  cloudChanged();
 }
 
 // Cadre gris clair façon inventaire (9 tranches de la texture du coffre).
@@ -2197,6 +2217,306 @@ addEventListener('keydown', ev => {
   if (ev.key === 'Escape' && !ev.defaultPrevented && tbOpen()) closeTimeblock();
 });
 
+// --- Compte et sauvegarde en ligne (Supabase) ---
+// Les données restent dans le navigateur (l'app marche hors connexion) ; une fois connecté, elles sont aussi
+// envoyées dans la table « user_data » (une ligne par compte, tout dans un JSON) peu après chaque modification.
+// À l'ouverture et au retour sur l'onglet, si le compte a été modifié ailleurs (autre appareil), on reprend
+// sa version et on recharge la page. Seule la clé publiable est ici : chaque compte ne voit que sa ligne (RLS).
+const SUPABASE_URL = 'https://hzgtnstmmbmmubvzxhas.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_HhqBiNcmR0j0doZ_esJrbA_znOLL7Nw';
+const SESSION_KEY = 'compte-session', SYNC_STATE_KEY = 'compte-sync';   // pas synchronisées elles-mêmes
+const SYNC_KEYS = [DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
+let session = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } })();
+// sync.at : version (updated_at) du compte déjà présente ici ; sync.dirty : modifications locales pas encore envoyées
+const sync = (() => { try { return JSON.parse(localStorage.getItem(SYNC_STATE_KEY)) || {}; } catch { return {}; } })();
+let pushTimer = null, pushing = null;
+let markAppReady;
+const appReady = new Promise(res => { markAppReady = res; });   // textures et police chargées
+const saveSession = () => { try { session ? localStorage.setItem(SESSION_KEY, JSON.stringify(session)) : localStorage.removeItem(SESSION_KEY); } catch {} };
+const saveSyncState = () => { try { localStorage.setItem(SYNC_STATE_KEY, JSON.stringify(sync)); } catch {} };
+
+class CloudError extends Error {}
+async function supa(path, { method = 'GET', body, auth = true, headers = {} } = {}) {
+  let res;
+  try {
+    res = await fetch(SUPABASE_URL + path, {
+      method,
+      headers: {
+        apikey: SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        ...(auth && session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        ...headers,
+      },
+      body: body && JSON.stringify(body),
+    });
+  } catch { throw new CloudError('Pas de connexion à internet'); }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = (data && (data.msg || data.message || data.error_description || data.error)) || `Erreur ${res.status}`;
+    const err = new CloudError(msg);
+    err.status = res.status;
+    err.code = data && (data.error_code || data.code);
+    throw err;
+  }
+  return data;
+}
+function sessionFrom(d) {
+  return {
+    access_token: d.access_token, refresh_token: d.refresh_token,
+    expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600),
+    user: { id: d.user.id, email: d.user.email },
+  };
+}
+// Jeton encore valable (renouvelé une minute avant d'expirer) ; déconnecte si le renouvellement est refusé.
+async function freshSession() {
+  if (!session) return null;
+  if (session.expires_at * 1000 - 60000 > Date.now()) return session;
+  try {
+    session = sessionFrom(await supa('/auth/v1/token?grant_type=refresh_token', { method: 'POST', auth: false, body: { refresh_token: session.refresh_token } }));
+    saveSession();
+  } catch (e) {
+    if (e.status >= 400 && e.status < 500) { session = null; saveSession(); }
+    throw e;
+  }
+  return session;
+}
+
+const localData = () => Object.fromEntries(SYNC_KEYS.map(k => [k, localStorage.getItem(k)]).filter(([, v]) => v != null));
+const hasData = data => !!data && Object.keys(data).length > 0;
+function applyCloudData(row) {
+  for (const k of SYNC_KEYS) {
+    try { row.data[k] == null ? localStorage.removeItem(k) : localStorage.setItem(k, row.data[k]); } catch {}
+  }
+  Object.assign(sync, { at: row.updated_at, dirty: false });
+  saveSyncState();
+  location.reload();   // les données sont lues au chargement de la page
+}
+async function pullCloud() {
+  await freshSession();
+  const rows = await supa(`/rest/v1/user_data?select=data,updated_at&user_id=eq.${session.user.id}`);
+  return rows[0] || null;
+}
+async function pushCloud() {
+  if (pushing) return pushing;   // un seul envoi à la fois
+  pushing = (async () => {
+    await freshSession();
+    const [row] = await supa('/rest/v1/user_data?on_conflict=user_id', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: { user_id: session.user.id, data: localData(), updated_at: new Date().toISOString() },
+    });
+    Object.assign(sync, { at: row.updated_at, dirty: false, savedAt: Date.now() });
+    saveSyncState();
+  })().finally(() => { pushing = null; });
+  return pushing;
+}
+// Appelée à chaque enregistrement local : envoi groupé 1,5 s après la dernière modification.
+function cloudChanged() {
+  if (!session) return;
+  sync.dirty = true;
+  saveSyncState();
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => pushCloud().catch(() => {}), 1500);
+}
+// À l'ouverture / au retour sur l'onglet : reprend la version du compte si elle a changé ailleurs,
+// sinon envoie ce qui n'a pas encore pu l'être (hors connexion…).
+async function cloudCheck() {
+  if (!session) return;
+  try {
+    const row = await pullCloud();
+    if (row && row.updated_at !== sync.at && !sync.dirty) applyCloudData(row);
+    else if (!row || sync.dirty) await pushCloud();
+  } catch {}
+}
+addEventListener('online', cloudCheck);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') cloudCheck(); });
+
+// Retour du lien de confirmation d'e-mail : « #access_token=…&refresh_token=… » dans l'adresse.
+if (location.hash.includes('access_token=')) {
+  const q = new URLSearchParams(location.hash.slice(1));
+  history.replaceState(null, '', location.pathname + location.search);
+  if (q.get('refresh_token')) {
+    session = { access_token: q.get('access_token'), refresh_token: q.get('refresh_token'), expires_at: Number(q.get('expires_at')) || 0, user: null };
+    Promise.all([supa('/auth/v1/user'), appReady])
+      .then(([u]) => { session.user = { id: u.id, email: u.email }; saveSession(); return afterLogin(); })
+      .catch(() => { session = null; saveSession(); });
+  }
+}
+
+// Après connexion : si le compte et cet appareil ont tous deux des données, on demande lesquelles garder.
+async function afterLogin() {
+  const row = await pullCloud();
+  const local = localData();
+  if (row && hasData(row.data) && hasData(local) && JSON.stringify(row.data) !== JSON.stringify(local)) {
+    openConfirm({
+      question: 'Quelles données garder ?',
+      detail: ['Ce compte a déjà des données sauvegardées,', 'et cet appareil aussi. Les autres seront remplacées.'],
+      noLabel: 'Celles du compte', yesLabel: 'Celles de cet appareil', buttonWidth: 136,
+      onNo: () => applyCloudData(row),
+      onYes: () => pushCloud().then(renderGui, () => {}),
+      onCancel: () => applyCloudData(row),
+    });
+  } else if (row && hasData(row.data)) applyCloudData(row);
+  else await pushCloud();
+  renderGui();
+}
+
+// Bulle de la perle de l'Ender (Profil Joueur)
+function accountTooltip() {
+  if (!session || !session.user) {
+    return ['§aSauvegarde en ligne', '§7Connecte-toi pour sauvegarder tes', '§7données et les retrouver sur', '§7tous tes appareils.', '', '§eClique pour te connecter !'];
+  }
+  const status = sync.dirty ? '§6Modifications en cours d\'envoi…'
+    : sync.savedAt ? `§7Dernière sauvegarde : §f${formatDate(new Date(sync.savedAt))} ${fmtMin(new Date(sync.savedAt).getHours() * 60 + new Date(sync.savedAt).getMinutes())}`
+    : '§7Données sauvegardées.';
+  return ['§aSauvegarde en ligne', `§7Connecté : §f${session.user.email}`, status, '', '§eClique pour gérer !'];
+}
+function openAccount() {
+  if (!session || !session.user) { openLogin(); return; }
+  openConfirm({
+    question: 'Sauvegarde en ligne',
+    detail: [`Connecté : ${session.user.email}`, 'Tes données sont sauvegardées automatiquement.'],
+    noLabel: 'Retour', yesLabel: 'Se déconnecter', buttonWidth: 100,
+    onYes: logout,
+  });
+}
+async function logout() {
+  const s = session;
+  if (sync.dirty) await pushCloud().catch(() => {});
+  supa('/auth/v1/logout', { method: 'POST', headers: { Authorization: `Bearer ${s.access_token}` } }).catch(() => {});
+  session = null;
+  saveSession();
+  Object.assign(sync, { at: null, dirty: false, savedAt: null });
+  saveSyncState();
+  renderGui();
+}
+
+// --- Écran de connexion : deux champs (e-mail, mot de passe) façon Minecraft et trois boutons ---
+const loginScreen = document.getElementById('loginScreen');
+const loginCanvas = document.getElementById('loginCanvas');
+const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
+const login = { layout: null, hover: null, message: '', busy: false, blink: true, timer: null };
+const loginOpen = () => !loginScreen.hidden;
+function openLogin() {
+  hideTooltip();
+  canvas.hidden = true;
+  loginScreen.hidden = false;
+  Object.assign(login, { message: '', busy: false, hover: null });
+  loginPassword.value = '';
+  clearInterval(login.timer);
+  login.timer = setInterval(() => { login.blink = !login.blink; renderLogin(); }, 300);
+  renderLogin();
+  (loginEmail.value ? loginPassword : loginEmail).focus();
+}
+function closeLogin() {
+  clearInterval(login.timer);
+  loginScreen.hidden = true;
+  canvas.hidden = false;
+  loginEmail.blur();
+  loginPassword.blur();
+  renderGui();
+}
+function renderLogin() {
+  const S = signScale();
+  const { ctx, W, H } = prepareScreen(loginCanvas, S);
+  const fw = Math.min(200, W - 16), fx = Math.floor((W - fw) / 2);
+  let y = Math.max(4, Math.floor(H / 2) - 86);
+  const centered = (text, y, color) => drawText(ctx, font, text, Math.floor(W / 2 - textWidth(font, text) / 2), y, color, S, true);
+  centered('Connexion', y, '#FFFFFF');
+  centered('Sauvegarde tes données en ligne', y + 14, '#A0A0A0');
+  y += 34;
+  const fields = [];
+  for (const [input, label, secret] of [[loginEmail, 'E-mail', false], [loginPassword, 'Mot de passe', true]]) {
+    drawText(ctx, font, label, fx, y, '#A0A0A0', S);
+    const box = [fx, y + 11, fw, 20];
+    const fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
+    const focused = document.activeElement === input;
+    fr(...box, focused ? '#FFFFFF' : '#A0A0A0');   // champ de texte de Minecraft : bord clair, fond noir
+    fr(box[0] + 1, box[1] + 1, fw - 2, 18, '#000000');
+    let text = secret ? '*'.repeat(input.value.length) : input.value;
+    while (text && textWidth(font, text + '_') > fw - 8) text = text.slice(1);   // on garde la fin visible
+    drawText(ctx, font, text + (focused && login.blink ? '_' : ''), fx + 4, y + 17, '#E0E0E0', S, true);
+    fields.push([input, box]);
+    y += 38;
+  }
+  if (login.message) centered(login.message, y, login.message.startsWith('§a') ? '#55FF55' : '#FF5555');
+  y += 14;
+  const half = Math.floor((fw - 4) / 2);
+  const btns = { in: [fx, y, half, 20], up: [fx + fw - half, y, half, 20], cancel: [fx, y + 24, fw, 20] };
+  drawButton(ctx, ...btns.in.slice(0, 3), 'Se connecter', login.hover === 'in', S);
+  drawButton(ctx, ...btns.up.slice(0, 3), 'Créer un compte', login.hover === 'up', S);
+  drawButton(ctx, ...btns.cancel.slice(0, 3), 'Annuler', login.hover === 'cancel', S);
+  login.layout = { S, btns };
+  for (const [input, [x, y, w, h]] of fields) Object.assign(input.style, { left: `${x * S}px`, top: `${y * S}px`, width: `${w * S}px`, height: `${h * S}px` });
+}
+const LOGIN_ERRORS = [
+  [/invalid login credentials|invalid_credentials/i, 'E-mail ou mot de passe incorrect'],
+  [/email not confirmed|email_not_confirmed/i, "Confirme d'abord ton e-mail (lien reçu)"],
+  [/already registered|user_already_exists/i, 'Un compte existe déjà avec cet e-mail'],
+  [/password should be at least|weak_password/i, 'Mot de passe trop court (6 caractères min.)'],
+  [/unable to validate email|invalid format|email_address_invalid/i, 'Adresse e-mail invalide'],
+  [/rate limit|over_email_send_rate_limit|over_request_rate_limit/i, 'Trop d\'essais, réessaie dans un moment'],
+  [/internet/i, 'Pas de connexion à internet'],
+];
+const loginError = e => (LOGIN_ERRORS.find(([re]) => re.test(`${e.message} ${e.code || ''}`)) || [0, 'Erreur : ' + e.message])[1];
+async function submitLogin(mode) {
+  if (login.busy) return;
+  const email = loginEmail.value.trim(), password = loginPassword.value;
+  if (!email || !password) { login.message = 'Remplis l\'e-mail et le mot de passe'; renderLogin(); return; }
+  login.busy = true;
+  login.message = '§a' + (mode === 'up' ? 'Création du compte…' : 'Connexion…');
+  renderLogin();
+  try {
+    const d = mode === 'up'
+      ? await supa('/auth/v1/signup', { method: 'POST', auth: false, body: { email, password } })
+      : await supa('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email, password } });
+    if (!d.access_token) {   // inscription avec confirmation d'e-mail activée
+      login.message = '§aCompte créé : clique sur le lien reçu par e-mail';
+      return;
+    }
+    session = sessionFrom(d);
+    saveSession();
+    Object.assign(sync, { at: null, dirty: false });
+    saveSyncState();
+    closeLogin();
+    await afterLogin();
+  } catch (e) {
+    login.message = loginError(e);
+  } finally {
+    login.busy = false;
+    if (loginOpen()) renderLogin();
+  }
+}
+for (const input of [loginEmail, loginPassword]) {
+  input.addEventListener('input', () => { login.message = login.message.startsWith('§a') ? login.message : ''; renderLogin(); });
+  input.addEventListener('focus', renderLogin);
+  input.addEventListener('blur', renderLogin);
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (input === loginEmail) loginPassword.focus(); else submitLogin('in');
+    } else if (ev.key === 'Escape') { ev.preventDefault(); closeLogin(); }
+  });
+}
+loginCanvas.addEventListener('mousemove', ev => {
+  if (!login.layout) return;
+  const { S, btns } = login.layout;
+  const hover = Object.keys(btns).find(k => inRect(ev, btns[k], S)) || null;
+  loginCanvas.style.cursor = hover ? 'pointer' : '';
+  if (hover !== login.hover) { login.hover = hover; renderLogin(); }
+});
+loginCanvas.addEventListener('click', ev => {
+  if (!login.layout) return;
+  const { S, btns } = login.layout;
+  if (inRect(ev, btns.cancel, S)) { playClick(); closeLogin(); }
+  else if (inRect(ev, btns.in, S)) { playClick(); submitLogin('in'); }
+  else if (inRect(ev, btns.up, S)) { playClick(); submitLogin('up'); }
+});
+addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && loginOpen() && !ev.defaultPrevented) closeLogin();
+});
+
 function resize() {
   state.S = Math.max(2, Math.min(5, Math.floor(Math.min(innerWidth / (GUI_W + 16), innerHeight / (GUI_H + 16)))));
   canvas.width = GUI_W * state.S;
@@ -2208,6 +2528,7 @@ function resize() {
   if (dialog.cfg) renderConfirm();
   if (tbOpen()) renderTimeblock();
   if (pvOpen()) renderPhotoPreview();
+  if (loginOpen()) renderLogin();
 }
 
 async function main() {
@@ -2234,6 +2555,8 @@ async function main() {
   canvas.addEventListener('click', onClick);
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseleave', onLeave);
+  markAppReady();
+  cloudCheck();
 }
 
 main();
