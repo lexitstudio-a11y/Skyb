@@ -2136,6 +2136,21 @@ function renderConfirm() {
   centered(dialog.cfg.question, y, '#FFFFFF');
   y += 16;
   for (const line of lines) { centered(line, y, '#AAAAAA'); y += 10; }
+  // Nuancier (cfg.colors = { list, current(), onPick(i) }) : 2 rangées de cases de couleur, la choisie encadrée de blanc.
+  let swatches = null;
+  if (dialog.cfg.colors) {
+    const { list, current } = dialog.cfg.colors, perRow = Math.ceil(list.length / 2), size = 12, gap = 2;
+    const x0 = Math.floor(W / 2 - (perRow * (size + gap) - gap) / 2);
+    y += 8;
+    swatches = list.map((color, i) => {
+      const r = [x0 + (i % perRow) * (size + gap), y + Math.floor(i / perRow) * (size + gap), size, size];
+      if (i === current()) { ctx.fillStyle = '#FFFFFF'; ctx.fillRect((r[0] - 1) * S, (r[1] - 1) * S, (size + 2) * S, (size + 2) * S); }
+      drawColorBlock(ctx, r[0], r[1], size, size, color, S);
+      if (dialog.hover === 'color' + i) { ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'; ctx.fillRect(r[0] * S, r[1] * S, size * S, size * S); }
+      return r;
+    });
+    y += 2 * (size + gap);
+  }
   const bw = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2)), by = y + 14;
   const no = [Math.floor(W / 2) - bw - 4, by, bw, 20], yes = [Math.floor(W / 2) + 4, by, bw, 20];
   // Sous Non / Oui, sur toute leur largeur : « Modifier » (si prévu) puis « Supprimer ».
@@ -2147,7 +2162,7 @@ function renderConfirm() {
   drawButton(ctx, ...yes.slice(0, 3), dialog.cfg.yesLabel || 'Oui', dialog.hover === 'yes', S);
   if (edit) drawButton(ctx, ...edit.slice(0, 3), dialog.cfg.editLabel || 'Modifier le titre', dialog.hover === 'edit', S);
   if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), '§cSupprimer', dialog.hover === 'del', S);
-  dialog.layout = { S, no, yes, edit, del: dialog.cfg.onDelete ? del : null };
+  dialog.layout = { S, no, yes, edit, del: dialog.cfg.onDelete ? del : null, swatches };
 }
 function openConfirm(cfg) {
   dialog.cfg = cfg;
@@ -2164,14 +2179,17 @@ function closeConfirm() {
   renderGui();
 }
 dialogCanvas.addEventListener('mousemove', ev => {
-  const { S, no, yes, edit, del } = dialog.layout;
-  const hover = inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit' : del && inRect(ev, del, S) ? 'del' : null;
+  const { S, no, yes, edit, del, swatches } = dialog.layout;
+  const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
+  const hover = sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
 });
 dialogCanvas.addEventListener('click', ev => {
-  const { S, no, yes, edit, del } = dialog.layout;
+  const { S, no, yes, edit, del, swatches } = dialog.layout;
   const cfg = dialog.cfg;
+  const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
+  if (sw >= 0) { playClick(); cfg.colors.onPick(sw); renderConfirm(); return; }   // la fenêtre reste ouverte
   if (edit && inRect(ev, edit, S)) { playClick(); closeConfirm(); cfg.onEdit(); return; }
   if (inRect(ev, no, S)) { playClick(); closeConfirm(); if (cfg.onNo) cfg.onNo(); }
   else if (inRect(ev, yes, S)) { playClick(); closeConfirm(); cfg.onYes(); }
@@ -2589,6 +2607,16 @@ function blockMenu(block) {
     detail: [`De ${fmtMin(block.debut)} à ${fmtMin(block.fin)}`],
     noLabel: 'Renommer', yesLabel: 'Retour',
     editLabel: 'Pop-up Timer',
+    colors: {
+      list: TB_COLORS,
+      current: () => (block.couleur ?? (timeblocks[tb.date] || []).indexOf(block)) % TB_COLORS.length,
+      onPick: i => {
+        block.couleur = i;
+        saveTimeblocks();
+        if (timer.next && timer.next.block === block) timer.next.color = TB_COLORS[i];   // le Pop-up Timer suit
+        if (timer.block === block) { timer.color = TB_COLORS[i]; drawTimer(); }
+      },
+    },
     onEdit: () => { openTimer(); showTimeblock(); },
     onNo: () => editBlockTitle(block, false),
     onYes: showTimeblock,
