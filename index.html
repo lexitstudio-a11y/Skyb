@@ -447,10 +447,10 @@ function todoGrid(list, slots, numbers) {
         ...(todo.description ? wrapText(todo.description, 180).map(l => '§7' + l) : []), '',
         `§8Ajoutée le ${todo.date}`,
         ...(todo.fini
-          ? [`§cTerminée le ${todo.fini}`, `§8Supprimée le ${formatDate(addDays(todo.fini, TODO_KEEP_DAYS))}`]
+          ? [`§cTerminée le ${todo.fini}`, `§8Supprimée le ${formatDate(addDays(todo.fini, TODO_KEEP_DAYS))}`, '', '§eClique pour supprimer !']
           : ['§eClique quand elle est terminée !']),
       ],
-      action: () => askTodoDone(todo),
+      action: () => todo.fini ? askTodoDelete(todo) : askTodoDone(todo),
     };
   });
   return slots;
@@ -503,6 +503,18 @@ function addTodo() {
   });
 }
 // Oui = terminée (passe dans « Actions terminées ») ; Non = en cours ; Supprimer = retirée.
+// Action terminée : on propose seulement de la supprimer (sinon elle part toute seule après TODO_KEEP_DAYS jours).
+function askTodoDelete(todo) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.max(1, Math.round((addDays(todo.fini, TODO_KEEP_DAYS) - today) / 864e5));
+  openConfirm({
+    question: 'Supprimer cette action ?',
+    detail: [todo.titre, `Elle sera supprimée automatiquement dans ${days} jour${days > 1 ? 's' : ''}.`],
+    noLabel: 'Retour', yesLabel: '§cSupprimer',
+    onYes: () => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); saveTodos(); refreshTodo(); },
+  });
+}
 function askTodoDone(todo) {
   const update = change => { change(); saveTodos(); refreshTodo(); };
   openConfirm({
