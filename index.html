@@ -28,6 +28,13 @@
     justify-content: center;
     overflow: hidden;
   }
+  /* Téléphone en portrait : l'app tournée pour s'afficher en paysage (taille et rotation posées en JS). */
+  html.rotated body {
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+  }
   #tooltip {
     position: fixed;
     pointer-events: none;
@@ -107,6 +114,23 @@
   <canvas id="dialogCanvas"></canvas>
 </div>
 <script>
+// Téléphone tenu en portrait : toute l'app est tournée d'un quart de tour (classe « rotated » sur <html>) pour
+// s'afficher en paysage. Les tailles d'écran et positions de la souris / du doigt passent par ces fonctions,
+// qui les donnent dans le repère de l'app tournée.
+const touchScreen = matchMedia('(pointer: coarse)');
+const isRotated = () => touchScreen.matches && window.innerHeight > window.innerWidth;
+const viewW = () => isRotated() ? window.innerHeight : window.innerWidth;
+const viewH = () => isRotated() ? window.innerWidth : window.innerHeight;
+const evX = ev => isRotated() ? ev.clientY : ev.clientX;
+const evY = ev => isRotated() ? window.innerWidth - ev.clientX : ev.clientY;
+function applyOrientation() {
+  const on = isRotated();
+  document.documentElement.classList.toggle('rotated', on);
+  Object.assign(document.body.style, on
+    ? { width: `${window.innerHeight}px`, height: `${window.innerWidth}px`, transform: `translateX(${window.innerWidth}px) rotate(90deg)` }
+    : { width: '', height: '', transform: '' });
+}
+
 // Interface "Profil Joueur" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
 const TEX = 'assets/textures/';
 const GUI_W = 176;
@@ -1235,8 +1259,7 @@ function dimmed(img) {
 
 // Case (ligne, colonne) sous la souris, ou null.
 function slotAt(ev) {
-  const r = canvas.getBoundingClientRect();
-  const gx = (ev.clientX - r.left) / state.S, gy = (ev.clientY - r.top) / state.S;
+  const gx = (evX(ev) - canvas.offsetLeft) / state.S, gy = (evY(ev) - canvas.offsetTop) / state.S;
   const c = Math.floor((gx - 7) / 18), row = Math.floor((gy - 17) / 18);
   if (c < 0 || c >= COLS || row < 0 || row >= ROWS) return null;
   return `${row},${c}`;
@@ -1244,10 +1267,10 @@ function slotAt(ev) {
 
 function placeTooltip(ev) {
   const S = state.S, margin = 4;
-  let x = ev.clientX + 12 * S, y = ev.clientY - 12 * S;
-  if (x + tip.width > innerWidth - margin) x = ev.clientX - 12 * S - tip.width;
-  y = Math.max(margin, Math.min(y, innerHeight - tip.height - margin));
-  x = Math.min(x, innerWidth - tip.width - margin);   // ne dépasse pas à droite
+  let x = evX(ev) + 12 * S, y = evY(ev) - 12 * S;
+  if (x + tip.width > viewW() - margin) x = evX(ev) - 12 * S - tip.width;
+  y = Math.max(margin, Math.min(y, viewH() - tip.height - margin));
+  x = Math.min(x, viewW() - tip.width - margin);   // ne dépasse pas à droite
   tip.style.left = Math.max(margin, x) + 'px';
   tip.style.top = y + 'px';
 }
@@ -1264,7 +1287,7 @@ function onMove(ev) {
       // Texte plus petit si l'overlay ne tient pas dans la fenêtre.
       for (let ts = tooltipScale(state.S); ; ts--) {
         renderTooltip(tip, font, lines, ts);
-        if (ts <= 1 || (tip.width <= innerWidth - 8 && tip.height <= innerHeight - 8)) break;
+        if (ts <= 1 || (tip.width <= viewW() - 8 && tip.height <= viewH() - 8)) break;
       }
       tip.hidden = false;
     } else tip.hidden = true;
@@ -1366,18 +1389,18 @@ function fitSignText(text, caret = text.length) {
 }
 
 function signScale() {
-  return Math.max(1, Math.min(5, Math.floor(innerHeight / 215), Math.floor(innerWidth / 112)));
+  return Math.max(1, Math.min(5, Math.floor(viewH() / 215), Math.floor(viewW() / 112)));
 }
 
 function renderSign() {
   const cfg = sign.cfg;
   if (cfg.book) return renderBook();
   const S = signScale();
-  signCanvas.width = innerWidth;
-  signCanvas.height = innerHeight;
+  signCanvas.width = viewW();
+  signCanvas.height = viewH();
   const ctx = signCanvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
-  const W = Math.floor(innerWidth / S), H = Math.floor(innerHeight / S);
+  const W = Math.floor(viewW() / S), H = Math.floor(viewH() / S);
   ctx.fillStyle = 'rgba(16, 16, 16, 0.35)';
   ctx.fillRect(0, 0, signCanvas.width, signCanvas.height);
   const centered = (text, y, color, shadow) => drawText(ctx, font, text, Math.floor(W / 2 - textWidth(font, text) / 2), y, color, S, shadow);
@@ -1452,7 +1475,7 @@ function bookRows(text) {
 }
 function renderBook() {
   const cfg = sign.cfg;
-  const S = Math.max(1, Math.min(5, Math.floor(innerHeight / 228), Math.floor(innerWidth / 200)));
+  const S = Math.max(1, Math.min(5, Math.floor(viewH() / 228), Math.floor(viewW() / 200)));
   const { ctx, W, H } = prepareScreen(signCanvas, S);
   const left = Math.floor((W - 192) / 2), top = Math.max(2, Math.floor((H - 222) / 2));
   ctx.drawImage(T.book_gui, 0, 0, 192, 192, left * S, top * S, 192 * S, 192 * S);
@@ -1525,7 +1548,7 @@ function renderBook() {
 }
 
 function inRect(ev, [x, y, w, h], S = sign.layout.S) {
-  const gx = ev.clientX / S, gy = ev.clientY / S;
+  const gx = evX(ev) / S, gy = evY(ev) / S;
   return gx >= x && gx < x + w && gy >= y && gy < y + h;
 }
 
@@ -1539,13 +1562,13 @@ function drawButton(ctx, x, y, w, label, hover, S) {
 
 // Fond assombri commun aux écrans plein écran ; renvoie la taille en pixels GUI.
 function prepareScreen(cv, S) {
-  cv.width = innerWidth;
-  cv.height = innerHeight;
+  cv.width = viewW();
+  cv.height = viewH();
   const ctx = cv.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = 'rgba(16, 16, 16, 0.35)';
   ctx.fillRect(0, 0, cv.width, cv.height);
-  return { ctx, W: Math.floor(innerWidth / S), H: Math.floor(innerHeight / S) };
+  return { ctx, W: Math.floor(viewW() / S), H: Math.floor(viewH() / S) };
 }
 
 function openSign(cfg) {
@@ -1821,7 +1844,7 @@ function fitText(text, w) {
 }
 
 function tbScale() {
-  return Math.max(1, Math.min(3, Math.floor(innerWidth / 236), Math.floor(innerHeight / 250)));
+  return Math.max(1, Math.min(3, Math.floor(viewW() / 236), Math.floor(viewH() / 250)));
 }
 function renderTimeblock() {
   const S = tbScale();
@@ -2034,7 +2057,7 @@ function renderPhotoPreview() {
 
   const avail = (by - 6) * S - 12;   // hauteur libre au-dessus des boutons, bordure du téléphone comprise
   const ph = Math.min(avail / 1.05, 2556 / 2.4), pw = ph * 1179 / 2556;   // écran du téléphone
-  const bez = Math.round(ph * 0.022), x = Math.round((innerWidth - pw) / 2), y = Math.round(6 + (avail - ph) / 2);
+  const bez = Math.round(ph * 0.022), x = Math.round((viewW() - pw) / 2), y = Math.round(6 + (avail - ph) / 2);
   const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); };
   rr(x - bez - 2, y - bez - 2, pw + 2 * bez + 4, ph + 2 * bez + 4, pw * 0.16 + bez); ctx.fillStyle = '#3A3A3C'; ctx.fill();   // tranche
   rr(x - bez, y - bez, pw + 2 * bez, ph + 2 * bez, pw * 0.16 + bez); ctx.fillStyle = '#000'; ctx.fill();                      // bordure
@@ -2111,7 +2134,7 @@ const tbOpen = () => tb.date && !timeblockScreen.hidden;
 
 function tbPoint(ev) {
   const { S } = tb.layout;
-  return { x: ev.clientX / S, y: ev.clientY / S };
+  return { x: evX(ev) / S, y: evY(ev) / S };
 }
 function tbTimeAt(y) {
   const { grid } = tb.layout;
@@ -2567,7 +2590,8 @@ addEventListener('keydown', ev => {
 });
 
 function resize() {
-  state.S = Math.max(2, Math.min(5, Math.floor(Math.min(innerWidth / (GUI_W + 16), innerHeight / (GUI_H + 16)))));
+  applyOrientation();
+  state.S = Math.max(2, Math.min(5, Math.floor(Math.min(viewW() / (GUI_W + 16), viewH() / (GUI_H + 16)))));
   canvas.width = GUI_W * state.S;
   canvas.height = GUI_H * state.S;
   state.hovered = null;
