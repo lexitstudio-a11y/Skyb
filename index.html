@@ -1040,7 +1040,7 @@ const SENS = {
   croissant: { head: 'tete_plus_verte', label: '§aProgression croissante', lore: ['§7La valeur doit augmenter', '§7pour atteindre la cible.'] },
   decroissant: { head: 'tete_plus_rouge', label: '§cProgression décroissante', lore: ['§7La valeur doit diminuer', '§7pour atteindre la cible.'] },
 };
-const fmtNumber = (v, unit) => v == null ? '§cnon définie' : '§e' + String(v).replace('.', ',') + (unit ? ' ' + unit : '');
+const fmtNumber = (v, unit) => v == null ? '§cnon définie' : '§e' + String(v).replace('.', ',') + (unit || '');   // collée au nombre : 20J
 // Unité de mesure d'un arbre (kg, km, pages…), affichée après ses valeurs.
 function editArbreUnit(a) {
   openSign({
@@ -1178,7 +1178,7 @@ function buildArbrePages(a, n) {
   };
   const arbreSlots = {
     '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
-    '1,5': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§8aucune'}`, '§7Affichée après les nombres (ex. 20 J).', '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
+    '1,5': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§8aucune'}`, '§7Affichée après les nombres (ex. 20J).', '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
     '0,4': { item: 'name_tag', tooltip: ['§aRenommer', "§7Modifie le titre et la description", "§7de l'arbre.", '', '§eClique pour modifier !'], action: () => renameArbre(a) },
     '1,4': {
       item: 'writable_book', action: () => addArbreValue(a, n),
