@@ -959,7 +959,33 @@ function saveArbres() {
   try { localStorage.setItem(ARBRES_KEY, JSON.stringify(arbres)); } catch {}
   cloudChanged();
 }
-const arbreProgress = a => Math.max(0, Math.min(100, a.progression || 0));
+// Progression en % (entier, arrondi à l'inférieur) : part du chemin parcouru entre la valeur de départ et la
+// valeur ciblée (marche dans les deux sens : croissant ou décroissant).
+const arbreProgress = a => Math.floor(Math.max(0, Math.min(100, a.progression || 0)));
+function computeProgress(a) {
+  if (a.valeur == null || a.depart == null || a.cible == null || a.cible === a.depart) return 0;
+  return (a.valeur - a.depart) / (a.cible - a.depart) * 100;
+}
+// Livre « Configuration » : nouvelle valeur actuelle (panneau) ; gardée dans l'historique avec sa date.
+// Tant que le départ et la cible ne sont pas choisis, il ouvre la configuration.
+function addArbreValue(a, n) {
+  if (a.depart == null || a.cible == null) { location.hash = `arbre-${n}-type`; return; }
+  openSign({
+    title: 'Nouvelle valeur',
+    lines: 1, fixed: ['', '^^^^^^^^^^^^', 'Valeur actuelle', a.unite || ''],
+    numeric: 'decimal',
+    transform: t => t.replace(/[^0-9,.-]/g, ''),
+    validate: t => !t.trim() || !isNaN(parseFloat(t.replace(',', '.'))),
+    onDone: t => {
+      if (!t.trim()) return;
+      a.valeur = parseFloat(t.replace(',', '.'));
+      (a.historique ||= []).push({ date: formatDate(new Date()), valeur: a.valeur });
+      a.progression = computeProgress(a);
+      saveArbres();
+      refreshArbres();
+    },
+  });
+}
 // État d'un niveau (1 à 5) : terminé si la progression a dépassé sa fin, en cours si elle est dedans.
 function levelState(a, level) {
   const done = Math.floor(arbreProgress(a) / 20);
@@ -1103,9 +1129,15 @@ function refreshArbres() {
       const arbreSlots = {
         '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
         '1,4': {
-          item: 'writable_book', open: `arbre-${n}-type`,
+          item: 'writable_book', action: () => addArbreValue(a, n),
           tooltip: () => ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
-            `§7Départ : ${fmtNumber(a.depart, a.unite)}`, `§7Cible : ${fmtNumber(a.cible, a.unite)}`, '', '§eClique pour modifier !'],
+            `§7Départ : ${fmtNumber(a.depart, a.unite)}`, `§7Cible : ${fmtNumber(a.cible, a.unite)}`,
+            `§7Valeur actuelle : ${fmtNumber(a.valeur, a.unite)}`, `§7Progression : §e${arbreProgress(a)}%`, '',
+            a.depart != null && a.cible != null ? '§eClique pour ajouter une valeur !' : '§eClique pour configurer !'],
+        },
+        '5,8': {
+          image: 'livre_historique', open: `arbre-${n}-historique`,
+          tooltip: () => ['§aHistorique', `§7${(a.historique || []).length} valeur${(a.historique || []).length > 1 ? 's' : ''} enregistrée${(a.historique || []).length > 1 ? 's' : ''}`, '', '§eClique pour voir !'],
         },
         '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
         ...navSlots(arbresPageId(k)),
@@ -1115,6 +1147,17 @@ function refreshArbres() {
         arbreSlots[`3,${level + 1}`] = { pane: LEVEL_PANES[st], count: level, tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
       }
       PAGES[`arbre-${n}`] = { title: a.titre, slots: arbreSlots };
+      // Historique : les valeurs entrées, la plus récente en haut à gauche (4 rangées de 7, comme la liste d'actions)
+      const histo = [...(a.historique || [])].reverse().slice(0, TODO_ROWS * TODO_COLS);
+      const histoSlots = { ...navSlots(`arbre-${n}`) };
+      histo.forEach((h, j) => {
+        const p = a.depart != null && a.cible != null && a.cible !== a.depart
+          ? Math.floor(Math.max(0, Math.min(100, (h.valeur - a.depart) / (a.cible - a.depart) * 100))) : 0;
+        histoSlots[`${1 + Math.floor(j / TODO_COLS)},${1 + j % TODO_COLS}`] = {
+          item: 'paper', tooltip: [`§a${h.date}`, `§7Valeur : ${fmtNumber(h.valeur, a.unite)}`, `§7Progression : §e${p}%`],
+        };
+      });
+      PAGES[`arbre-${n}-historique`] = { title: "Historique des valeurs", slots: histoSlots };
     });
     PAGES[arbresPageId(k)] = { title: PAGE_TITLES.arbres, slots };
   }
@@ -1125,7 +1168,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'panneau', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'panneau', 'livre_historique', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
