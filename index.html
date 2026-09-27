@@ -2203,17 +2203,18 @@ function blockMenu(block) {
 }
 
 // --- Pop-up Timer : compte à rebours jusqu'à la fin d'un bloc, dans une petite fenêtre qui reste au-dessus
-// des autres apps (mode « image dans l'image » : le timer est dessiné sur un canvas filmé en vidéo).
-// Sans ce mode (Firefox…), le timer flotte en haut à droite de l'app ; un clic dessus le ferme.
+// des autres apps. Chrome / Edge / Arc : vraie mini-fenêtre (Document Picture-in-Picture) qui reste ouverte
+// quand on change d'onglet ; Safari / iPhone : mode « image dans l'image » d'une vidéo (le canvas filmé).
+// Sans l'un ni l'autre (Firefox…), le timer flotte en haut à droite de l'app ; un clic dessus le ferme.
 const TIMER_W = 120, TIMER_H = 50, TIMER_S = 4;
-const timer = { canvas: null, video: null, block: null, color: null, end: 0, loop: null, rang: false, floating: false };
+const timer = { canvas: null, video: null, win: null, block: null, color: null, end: 0, loop: null, rang: false, floating: false };
 function prepareTimer(block) {
   if (!timer.canvas) {
     timer.canvas = document.createElement('canvas');
     timer.canvas.width = TIMER_W * TIMER_S;
     timer.canvas.height = TIMER_H * TIMER_S;
     timer.canvas.id = 'timerCanvas';
-    timer.canvas.addEventListener('click', closeTimer);
+    timer.canvas.addEventListener('click', () => { if (timer.floating) closeTimer(); });
     const video = timer.video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
@@ -2236,9 +2237,27 @@ function prepareTimer(block) {
 function openTimer() {
   const { block, color, date } = timer.next;
   Object.assign(timer, { block, color, rang: false, end: toDate(date).getTime() + block.fin * 60000 });
-  clearInterval(timer.loop);
-  timer.loop = setInterval(drawTimer, 250);
   drawTimer();
+  if (timer.win) return;   // mini-fenêtre déjà ouverte : elle affiche maintenant ce bloc
+  if (timer.floating) { runTimer(window); return; }
+  if (window.documentPictureInPicture) {
+    documentPictureInPicture.requestWindow({ width: TIMER_W * 2, height: TIMER_H * 2 }).then(win => {
+      timer.win = win;
+      win.document.title = 'Timer';
+      Object.assign(win.document.body.style, { margin: '0', background: '#000', overflow: 'hidden' });
+      Object.assign(timer.canvas.style, { display: 'block', width: '100vw', height: '100vh', objectFit: 'contain', imageRendering: 'pixelated' });
+      win.document.body.append(timer.canvas);
+      win.addEventListener('pagehide', closeTimer);
+      runTimer(win);   // la mini-fenêtre est visible : ses minuteurs ne sont pas ralentis quand l'onglet est caché
+    }).catch(videoTimer);
+  } else videoTimer();
+}
+function runTimer(win) {
+  if (timer.loop) timer.loop.win.clearInterval(timer.loop.id);
+  timer.loop = { win, id: win.setInterval(drawTimer, 250) };
+}
+function videoTimer() {
+  runTimer(window);
   const pip = document.pictureInPictureEnabled && timer.video.srcObject && timer.video.requestPictureInPicture;
   if (pip) timer.video.requestPictureInPicture().catch(floatTimer);
   else floatTimer();
@@ -2248,9 +2267,16 @@ function floatTimer() {
   document.body.append(timer.canvas);
 }
 function closeTimer() {
-  clearInterval(timer.loop);
+  if (timer.loop) { try { timer.loop.win.clearInterval(timer.loop.id); } catch {} }
   timer.loop = null;
   timer.block = null;
+  if (timer.win) {
+    const win = timer.win;
+    timer.win = null;
+    timer.canvas.remove();
+    timer.canvas.removeAttribute('style');
+    win.close();
+  }
   if (timer.floating) { timer.canvas.remove(); timer.floating = false; }
   if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
 }
