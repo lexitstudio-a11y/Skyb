@@ -721,10 +721,7 @@ const PAGES = {
     title: PAGE_TITLES['todo-finies'],
     slots: doneTodoSlots(),
   },
-  arbres: {   // page vide pour l'instant
-    title: PAGE_TITLES.arbres,
-    slots: { ...navSlots('main') },
-  },
+  arbres: { title: PAGE_TITLES.arbres, slots: {} },   // rempli par refreshArbres
   duree: {
     title: PAGE_TITLES.duree,
     slots: {
@@ -946,13 +943,71 @@ for (const n of [1, 2, 3]) {
 }
 
 const pageTitle = id => { const t = PAGES[id].title; return typeof t === 'function' ? t() : t; };
-Object.entries(PAGES).forEach(([id, page]) => { if (!id.startsWith('todo') && !id.startsWith('agenda')) numberDuplicates(page.slots); });
+Object.entries(PAGES).forEach(([id, page]) => { if (!/^(todo|agenda|arbre)/.test(id)) numberDuplicates(page.slots); });
+
+// --- Arbres de Progression ---
+// Pages « arbres », « arbres-2 »… : 6 arbres par page (rangées 1 et 3, colonnes 2 / 4 / 6), la tête verte en
+// haut à droite en ajoute un, la flèche en bas à droite mène à la page suivante.
+// Le numéro d'un arbre = dizaines de sa progression (22 % -> 2, 58 % -> 5 ; rien à 0 %).
+// Page d'un arbre (« arbre-n ») : livre (configuration, à venir), puis ses 5 niveaux de 20 % chacun :
+// l'icône de l'arbre = niveau 1, puis vitres 2 à 5 (vert = terminé, orange = en cours, rouge = pas commencé).
+const ARBRES_KEY = 'arbres';
+const arbres = (() => { try { return JSON.parse(localStorage.getItem(ARBRES_KEY)) || []; } catch { return []; } })();
+const ARBRES_PER_PAGE = 6, ARBRE_CELLS = ['1,2', '1,4', '1,6', '3,2', '3,4', '3,6'];
+const arbresPageId = k => k === 1 ? 'arbres' : `arbres-${k}`;   // k : numéro de page (à partir de 1)
+function saveArbres() {
+  try { localStorage.setItem(ARBRES_KEY, JSON.stringify(arbres)); } catch {}
+  cloudChanged();
+}
+const arbreProgress = a => Math.max(0, Math.min(100, a.progression || 0));
+// État d'un niveau (1 à 5) : terminé si la progression a dépassé sa fin, en cours si elle est dedans.
+function levelState(a, level) {
+  const done = Math.floor(arbreProgress(a) / 20);
+  return level <= done ? 'done' : level === done + 1 ? 'current' : 'todo';
+}
+const LEVEL_LABELS = { done: '§aTerminé', current: '§6En cours', todo: '§cPas commencé' };
+const LEVEL_PANES = { done: 'lime_stained_glass', current: 'orange_stained_glass', todo: 'red_stained_glass' };
+function addArbre() {
+  arbres.push({ titre: `Arbre de progression ${arbres.length + 1}`, image: 'tournesol', progression: 0 });
+  saveArbres();
+  refreshArbres();
+}
+function refreshArbres() {
+  const pages = Math.max(1, Math.ceil(arbres.length / ARBRES_PER_PAGE));
+  for (let k = 1; k <= pages; k++) {
+    const slots = {
+      '0,8': { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre },
+      ...navSlots(k === 1 ? 'main' : arbresPageId(k - 1)),
+    };
+    if (k < pages) slots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: arbresPageId(k + 1) };
+    arbres.slice((k - 1) * ARBRES_PER_PAGE, k * ARBRES_PER_PAGE).forEach((a, i) => {
+      const n = (k - 1) * ARBRES_PER_PAGE + i + 1, pct = arbreProgress(a);
+      slots[ARBRE_CELLS[i]] = {
+        image: a.image, count: Math.floor(pct / 10) || null,
+        tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', '§eClique pour voir !'],
+        open: `arbre-${n}`,
+      };
+      const arbreSlots = {
+        '1,4': { item: 'writable_book', tooltip: ['§aConfiguration', '§7Configuration à venir.'] },
+        '3,2': { image: a.image, tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
+        ...navSlots(arbresPageId(k)),
+      };
+      for (let level = 2; level <= 5; level++) {
+        const st = levelState(a, level);
+        arbreSlots[`3,${level + 1}`] = { pane: LEVEL_PANES[st], count: level, tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
+      }
+      PAGES[`arbre-${n}`] = { title: a.titre, slots: arbreSlots };
+    });
+    PAGES[arbresPageId(k)] = { title: PAGE_TITLES.arbres, slots };
+  }
+  if (state.page.startsWith('arbre')) renderGui();
+}
 
 const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tournesol',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -1243,7 +1298,8 @@ function currentSlots() {
   return Object.fromEntries(Object.entries(slots).filter(([, s]) => !s.when || s.when()));
 }
 // Une case est un item (survol, overlay, clic) sauf les vitres.
-const itemAt = key => { const slot = key && currentSlots()[key]; return slot && !slot.pane ? slot : null; };
+// Case survolable : tout sauf les vitres décoratives (une vitre avec une info-bulle l'est aussi).
+const itemAt = key => { const slot = key && currentSlots()[key]; return slot && (!slot.pane || slot.tooltip) ? slot : null; };
 let T, font, BLOCKS;
 const canvas = document.getElementById('gui');
 const tip = document.getElementById('tooltip');
@@ -2427,7 +2483,7 @@ addEventListener('keydown', ev => {
 const SUPABASE_URL = 'https://hzgtnstmmbmmubvzxhas.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_HhqBiNcmR0j0doZ_esJrbA_znOLL7Nw';
 const SESSION_KEY = 'compte-session', SYNC_STATE_KEY = 'compte-sync';   // pas synchronisées elles-mêmes
-const SYNC_KEYS = [DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
+const SYNC_KEYS = [DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
 let session = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } })();
 // sync.at : version (updated_at) du compte déjà présente ici ; sync.dirty : modifications locales pas encore envoyées
 const sync = (() => { try { return JSON.parse(localStorage.getItem(SYNC_STATE_KEY)) || {}; } catch { return {}; } })();
@@ -2914,6 +2970,7 @@ async function main() {
     cyan_terracotta: { top: T.cyan_terracotta, front: T.cyan_terracotta, side: T.cyan_terracotta },
     tnt: { top: T.tnt_top, front: T.tnt_side, side: T.tnt_side },
   };
+  refreshArbres();
   HEADS.profile = headFaces(T.steve);
   if (profile.skin) loadSkin(profile.skin).then(img => { HEADS.profile = headFaces(img); renderGui(); }, () => {});
   const page = location.hash.slice(1);
