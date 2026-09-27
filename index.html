@@ -672,13 +672,13 @@ function renameSlot(n) {
   };
 }
 
-const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments' };
+const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Arbres de Progression' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
     slots: {
       '1,4': { head: 'profile', tooltip: profileTooltip, action: editProfile },
-      '2,1': { item: 'diamond_sword', tooltip: ['§aCompétences', ...LORE] },
+      '2,1': { image: 'arbres_progression', tooltip: ['§aArbres de Progression', ...LORE], open: 'arbres' },
       '2,4': { item: 'book', tooltip: ['§aLes Pilliers Temporels', ...LORE], open: 'serments' },
       '2,5': {
         item: 'paper', open: 'todo',
@@ -720,6 +720,10 @@ const PAGES = {
   'todo-finies': {
     title: PAGE_TITLES['todo-finies'],
     slots: doneTodoSlots(),
+  },
+  arbres: {   // page vide pour l'instant
+    title: PAGE_TITLES.arbres,
+    slots: { ...navSlots('main') },
   },
   duree: {
     title: PAGE_TITLES.duree,
@@ -948,7 +952,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass',
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
