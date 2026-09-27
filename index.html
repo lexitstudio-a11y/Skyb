@@ -919,9 +919,9 @@ function seasonGoals(n, season) {
     '3,6': { image: 'laisse', count: 3, tooltip: () => ["§aObjectifs d'Identité", tag, ...identityGoalLines(`freres-${n}-saison${season}`), '', readOnly] },
   };
 }
-// Page d'un round : une pousse numérotée 1 à 3 au-dessus de chacun des 3 objectifs (usage à venir).
-function roundSprouts() {
-  return Object.fromEntries([2, 4, 6].map((col, i) => [`1,${col}`, { image: 'pousse', count: i + 1, tooltip: [`§aPousse ${i + 1}`, '§7Description à venir.'] }]));
+// Page d'un round : une pousse numérotée 1 à 3 au-dessus de chacun des 3 objectifs (voir resultSprout / goalsSprout).
+function roundSprouts(id) {
+  return { '1,2': resultSprout(id), '1,4': goalsSprout(id, 'action', 2), '1,6': goalsSprout(id, 'identite', 3) };
 }
 // Page d'un round : œil de l'Ender en bas à gauche qui mène à la saison de ce round (numéroté avec la saison).
 function seasonEye(n, season) {
@@ -939,7 +939,7 @@ for (const n of [1, 2, 3]) {
     const label = period.replace(/^saison/, 'Saison ').replace(/^round/, 'Round ');   // « saison2 » -> « Saison 2 »
     const k = +period.replace(/\D/g, '');
     const [first, last] = period.startsWith('saison') ? [3 * k - 2, 3 * k] : [k, k];   // mois du serment couverts
-    PAGES[id] = { title: `${label} - Serment S ${n}`, slots: { ...freresSlots(n, id), ...(period.startsWith('round') ? tomorrowClock(first, last, '5,8') : {}), ...(period.startsWith('saison') ? roundCompass(n, k) : { ...seasonEye(n, Math.ceil(k / 3)), ...seasonGoals(n, Math.ceil(k / 3)), ...roundSprouts() }), ...navSlots(`serment${n}`) } };
+    PAGES[id] = { title: `${label} - Serment S ${n}`, slots: { ...freresSlots(n, id), ...(period.startsWith('round') ? tomorrowClock(first, last, '5,8') : {}), ...(period.startsWith('saison') ? roundCompass(n, k) : { ...seasonEye(n, Math.ceil(k / 3)), ...seasonGoals(n, Math.ceil(k / 3)), ...roundSprouts(id) }), ...navSlots(`serment${n}`) } };
     // Sous-pages (vides pour l'instant) ouvertes par la TNT et l'étiquette.
     PAGES[`${id}-actions`] = { title: "Objectifs d'Action", slots: navSlots(id) };
     PAGES[`${id}-identite`] = { title: "Objectifs d'Identité", slots: navSlots(id) };
@@ -1071,101 +1071,162 @@ function editArbreValue(a, field, label) {
     },
   });
 }
-// Suppression d'un arbre (tête rouge en haut à gauche de sa page), après confirmation.
+// Listes d'arbres : la liste principale (« arbres », « arbres-2 »…) et les listes créées depuis une page de round
+// (groupe « <round>-action » ou « <round>-identite » : un arbre par phrase des Objectifs d'Action / d'Identité).
+const groupPageId = (groupe, k) => `arbres-g-${groupe}${k > 1 ? `-p${k}` : ''}`;
+const groupBack = groupe => groupe.replace(/-(action|identite)$/, '');
+const groupTitle = groupe => groupe.endsWith('-action') ? "Arbres d'Action" : "Arbres d'Identité";
+function arbreLists() {
+  const lists = [{ trees: arbres.filter(a => !a.groupe), pageId: arbresPageId, title: PAGE_TITLES.arbres, back: 'main', add: true }];
+  for (const groupe of new Set(arbres.map(a => a.groupe).filter(Boolean)))
+    lists.push({ trees: arbres.filter(a => a.groupe === groupe), pageId: k => groupPageId(groupe, k), title: groupTitle(groupe), back: groupBack(groupe) });
+  return lists;
+}
+// Suppression d'un arbre (tête rouge en haut à gauche de sa page), après confirmation ; retour à sa liste.
 function deleteArbre(a) {
   openConfirm({
     question: 'Supprimer cet arbre ?',
     detail: [a.titre, '', 'Sa configuration et sa progression seront perdues.'],
     noLabel: 'Retour', yesLabel: '§cSupprimer',
     onYes: () => {
-      const i = arbres.indexOf(a);
-      if (i >= 0) arbres.splice(i, 1);
+      const list = arbreLists().find(l => l.trees.includes(a));
+      const pos = list.trees.indexOf(a);
+      arbres.splice(arbres.indexOf(a), 1);
       saveArbres();
       refreshArbres();
-      location.hash = arbresPageId(Math.max(1, Math.ceil(i / ARBRES_PER_PAGE)));   // page où il était (ou la précédente)
+      const k = Math.max(1, Math.ceil(pos / ARBRES_PER_PAGE));   // page où il était (ou la précédente)
+      location.hash = PAGES[list.pageId(k)] ? list.pageId(k) : list.back;   // liste vide : retour au round
     },
   });
+}
+// Pages d'un arbre (n = sa place dans « arbres », à partir de 1) : l'arbre, sa configuration, son historique.
+function buildArbrePages(a, n, back) {
+  const pct = arbreProgress(a);
+  PAGES[`arbre-${n}-type`] = {
+    title: 'Type de progression',
+    slots: {
+      ...Object.fromEntries(Object.entries(SENS).map(([sens, cfg], j) => [`2,${3 + 2 * j}`, {
+        image: cfg.head,
+        tooltip: () => [cfg.label, ...cfg.lore, ...(a.sens === sens ? ['', '§aChoix actuel'] : []), '', '§eClique pour choisir !'],
+        action: () => { a.sens = sens; saveArbres(); location.hash = `arbre-${n}-valeurs`; },
+      }])),
+      ...navSlots(`arbre-${n}`),
+    },
+  };
+  PAGES[`arbre-${n}-valeurs`] = {
+    title: 'Valeurs de la progression',
+    slots: {
+      '0,4': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§cnon définie'}`, '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
+      '2,3': { item: 'clock_00', tooltip: () => ['§aValeur de départ', `§7Valeur : ${fmtNumber(a.depart, a.unite)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'depart', 'Valeur de départ') },
+      '2,5': { item: 'clock_00', tooltip: () => ['§aValeur ciblée', `§7Valeur : ${fmtNumber(a.cible, a.unite)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'cible', 'Valeur ciblée') },
+      // Valider : visible une fois les deux valeurs choisies ; ramène à la page de l'arbre
+      '5,8': {
+        image: 'tete_valider', when: () => a.depart != null && a.cible != null,
+        tooltip: () => ['§aValider', `§7De ${fmtNumber(a.depart, a.unite)} §7à ${fmtNumber(a.cible, a.unite)}`, '', '§eClique pour valider !'],
+        action: () => { location.hash = `arbre-${n}`; },
+      },
+      ...navSlots(`arbre-${n}-type`),
+    },
+  };
+  const arbreSlots = {
+    '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
+    '1,4': {
+      item: 'writable_book', action: () => addArbreValue(a, n),
+      tooltip: () => ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
+        `§7Départ : ${fmtNumber(a.depart, a.unite)}`, `§7Cible : ${fmtNumber(a.cible, a.unite)}`,
+        `§7Valeur actuelle : ${fmtNumber(a.valeur, a.unite)}`, `§7Progression : §e${arbreProgress(a)}%`, '',
+        a.depart != null && a.cible != null ? '§eClique pour ajouter une valeur !' : '§eClique pour configurer !'],
+    },
+    '5,8': {
+      image: 'livre_historique', open: `arbre-${n}-historique`,
+      tooltip: () => ['§aHistorique', `§7${(a.historique || []).length} valeur${(a.historique || []).length > 1 ? 's' : ''} enregistrée${(a.historique || []).length > 1 ? 's' : ''}`, '', '§eClique pour voir !'],
+    },
+    '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
+    ...navSlots(back),
+  };
+  for (let level = 2; level <= 5; level++) {
+    const st = levelState(a, level);
+    arbreSlots[`3,${level + 1}`] = { pane: LEVEL_PANES[st], count: level, tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
+  }
+  PAGES[`arbre-${n}`] = { title: fitText(a.titre, 160), slots: arbreSlots };   // titre coupé s'il dépasse de la fenêtre
+  // Historique : les valeurs entrées, la plus récente en haut à gauche (4 rangées de 7, comme la liste d'actions)
+  const histo = [...(a.historique || [])].reverse().slice(0, TODO_ROWS * TODO_COLS);
+  const histoSlots = { ...navSlots(`arbre-${n}`) };
+  histo.forEach((h, j) => {
+    const p = a.depart != null && a.cible != null && a.cible !== a.depart
+      ? Math.floor(Math.max(0, Math.min(100, (h.valeur - a.depart) / (a.cible - a.depart) * 100))) : 0;
+    histoSlots[`${1 + Math.floor(j / TODO_COLS)},${1 + j % TODO_COLS}`] = {
+      item: 'paper', tooltip: [`§a${h.date}`, `§7Valeur : ${fmtNumber(h.valeur, a.unite)}`, `§7Progression : §e${p}%`],
+    };
+  });
+  PAGES[`arbre-${n}-historique`] = { title: 'Historique des valeurs', slots: histoSlots };
 }
 function refreshArbres() {
   // les numéros changent après une suppression : on reconstruit toutes les pages des arbres
   for (const id of Object.keys(PAGES)) if (/^arbres?-/.test(id)) delete PAGES[id];
-  const pages = Math.max(1, Math.ceil(arbres.length / ARBRES_PER_PAGE));
-  for (let k = 1; k <= pages; k++) {
-    const slots = {
-      '0,8': { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre },
-      ...navSlots(k === 1 ? 'main' : arbresPageId(k - 1)),
-    };
-    if (k < pages) slots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: arbresPageId(k + 1) };
-    arbres.slice((k - 1) * ARBRES_PER_PAGE, k * ARBRES_PER_PAGE).forEach((a, i) => {
-      const n = (k - 1) * ARBRES_PER_PAGE + i + 1, pct = arbreProgress(a);
-      slots[ARBRE_CELLS[i]] = {
-        ...arbreIcon(a), count: Math.floor(pct / 10) || null,
-        tooltip: () => [`§a${a.titre}`, ...(a.description ? wrapText(a.description, 180).map(l => '§7' + l) : []), `§7Progression : §e${pct}%`, '', '§eClique pour voir !'],
-        open: `arbre-${n}`,
-      };
-      // Configuration : type de progression puis valeurs (pages « arbre-n-type » et « arbre-n-valeurs »)
-      PAGES[`arbre-${n}-type`] = {
-        title: 'Type de progression',
-        slots: {
-          ...Object.fromEntries(Object.entries(SENS).map(([sens, cfg], j) => [`2,${3 + 2 * j}`, {
-            image: cfg.head,
-            tooltip: () => [cfg.label, ...cfg.lore, ...(a.sens === sens ? ['', '§aChoix actuel'] : []), '', '§eClique pour choisir !'],
-            action: () => { a.sens = sens; saveArbres(); location.hash = `arbre-${n}-valeurs`; },
-          }])),
-          ...navSlots(`arbre-${n}`),
-        },
-      };
-      PAGES[`arbre-${n}-valeurs`] = {
-        title: 'Valeurs de la progression',
-        slots: {
-          '0,4': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§cnon définie'}`, '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
-          '2,3': { item: 'clock_00', tooltip: () => ['§aValeur de départ', `§7Valeur : ${fmtNumber(a.depart, a.unite)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'depart', 'Valeur de départ') },
-          '2,5': { item: 'clock_00', tooltip: () => ['§aValeur ciblée', `§7Valeur : ${fmtNumber(a.cible, a.unite)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'cible', 'Valeur ciblée') },
-          // Valider : visible une fois les deux valeurs choisies ; ramène à la page de l'arbre
-          '5,8': {
-            image: 'tete_valider', when: () => a.depart != null && a.cible != null,
-            tooltip: () => ['§aValider', `§7De ${fmtNumber(a.depart, a.unite)} §7à ${fmtNumber(a.cible, a.unite)}`, '', '§eClique pour valider !'],
-            action: () => { location.hash = `arbre-${n}`; },
-          },
-          ...navSlots(`arbre-${n}-type`),
-        },
-      };
-      const arbreSlots = {
-        '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
-        '1,4': {
-          item: 'writable_book', action: () => addArbreValue(a, n),
-          tooltip: () => ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
-            `§7Départ : ${fmtNumber(a.depart, a.unite)}`, `§7Cible : ${fmtNumber(a.cible, a.unite)}`,
-            `§7Valeur actuelle : ${fmtNumber(a.valeur, a.unite)}`, `§7Progression : §e${arbreProgress(a)}%`, '',
-            a.depart != null && a.cible != null ? '§eClique pour ajouter une valeur !' : '§eClique pour configurer !'],
-        },
-        '5,8': {
-          image: 'livre_historique', open: `arbre-${n}-historique`,
-          tooltip: () => ['§aHistorique', `§7${(a.historique || []).length} valeur${(a.historique || []).length > 1 ? 's' : ''} enregistrée${(a.historique || []).length > 1 ? 's' : ''}`, '', '§eClique pour voir !'],
-        },
-        '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
-        ...navSlots(arbresPageId(k)),
-      };
-      for (let level = 2; level <= 5; level++) {
-        const st = levelState(a, level);
-        arbreSlots[`3,${level + 1}`] = { pane: LEVEL_PANES[st], count: level, tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
-      }
-      PAGES[`arbre-${n}`] = { title: a.titre, slots: arbreSlots };
-      // Historique : les valeurs entrées, la plus récente en haut à gauche (4 rangées de 7, comme la liste d'actions)
-      const histo = [...(a.historique || [])].reverse().slice(0, TODO_ROWS * TODO_COLS);
-      const histoSlots = { ...navSlots(`arbre-${n}`) };
-      histo.forEach((h, j) => {
-        const p = a.depart != null && a.cible != null && a.cible !== a.depart
-          ? Math.floor(Math.max(0, Math.min(100, (h.valeur - a.depart) / (a.cible - a.depart) * 100))) : 0;
-        histoSlots[`${1 + Math.floor(j / TODO_COLS)},${1 + j % TODO_COLS}`] = {
-          item: 'paper', tooltip: [`§a${h.date}`, `§7Valeur : ${fmtNumber(h.valeur, a.unite)}`, `§7Progression : §e${p}%`],
+  for (const list of arbreLists()) {
+    const pages = Math.max(1, Math.ceil(list.trees.length / ARBRES_PER_PAGE));
+    for (let k = 1; k <= pages; k++) {
+      const slots = { ...navSlots(k === 1 ? list.back : list.pageId(k - 1)) };
+      if (list.add) slots['0,8'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
+      if (k < pages) slots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: list.pageId(k + 1) };
+      list.trees.slice((k - 1) * ARBRES_PER_PAGE, k * ARBRES_PER_PAGE).forEach((a, i) => {
+        const n = arbres.indexOf(a) + 1, pct = arbreProgress(a);
+        slots[ARBRE_CELLS[i]] = {
+          ...arbreIcon(a), count: Math.floor(pct / 10) || null,
+          tooltip: () => [`§a${a.titre}`, ...(a.description ? wrapText(a.description, 180).map(l => '§7' + l) : []), `§7Progression : §e${pct}%`, '', '§eClique pour voir !'],
+          open: `arbre-${n}`,
         };
+        buildArbrePages(a, n, list.pageId(k));
       });
-      PAGES[`arbre-${n}-historique`] = { title: "Historique des valeurs", slots: histoSlots };
-    });
-    PAGES[arbresPageId(k)] = { title: PAGE_TITLES.arbres, slots };
+      PAGES[list.pageId(k)] = { title: list.title, slots };
+    }
   }
   if (state.page.startsWith('arbre') && PAGES[state.page]) renderGui();   // page supprimée : la navigation s'en charge
+}
+// Pousses d'une page de round (au-dessus des 3 objectifs) :
+//   1 (Objectif de Résultat) : crée un arbre du même titre dans la liste principale (ou ouvre celui déjà créé) ;
+//   2 / 3 (Objectifs d'Action / d'Identité) : un arbre par phrase, dans une page à part (phrases ajoutées depuis : nouveaux arbres).
+const goalLines = text => (text || '').split('\n').map(l => l.trim()).filter(Boolean);
+function askGoalFirst(what, edit) {
+  openConfirm({ question: `Écris d'abord ${what}`, noLabel: 'Retour', yesLabel: 'Écrire', onYes: edit });
+}
+function resultSprout(id) {
+  const source = `${id}-resultat`, tree = () => arbres.find(a => a.source === source);
+  return {
+    image: 'pousse', count: 1,
+    tooltip: () => ['§aArbre de progression', "§7Crée un arbre de progression", "§7avec l'Objectif de Résultat.", '', tree() ? '§eClique pour le voir !' : '§eClique pour le créer !'],
+    action: () => {
+      const titre = resultGoal(id);
+      if (!tree() && !titre) { askGoalFirst('ton Objectif de Résultat', () => editResultGoal(id)); return; }
+      if (!tree()) {
+        arbres.push({ titre, icone: randomArbreIcon(), progression: 0, source });
+        saveArbres();
+        refreshArbres();
+      }
+      location.hash = `arbre-${arbres.indexOf(tree()) + 1}`;
+    },
+  };
+}
+function goalsSprout(id, kind, count) {
+  const groupe = `${id}-${kind}`, text = () => (kind === 'action' ? actionGoals : identityGoals)[id];
+  const label = kind === 'action' ? "d'Action" : "d'Identité";
+  return {
+    image: 'pousse', count,
+    tooltip: () => {
+      const n = arbres.filter(a => a.groupe === groupe).length;
+      return [`§aArbres ${label}`, '§7Un arbre de progression par phrase', `§7des Objectifs ${label}.`, `§7${n} arbre${n > 1 ? 's' : ''}`, '', '§eClique pour voir !'];
+    },
+    action: () => {
+      const lines = goalLines(text());
+      const existing = new Set(arbres.filter(a => a.groupe === groupe).map(a => a.titre));
+      if (!lines.length && !existing.size) { askGoalFirst(`tes Objectifs ${label}`, () => (kind === 'action' ? editActionGoals : editIdentityGoals)(id)); return; }
+      for (const titre of lines) if (!existing.has(titre)) arbres.push({ titre, icone: randomArbreIcon(), progression: 0, groupe });
+      saveArbres();
+      refreshArbres();
+      location.hash = groupPageId(groupe, 1);
+    },
+  };
 }
 
 const FILES = [
