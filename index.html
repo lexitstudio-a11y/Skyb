@@ -1009,7 +1009,21 @@ const SENS = {
   croissant: { head: 'tete_plus_verte', label: '§aProgression croissante', lore: ['§7La valeur doit augmenter', '§7pour atteindre la cible.'] },
   decroissant: { head: 'tete_plus_rouge', label: '§cProgression décroissante', lore: ['§7La valeur doit diminuer', '§7pour atteindre la cible.'] },
 };
-const fmtNumber = v => v == null ? '§cnon définie' : '§e' + String(v).replace('.', ',');
+const fmtNumber = (v, unit) => v == null ? '§cnon définie' : '§e' + String(v).replace('.', ',') + (unit ? ' ' + unit : '');
+// Unité de mesure d'un arbre (kg, km, pages…), affichée après ses valeurs.
+function editArbreUnit(a) {
+  openSign({
+    title: 'Unité de mesure',
+    lines: 1, fixed: ['', '^^^^^^^^^^^^', 'Unité de mesure', 'ex. kg, km, pages'],
+    initial: a.unite || '',
+    onDone: t => {
+      const unite = t.trim();
+      if (unite) a.unite = unite; else delete a.unite;
+      saveArbres();
+      refreshArbres();
+    },
+  });
+}
 // Valeur de départ / ciblée d'un arbre, saisie sur un panneau (nombre, virgule acceptée ; vide = effacer).
 function editArbreValue(a, field, label) {
   openSign({
@@ -1074,8 +1088,15 @@ function refreshArbres() {
       PAGES[`arbre-${n}-valeurs`] = {
         title: 'Valeurs de la progression',
         slots: {
-          '2,3': { item: 'clock_00', tooltip: () => ['§aValeur de départ', `§7Valeur : ${fmtNumber(a.depart)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'depart', 'Valeur de départ') },
-          '2,5': { item: 'clock_00', tooltip: () => ['§aValeur ciblée', `§7Valeur : ${fmtNumber(a.cible)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'cible', 'Valeur ciblée') },
+          '0,4': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§cnon définie'}`, '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
+          '2,3': { item: 'clock_00', tooltip: () => ['§aValeur de départ', `§7Valeur : ${fmtNumber(a.depart, a.unite)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'depart', 'Valeur de départ') },
+          '2,5': { item: 'clock_00', tooltip: () => ['§aValeur ciblée', `§7Valeur : ${fmtNumber(a.cible, a.unite)}`, '', '§eClique pour modifier !'], action: () => editArbreValue(a, 'cible', 'Valeur ciblée') },
+          // Valider : visible une fois les deux valeurs choisies ; ramène à la page de l'arbre
+          '5,8': {
+            image: 'tete_valider', when: () => a.depart != null && a.cible != null,
+            tooltip: () => ['§aValider', `§7De ${fmtNumber(a.depart, a.unite)} §7à ${fmtNumber(a.cible, a.unite)}`, '', '§eClique pour valider !'],
+            action: () => { location.hash = `arbre-${n}`; },
+          },
           ...navSlots(`arbre-${n}-type`),
         },
       };
@@ -1084,7 +1105,7 @@ function refreshArbres() {
         '1,4': {
           item: 'writable_book', open: `arbre-${n}-type`,
           tooltip: () => ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
-            `§7Départ : ${fmtNumber(a.depart)}`, `§7Cible : ${fmtNumber(a.cible)}`, '', '§eClique pour modifier !'],
+            `§7Départ : ${fmtNumber(a.depart, a.unite)}`, `§7Cible : ${fmtNumber(a.cible, a.unite)}`, '', '§eClique pour modifier !'],
         },
         '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, `§7Progression : §e${pct}%`, '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
         ...navSlots(arbresPageId(k)),
@@ -1104,7 +1125,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'panneau', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
