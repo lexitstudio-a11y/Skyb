@@ -356,6 +356,15 @@ function editTitleAndDescription(target) {
     },
   });
 }
+// État du compte (sauvegarde en ligne, voir plus bas) : déclaré ici car les enregistrements faits pendant le
+// chargement (ex. suppression des actions terminées depuis 30 jours) passent déjà par cloudChanged().
+const SESSION_KEY = 'compte-session', SYNC_STATE_KEY = 'compte-sync';   // pas synchronisées elles-mêmes
+let session = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } })();
+// sync.at : version (updated_at) du compte déjà présente ici ; sync.dirty : modifications locales pas encore envoyées
+const sync = (() => { try { return JSON.parse(localStorage.getItem(SYNC_STATE_KEY)) || {}; } catch { return {}; } })();
+let pushTimer = null, pushing = null;
+const saveSession = () => { try { session ? localStorage.setItem(SESSION_KEY, JSON.stringify(session)) : localStorage.removeItem(SESSION_KEY); } catch {} };
+const saveSyncState = () => { try { localStorage.setItem(SYNC_STATE_KEY, JSON.stringify(sync)); } catch {} };
 function loadJSON(key) {
   try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; }
 }
@@ -541,7 +550,15 @@ function askTodoDelete(todo) {
     question: 'Supprimer cette action ?',
     detail: [todo.titre, '', `Elle sera supprimée automatiquement dans ${days} jour${days > 1 ? 's' : ''}.`],
     noLabel: 'Retour', yesLabel: '§cSupprimer',
-    onYes: () => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); saveTodos(); refreshTodo(); },
+    onYes: () => {
+      const i = todos.indexOf(todo);
+      if (i >= 0) todos.splice(i, 1);
+      // supprimée à la main : ne compte plus dans le total (la suppression automatique après 30 jours, elle, le garde)
+      todoStats.finies = Math.max(0, todoStats.finies - 1);
+      saveJSON(TODO_STATS_KEY, todoStats);
+      saveTodos();
+      refreshTodo();
+    },
   });
 }
 function askTodoDone(todo) {
@@ -2904,16 +2921,9 @@ addEventListener('keydown', ev => {
 // sa version et on recharge la page. Seule la clé publiable est ici : chaque compte ne voit que sa ligne (RLS).
 const SUPABASE_URL = 'https://hzgtnstmmbmmubvzxhas.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_HhqBiNcmR0j0doZ_esJrbA_znOLL7Nw';
-const SESSION_KEY = 'compte-session', SYNC_STATE_KEY = 'compte-sync';   // pas synchronisées elles-mêmes
 const SYNC_KEYS = [DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
-let session = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } })();
-// sync.at : version (updated_at) du compte déjà présente ici ; sync.dirty : modifications locales pas encore envoyées
-const sync = (() => { try { return JSON.parse(localStorage.getItem(SYNC_STATE_KEY)) || {}; } catch { return {}; } })();
-let pushTimer = null, pushing = null;
 let markAppReady;
 const appReady = new Promise(res => { markAppReady = res; });   // textures et police chargées
-const saveSession = () => { try { session ? localStorage.setItem(SESSION_KEY, JSON.stringify(session)) : localStorage.removeItem(SESSION_KEY); } catch {} };
-const saveSyncState = () => { try { localStorage.setItem(SYNC_STATE_KEY, JSON.stringify(sync)); } catch {} };
 
 class CloudError extends Error {}
 async function supa(path, { method = 'GET', body, auth = true, headers = {} } = {}) {
