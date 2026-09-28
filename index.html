@@ -94,11 +94,12 @@
     opacity: 0;
     pointer-events: none;
   }
-  /* Notifications façon « succès » Minecraft, empilées en haut à gauche. */
+  /* Notifications façon « succès » Minecraft, empilées en haut à droite ; elles descendent depuis le haut. */
   #toasts {
     position: fixed;
     top: 8px;
-    left: 8px;
+    right: 8px;
+    align-items: flex-end;
     z-index: 45;
     display: flex;
     flex-direction: column;
@@ -106,7 +107,7 @@
     pointer-events: none;
   }
   #toasts canvas {
-    transform: translateX(calc(-100% - 16px));
+    transform: translateY(calc(-100% - 16px));
     transition: transform 0.35s ease-out;
   }
   #toasts canvas.shown {
@@ -2805,7 +2806,7 @@ function drawTimer() {
 }
 
 // --- Notifications (style « succès » Minecraft) : icône, titre en couleur, description en blanc ---
-// Elles glissent depuis la gauche, restent quelques secondes puis repartent ; un son au hasard parmi 4 (volume réduit).
+// Elles descendent depuis le haut (en haut à droite), restent quelques secondes puis remontent ; un son au hasard parmi 4 (volume réduit).
 const NOTIF_SOUNDS = [1, 2, 3, 4].map(i => { const a = new Audio(`assets/sounds/notif${i}.mp3`); a.preload = 'auto'; a.volume = 0.25; return a; });
 const toastBox = document.getElementById('toasts');
 function showToast({ icon = 'clock_00', title, text, color = '#FFFF55', duration = 6000 }) {
