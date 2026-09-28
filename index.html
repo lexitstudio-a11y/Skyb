@@ -665,13 +665,18 @@ function agendaGrid(list, slots, numbered) {
 function agendaSlots() {
   return agendaGrid(splitAgendas().recent, {
     '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', '§7Les agendas de plus de 7 jours.', '', '§eClique pour voir !'], open: 'agenda-autres' },
+    // Tant que l'agenda d'aujourd'hui n'est pas écrit, la tête propose celui d'aujourd'hui (puis celui de demain).
     '5,8': {
-      image: 'tete_plus_bleue', action: () => editAgenda(tomorrow()),
-      tooltip: () => ['§aAgenda ' + tomorrow(), '§7Écris les objectifs de demain.', '', '§eClique pour écrire !'],
+      image: 'tete_plus_bleue', action: () => editAgenda(agendaToWrite()),
+      tooltip: () => {
+        const today = agendaToWrite() !== tomorrow();
+        return ['§aAgenda ' + agendaToWrite(), `§7Écris les objectifs ${today ? "d'aujourd'hui" : 'de demain'}.`, '', '§eClique pour écrire !'];
+      },
     },
     ...navSlots('main'),
   }, true);
 }
+const agendaToWrite = () => { const today = formatDate(new Date()); return agendas.some(a => a.date === today) ? tomorrow() : today; };
 function olderAgendaSlots() {
   return agendaGrid(splitAgendas().older, { ...navSlots('agenda') }, false);
 }
