@@ -1084,14 +1084,14 @@ function editArbreValue(a, field, label) {
     },
   });
 }
-// Montre « Avancement des arbres » (liste principale) : une ligne par arbre, titre - barre de 20 traits - %.
+// Montre « Avancement des arbres » (en haut de chaque liste, pour ses arbres) : une ligne par arbre, titre - barre de 20 traits - %.
 // Couleur de la barre selon la progression, comme la ligne « Progression » des bulles.
-function arbresOverview() {
+function arbresOverview(list = arbres) {
   const color = pct => pct >= 100 ? '§2' : pct >= 50 ? '§e' : pct >= 10 ? '§6' : '§c';
   // titres complétés par des espaces pour que les barres commencent au même endroit
-  const titles = arbres.map(a => fitText(a.titre, 130));
+  const titles = list.map(a => fitText(a.titre, 130));
   const widest = Math.max(0, ...titles.map(t => textWidth(font, t))), space = textWidth(font, ' ');
-  const rows = arbres.map((a, i) => {
+  const rows = list.map((a, i) => {
     const pct = arbreProgress(a), filled = Math.round(pct / 5);
     const bar = color(pct) + '|'.repeat(filled) + '§8' + '|'.repeat(20 - filled);
     const pad = ' '.repeat(Math.round((widest - textWidth(font, titles[i])) / space));
@@ -1263,7 +1263,7 @@ function refreshArbres() {
     const pages = Math.max(1, Math.ceil(list.trees.length / ARBRES_PER_PAGE));
     for (let k = 1; k <= pages; k++) {
       const slots = { ...navSlots(list.back), ...prevPageSlot(k, list.pageId) };
-      if (list.add) slots['0,4'] = { item: 'clock_00', tooltip: arbresOverview };
+      slots['0,4'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };   // sur toutes les listes d'arbres
       if (list.add) slots['0,8'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
       if (k < pages) slots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: list.pageId(k + 1) };
       list.trees.slice((k - 1) * ARBRES_PER_PAGE, k * ARBRES_PER_PAGE).forEach((a, i) => {
