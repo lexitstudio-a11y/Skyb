@@ -1015,8 +1015,11 @@ function randomArbreIcon() {
 }
 // « Progression : 40% - 12/30J » : valeur actuelle (ou de départ) / valeur ciblée, colorée selon la progression
 // (0-9 % rouge, 10-49 % orange, 50-99 % jaune, 100 % vert + « Complété »).
+// Arbre configuré = toutes ses infos remplies (type, unité, départ, cible) ; sinon « N/A » en rouge au lieu du %.
+const arbreConfigured = a => !!a.sens && !!a.unite && a.depart != null && a.cible != null;
+const pctText = (a, pct) => arbreConfigured(a) ? `§e${pct}%` : '§cN/A';
 function progressLine(a, pct, valeur = a.valeur ?? a.depart) {
-  let line = `§7Progression : §e${pct}%`;
+  let line = `§7Progression : ${pctText(a, pct)}`;
   if (valeur != null && a.cible != null) {
     const color = pct >= 100 ? '§2' : pct >= 50 ? '§e' : pct >= 10 ? '§6' : '§c';
     const num = v => String(v).replace('.', ',');
@@ -1092,10 +1095,10 @@ function arbresOverview(list = arbres) {
   const titles = list.map(a => fitText(a.titre, 130));
   const widest = Math.max(0, ...titles.map(t => textWidth(font, t))), space = textWidth(font, ' ');
   const rows = list.map((a, i) => {
-    const pct = arbreProgress(a), filled = Math.round(pct / 5);
+    const pct = arbreProgress(a), filled = arbreConfigured(a) ? Math.round(pct / 5) : 0;   // pas configuré : barre vide
     const bar = color(pct) + '|'.repeat(filled) + '§8' + '|'.repeat(20 - filled);
     const pad = ' '.repeat(Math.round((widest - textWidth(font, titles[i])) / space));
-    return `§f${titles[i]}${pad} ${bar} §e${pct}%`;
+    return `§f${titles[i]}${pad} ${bar} ${pctText(a, pct)}`;
   });
   return ['§aAvancement des arbres', ...(rows.length ? rows : ['§8Aucun arbre pour l\'instant.'])];
 }
@@ -1205,14 +1208,14 @@ function buildArbrePages(a, n) {
   };
   const arbreSlots = {
     '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
-    '1,5': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§8aucune'}`, '§7Affichée après les nombres (ex. 20J).', '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
+    '1,5': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§cnon définie'}`, '§7Affichée après les nombres (ex. 20J).', '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
     '0,4': { item: 'name_tag', tooltip: ['§aRenommer', "§7Modifie le titre et la description", "§7de l'arbre.", '', '§eClique pour modifier !'], action: () => renameArbre(a) },
     '1,4': {
       item: 'writable_book', action: () => addArbreValue(a, n),
       tooltip: () => ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
-        `§7Unité de mesure : ${a.unite ? '§e' + a.unite : '§8aucune'}`,
+        `§7Unité de mesure : ${a.unite ? '§e' + a.unite : '§cnon définie'}`,
         `§7Départ : ${fmtNumber(a.depart, a.unite)}`, `§7Cible : ${fmtNumber(a.cible, a.unite)}`,
-        `§7Valeur actuelle : ${fmtNumber(a.valeur, a.unite)}`, `§7Progression : §e${arbreProgress(a)}%`, '',
+        `§7Valeur actuelle : ${fmtNumber(a.valeur, a.unite)}`, `§7Progression : ${pctText(a, arbreProgress(a))}`, '',
         a.depart != null && a.cible != null ? '§eClique pour ajouter une valeur !' : '§eClique pour configurer !'],
     },
     '5,8': {
