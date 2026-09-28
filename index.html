@@ -94,6 +94,24 @@
     opacity: 0;
     pointer-events: none;
   }
+  /* Notifications façon « succès » Minecraft, empilées en haut à gauche. */
+  #toasts {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 45;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+  }
+  #toasts canvas {
+    transform: translateX(calc(-100% - 16px));
+    transition: transform 0.35s ease-out;
+  }
+  #toasts canvas.shown {
+    transform: none;
+  }
   #timerCanvas {
     position: fixed;
     top: 8px;
@@ -130,6 +148,7 @@
   <canvas id="headCanvas"></canvas>
   <input id="headInput" class="loginInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Commande de la tête">
 </div>
+<div id="toasts"></div>
 <div id="dialogScreen" class="screen" hidden>
   <canvas id="dialogCanvas"></canvas>
 </div>
@@ -2768,6 +2787,50 @@ function drawTimer() {
   }
 }
 
+// --- Notifications (style « succès » Minecraft) : icône, titre en couleur, description en blanc ---
+// Elles glissent depuis la gauche, restent quelques secondes puis repartent ; un son au hasard parmi 4 (volume réduit).
+const NOTIF_SOUNDS = [1, 2, 3, 4].map(i => { const a = new Audio(`assets/sounds/notif${i}.mp3`); a.preload = 'auto'; a.volume = 0.25; return a; });
+const toastBox = document.getElementById('toasts');
+function showToast({ icon = 'clock_00', title, text, color = '#FFFF55', duration = 6000 }) {
+  if (!font) return;
+  const S = Math.max(2, Math.min(3, state.S)), H = 32;
+  const W = Math.max(160, 34 + Math.max(textWidth(font, title), textWidth(font, text)) + 8);
+  const cv = document.createElement('canvas');
+  cv.width = W * S;
+  cv.height = H * S;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
+  fr(1, 0, W - 2, H, '#101010');          // contour sombre, coins coupés
+  fr(0, 1, W, H - 2, '#101010');
+  fr(1, 1, W - 2, H - 2, '#5A5A5A');      // bordure claire
+  fr(2, 2, W - 4, H - 4, '#212121');      // fond
+  const size = 16 * S;
+  ctx.drawImage(T[icon], 8 * S, 8 * S, size, size);
+  drawText(ctx, font, title, 32, 7, color, S, true);
+  drawText(ctx, font, text, 32, 18, '#FFFFFF', S, true);
+  toastBox.append(cv);
+  requestAnimationFrame(() => requestAnimationFrame(() => cv.classList.add('shown')));
+  playSound(NOTIF_SOUNDS[Math.floor(Math.random() * NOTIF_SOUNDS.length)]);
+  setTimeout(() => { cv.classList.remove('shown'); setTimeout(() => cv.remove(), 400); }, duration);
+}
+// Rappel 5 minutes avant chaque bloc du Timeblock du jour (une seule fois par bloc, même après rechargement).
+const NOTIFIED_KEY = 'notifs-blocs';
+const notified = (() => { try { return JSON.parse(localStorage.getItem(NOTIFIED_KEY)) || {}; } catch { return {}; } })();
+function checkBlockReminders() {
+  const now = new Date(), today = formatDate(now), minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+  for (const d of Object.keys(notified)) if (d !== today) delete notified[d];   // on ne garde que le jour en cours
+  for (const b of timeblocks[today] || []) {
+    const left = b.debut - minutes, key = `${b.debut}-${b.titre}`;
+    if (left > 0 && left <= 5 && !(notified[today] || []).includes(key)) {
+      (notified[today] ||= []).push(key);
+      const m = Math.ceil(left);
+      showToast({ title: `Bientôt : ${fitText(b.titre, 150)}`, text: `Commence à ${fmtMin(b.debut)} (dans ${m} min)` });
+    }
+  }
+  try { localStorage.setItem(NOTIFIED_KEY, JSON.stringify(notified)); } catch {}
+}
+
 timeblockCanvas.addEventListener('pointerdown', ev => {
   if (!tb.layout) return;
   const p = tbPoint(ev);
@@ -3341,6 +3404,8 @@ async function main() {
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseleave', onLeave);
   markAppReady();
+  checkBlockReminders();
+  setInterval(checkBlockReminders, 15000);
   cloudCheck();
 }
 
