@@ -677,13 +677,26 @@ function agendaSlots() {
   }, true);
 }
 const agendaToWrite = () => { const today = formatDate(new Date()); return agendas.some(a => a.date === today) ? tomorrow() : today; };
-function olderAgendaSlots() {
-  return agendaGrid(splitAgendas().older, { ...navSlots('agenda') }, false);
+// « Autres Journées » : tous les anciens agendas (aucun n'est supprimé), 14 par page ; flèche en bas à droite
+// vers la page suivante, en bas à gauche vers la précédente, et près de la barrière pour revenir à l'agenda.
+const AGENDAS_PER_PAGE = 2 * TODO_COLS;
+const olderAgendaPageId = k => k === 1 ? 'agenda-autres' : `agenda-autres-${k}`;
+function olderAgendaSlots(k = 1) {
+  const older = splitAgendas().older, pages = Math.max(1, Math.ceil(older.length / AGENDAS_PER_PAGE));
+  const slots = { ...navSlots('agenda') };
+  if (k > 1) slots['5,0'] = { item: 'arrow', tooltip: ['§aPage précédente', `§7Page ${k - 1}`], open: olderAgendaPageId(k - 1) };
+  if (k < pages) slots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: olderAgendaPageId(k + 1) };
+  return agendaGrid(older.slice((k - 1) * AGENDAS_PER_PAGE, k * AGENDAS_PER_PAGE), slots, false);
 }
 function refreshAgenda() {
   PAGES.agenda.slots = agendaSlots();
-  PAGES['agenda-autres'].slots = olderAgendaSlots();
-  if (state.page.startsWith('agenda')) renderGui();
+  for (const id of Object.keys(PAGES)) if (/^agenda-autres-\d+$/.test(id)) delete PAGES[id];
+  const pages = Math.max(1, Math.ceil(splitAgendas().older.length / AGENDAS_PER_PAGE));
+  for (let k = 1; k <= pages; k++) {
+    if (k === 1) PAGES['agenda-autres'].slots = olderAgendaSlots(1);
+    else PAGES[olderAgendaPageId(k)] = { title: PAGE_TITLES['agenda-autres'], slots: olderAgendaSlots(k) };
+  }
+  if (state.page.startsWith('agenda') && PAGES[state.page]) renderGui();
 }
 // Ouvre le livre de l'agenda de cette date (le crée s'il n'existe pas encore).
 // text : texte déjà tapé mais pas encore enregistré (retour depuis le Timeblock).
@@ -3409,6 +3422,7 @@ async function main() {
     tnt: { top: T.tnt_top, front: T.tnt_side, side: T.tnt_side },
   };
   refreshArbres();
+  refreshAgenda();   // pages « Autres Journées » 2, 3… (créées selon le nombre d'anciens agendas)
   HEADS.profile = headFaces(T.steve);
   if (profile.skin) loadSkin(profile.skin).then(img => { HEADS.profile = headFaces(img); renderGui(); }, () => {});
   const page = location.hash.slice(1);
