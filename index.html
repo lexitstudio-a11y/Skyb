@@ -473,9 +473,9 @@ const todoImage = n => `actions/${(n - 1) % TODO_IMAGES + 1}`;
 // Place une liste d'actions (la première en haut à gauche) dans la zone 4x7.
 // numbers : numéro affiché de chaque action (actions en cours) ; sinon pas de numéro.
 function todoGrid(list, slots, numbers) {
-  if (daRows()) {   // une action par ligne : image à gauche, titre et description à droite (3 rangées par action)
+  if (daRows()) {   // une action par ligne : image à gauche, titre et description à droite (2 rangées par action)
     list.forEach((todo, i) => {
-      const n = numbers ? numbers[i] : null, r = 1 + 3 * i, cell = todoCell(todo, n);
+      const n = numbers ? numbers[i] : null, r = 1 + 2 * i, cell = todoCell(todo, n);
       const firstLine = (todo.description || '').split('\n')[0].trim();
       slots[`v${r},0`] = cell;
       slots[`v${r},2`] = {
@@ -484,7 +484,7 @@ function todoGrid(list, slots, numbers) {
         tooltip: cell.tooltip, action: cell.action,
       };
     });
-    return setRows(slots, 1 + 3 * list.length);
+    return setRows(slots, 1 + 2 * list.length);
   }
   const mobile = isMobileLayout();
   list.slice(0, mobile ? (MOBILE_NAV - 1) * 3 : TODO_ROWS * TODO_COLS).forEach((todo, i) => {
@@ -678,7 +678,7 @@ function agendaGrid(list, slots, numbered) {
   if (daRows()) {   // une journée par ligne : agenda et bilan à gauche, date et 1er objectif à droite
     const start = numbered ? 2 : 1;   // page principale : la balise est sur la rangée 0
     list.slice(0, agendasPerPage()).forEach((a, i) => {
-      const r = start + 3 * i, n = numbered ? i + 1 : null, cell = agendaSlot(a, n, numbered ? 'papier_agenda' : 'carte_vide');
+      const r = start + 2 * i, n = numbered ? i + 1 : null, cell = agendaSlot(a, n, numbered ? 'papier_agenda' : 'carte_vide');
       const first = a.texte.split('\n').map(l => l.trim()).find(Boolean);
       slots[`v${r},0`] = cell;
       slots[`v${r},1`] = bilanSlot(a, n);
@@ -687,7 +687,7 @@ function agendaGrid(list, slots, numbered) {
         desc: first || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
       };
     });
-    return setRows(slots, start + 3 * Math.min(list.length, agendasPerPage()));
+    return setRows(slots, start + 2 * Math.min(list.length, agendasPerPage()));
   }
   list.slice(0, agendasPerPage()).forEach((a, i) => {
     // téléphone : 5 journées par paire de rangées, une rangée vide entre deux paires (rangées 1-2, 4-5 et 7-8),
@@ -1404,11 +1404,12 @@ function setRows(slots, rows) { return Object.defineProperty(slots, 'rows', { va
 // de droite (bloc de couleur façon Timeblock), sa barre de progression (5 vitres = 5 niveaux), une rangée vide.
 const arbreColor = n => TB_COLORS[(n * 7) % TB_COLORS.length];
 function arbresScrollPage(list) {
+  const pitch = da === 'test' ? 2 : 3;   // D.A test : blocs « succès » plus rapprochés (2 rangées par arbre)
   const slots = { ...navSlots(list.back) };
   slots['v0,2'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };
   if (list.add) slots['v0,4'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
   list.trees.forEach((a, i) => {
-    const n = arbres.indexOf(a) + 1, pct = arbreProgress(a), r = 2 + 3 * i;
+    const n = arbres.indexOf(a) + 1, pct = arbreProgress(a), r = 2 + pitch * i;
     const open = () => { arbreFrom[n] = list.pageId(1); location.hash = `arbre-${n}`; };
     const tooltip = () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? [...wrapText(a.description, 180).map(l => '§7' + l), ''] : []), progressLine(a, pct), '', '§eClique pour voir !'];
     slots[`v${r},0`] = { ...arbreIcon(a), count: Math.floor(pct / 10) || null, tooltip, action: open };
@@ -1419,7 +1420,7 @@ function arbresScrollPage(list) {
       slots[`v${r + 1},${level - 1}`] = { pane: LEVEL_PANES[st], tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
     }
   });
-  return { title: list.title, slots, scrollRows: 2 + 3 * list.trees.length };
+  return { title: list.title, slots, scrollRows: 2 + pitch * list.trees.length };
 }
 function refreshArbres() {
   // les numéros changent après une suppression : on reconstruit toutes les pages des arbres
