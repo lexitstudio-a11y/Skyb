@@ -1452,6 +1452,7 @@ function arbresScrollPage(list) {
     const icon = { ...arbreIcon(a), count: Math.floor(pct / 10) || null, tooltip, action: open };
     const span = {
       span: 3, label: a.titre, color: arbreColor(n), desc: () => progressLine(a, pct).replace(/^§7Progression : /, '§a'), progress: () => pct, tooltip, action: open,
+      compact: da === 'test',   // D.A test : titre + barre de progression seulement (le détail reste dans l'overlay)
       descFull: () => [progressLine(a, pct).replace(/^§7Progression : /, '§a'), ...(a.description ? a.description.split('\n') : [])],
     };
     if (da === 'test') { lines.push({ icons: [[0, icon]], span, data: a, refresh: refreshArbres }); return; }   // la description remplace les vitres
@@ -2224,6 +2225,7 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
   const ix = x - 18 * (1 + (slot.gap ?? 1)), left = ix + 9, right = x + slot.span * 18 - 2, w = right - left;
   const ts = Math.max(1, Math.round(S * (slot.narrow ? 0.5 : 0.6))), k = S / ts;
   const text = (t, tx, ty, color) => drawText(ctx, font, t, tx * k + 1, Math.round(ty * k), color, ts, true);
+  if (slot.compact) { drawCompactAdvancement(ctx, slot, ix, left, right, y, S, k, text, hovered); return; }
   // description (sous la barre du titre)
   const desc = typeof slot.desc === 'function' ? slot.desc() : slot.desc;
   const open = slot.expanded && advDesc(slot, S);   // description dépliée : tout le texte, sur plusieurs lignes
@@ -2264,6 +2266,34 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
     if (desc || open) fr(ix, y + 14, right - ix, dh, 'rgba(0, 0, 0, 0.5)');
   }
   if (hovered) fr(left, y + 1, w, 14, 'rgba(255, 255, 255, 0.25)');
+}
+// Bloc « succès » compact (liste des arbres) : barre de titre de la hauteur de la case de l'item, et juste en
+// dessous, collée, la fine barre de progression qui termine le bloc. Description dépliée (toucher) sous la barre.
+function drawCompactAdvancement(ctx, slot, ix, left, right, y, S, k, text, hovered) {
+  const fr = (rx, ry, rw, rh, c) => { ctx.fillStyle = c; ctx.fillRect(rx * S, ry * S, rw * S, rh * S); };
+  const w = right - left, color = (typeof slot.color === 'function' ? slot.color() : slot.color) || '#3D79A8';
+  const open = slot.expanded && advDesc(slot, S);
+  if (open) {   // description dépliée : sous la barre de progression
+    fr(ix, y + 20, right - ix, open.h - 4, '#000000');
+    fr(ix + 1, y + 20, right - ix - 2, open.h - 5, '#212121');
+    open.lines.forEach((l, i) => text(l, ix + 2, y + 23 + i * 9 / k, '#55FF55'));
+  }
+  // barre de progression (verte, comme le chargement du monde) avec son contour noir
+  const pct = slot.progress ? Math.max(0, Math.min(100, slot.progress())) : 0, bw = right - ix - 2;
+  fr(ix, y + 17, right - ix, 4, '#000000');
+  fr(ix + 1, y + 17, bw, 3, '#3C3C3C');
+  if (pct > 0) fr(ix + 1, y + 17, Math.max(1, Math.round(bw * pct / 100)), 3, '#00FF00');
+  // barre de titre : même hauteur que la case de l'item
+  fr(left, y - 1, w, 18, shade(color, 0.25));
+  fr(left + 1, y, w - 2, 16, color);
+  fr(left + 1, y, w - 2, 1, shade(color, 1.4));
+  fr(left + 1, y + 15, w - 2, 1, shade(color, 0.7));
+  const tx = ix + 18 * (slot.inset || 1) + 2, room = (right - tx - 2) * k, label = typeof slot.label === 'function' ? slot.label() : slot.label;
+  let lines = wrapText(label, room);
+  if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
+  const top = y + 8 - lines.length * 4.5 / k + 0.5 / k;
+  lines.forEach((l, i) => text(l, tx, top + i * 9 / k, slot.text || '#FFFFFF'));
+  if (hovered) fr(left, y - 1, w, 18, 'rgba(255, 255, 255, 0.25)');
 }
 // Description dépliée d'un bloc « succès » (span 3 en colonne 2) : lignes coupées à la largeur, hauteur du cadre.
 function advDesc(slot, S = state.S * guiRatio()) {
