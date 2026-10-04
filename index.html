@@ -1751,9 +1751,9 @@ const MOBILE_NAV_COLS = [0, 0, 1, 1, 2, 3, 3, 4, 4];
 const MOBILE_PAGE_COLS = id => /^serment\d+$/.test(id) ? { 1: 0, 2: 1, 6: 3, 7: 4 } : null;
 // Places choisies à la main sur téléphone (clé ordinateur -> clé mobile), avant le placement automatique.
 const MOBILE_PLACES = {
-  // Profil Joueur (comme la liste des arbres) : tête au centre en rangée 1, puis une ligne sur deux :
+  // Profil Joueur (comme la liste des arbres) : tête en haut à droite, puis une ligne sur deux :
   // livre (serments), bûche (arbres), papier (liste de choses à faire), montre (agenda), chacun avec son titre
-  main: { '1,4': '1,2', '2,4': '3,0', '2,1': '5,0', '2,5': '7,0', '2,6': '9,0' },
+  main: { '1,4': '0,4', '2,4': '3,0', '2,1': '5,0', '2,5': '7,0', '2,6': '9,0' },
 };
 // Téléphone : titre dans un bloc de couleur (façon Timeblock) sur les 3 cases de droite, à côté de l'item
 // placé en colonne 0 (clé ordinateur -> couleur, ou { color, gradient: [haut, bas], text }) ; même overlay
