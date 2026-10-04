@@ -150,7 +150,7 @@
   <canvas id="dialogCanvas"></canvas>
 </div>
 <script>
-// Téléphone tenu en portrait : disposition mobile (coffre de 5 colonnes sur 9 rangées, voir mobileSlots).
+// Téléphone tenu en portrait : disposition mobile (coffre de 5 colonnes sur 11 rangées, voir mobileSlots).
 // Ordinateur et téléphone en paysage : coffre de 9 x 6 habituel.
 const touchScreen = matchMedia('(pointer: coarse)');
 const isMobileLayout = () => touchScreen.matches && window.innerHeight > window.innerWidth;
@@ -163,13 +163,13 @@ const evY = ev => ev.clientY;
 const TEX = 'assets/textures/';
 const GUI_W = 176;
 const GUI_H = 132;          // 125 lignes du haut de generic_54 + 7 lignes de bordure basse
-// Disposition du coffre : 9 x 6 (ordinateur) ou 5 x 9 (téléphone en portrait, titre sur 2 lignes au besoin).
-const MOBILE_W = 14 + 5 * 18, MOBILE_TITLE_LINES = 2;
+// Disposition du coffre : 9 x 6 (ordinateur) ou 5 x 11 (téléphone en portrait, titre sur 2 lignes au besoin).
+const MOBILE_W = 14 + 5 * 18, MOBILE_ROWS = 11, MOBILE_NAV = MOBILE_ROWS - 1, MOBILE_TITLE_LINES = 2;
 function guiLayout() {
   if (!isMobileLayout()) return { mobile: false, cols: 9, rows: 6, w: GUI_W, h: GUI_H, top: 18, title: [pageTitle(state.page)] };
   const title = font ? wrapText(pageTitle(state.page), MOBILE_W - 16).slice(0, MOBILE_TITLE_LINES) : [''];
   const top = 18 + (title.length - 1) * 9;
-  return { mobile: true, cols: 5, rows: 9, w: MOBILE_W, h: top - 1 + 9 * 18 + 7, top, title };
+  return { mobile: true, cols: 5, rows: MOBILE_ROWS, w: MOBILE_W, h: top - 1 + MOBILE_ROWS * 18 + 7, top, title };
 }
 const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la case
 
@@ -471,9 +471,9 @@ const todoImage = n => `actions/${(n - 1) % TODO_IMAGES + 1}`;
 // numbers : numéro affiché de chaque action (actions en cours) ; sinon pas de numéro.
 function todoGrid(list, slots, numbers) {
   const mobile = isMobileLayout();
-  list.slice(0, mobile ? 7 * 3 : TODO_ROWS * TODO_COLS).forEach((todo, i) => {
+  list.slice(0, mobile ? (MOBILE_NAV - 1) * 3 : TODO_ROWS * TODO_COLS).forEach((todo, i) => {
     const n = numbers ? numbers[i] : null;
-    // téléphone : 3 par rangée (colonnes 1 à 3, rien sur les bords ; rangées 1 à 7), clé mobile « m… » ;
+    // téléphone : 3 par rangée (colonnes 1 à 3, rien sur les bords ; rangées 1 à 9), clé mobile « m… » ;
     // ordinateur : 7 par rangée (rangées 1 à 4)
     const key = mobile ? `m${1 + Math.floor(i / 3)},${1 + i % 3}` : `${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`;
     slots[key] = {
@@ -655,7 +655,7 @@ function reviewDay(agenda) {
 // agendas sur les rangées 1 et 3, bilans sur les rangées 2 et 4 (7 journées par paire de rangées).
 function agendaGrid(list, slots, numbered) {
   list.slice(0, agendasPerPage()).forEach((a, i) => {
-    // téléphone : 5 journées par paire de rangées, une rangée vide entre deux paires (rangées 1-2 et 4-5),
+    // téléphone : 5 journées par paire de rangées, une rangée vide entre deux paires (rangées 1-2, 4-5 et 7-8),
     // clés mobiles « m… »
     const mobile = isMobileLayout(), per = mobile ? 5 : TODO_COLS, m = mobile ? 'm' : '';
     const row = 1 + (mobile ? 3 : 2) * Math.floor(i / per), col = (mobile ? 0 : 1) + i % per, n = numbered ? i + 1 : null;
@@ -690,9 +690,9 @@ function bilanStats() {
   return ['§bBilan des journées', ...rows, '', `§7${notes.length} journée${notes.length > 1 ? 's' : ''} notée${notes.length > 1 ? 's' : ''}`];
 }
 const agendaToWrite = () => { const today = formatDate(new Date()); return agendas.some(a => a.date === today) ? tomorrow() : today; };
-// « Autres Journées » : tous les anciens agendas (aucun n'est supprimé), 14 par page (10 sur téléphone) ; flèche en bas à droite
+// « Autres Journées » : tous les anciens agendas (aucun n'est supprimé), 14 par page (15 sur téléphone) ; flèche en bas à droite
 // vers la page suivante, en bas à gauche vers la précédente, et près de la barrière pour revenir à l'agenda.
-const agendasPerPage = () => isMobileLayout() ? 10 : 2 * TODO_COLS;   // téléphone : 10 (2 paires de rangées)
+const agendasPerPage = () => isMobileLayout() ? 15 : 2 * TODO_COLS;   // téléphone : 15 (3 paires de rangées)
 const olderAgendaPageId = k => k === 1 ? 'agenda-autres' : `agenda-autres-${k}`;
 function olderAgendaSlots(k = 1) {
   const older = splitAgendas().older, pages = Math.max(1, Math.ceil(older.length / agendasPerPage()));
@@ -1719,9 +1719,9 @@ function currentSlots() {
   if (!Object.values(slots).some(s => s.when)) return slots;
   return Object.fromEntries(Object.entries(slots).filter(([, s]) => !s.when || s.when()));
 }
-// --- Disposition téléphone : les pages sont décrites en 9 x 6 (rangée 5 = barre du bas) et replacées en 5 x 9 ---
+// --- Disposition téléphone : les pages sont décrites en 9 x 6 (rangée 5 = barre du bas) et replacées en 5 x 11 ---
 // Colonnes : 0-2 -> 0, 3 -> 1, 4 -> 2, 5 -> 3, 6-8 -> 4 (le centre reste au centre, les bords vont aux bords).
-// Barre du bas (rangée 5) -> rangée 8 : 0 -> 0 (bouton à gauche), 3 -> 1 (retour), 4 -> 2 (barrière), 5 -> 3, 8 -> 4.
+// Barre du bas (rangée 5) -> rangée 10 : 0 -> 0 (bouton à gauche), 3 -> 1 (retour), 4 -> 2 (barrière), 5 -> 3, 8 -> 4.
 // Deux cases qui tombent au même endroit : la seconde prend la place libre la plus proche de la rangée.
 // Les pages en grille (actions, agendas) donnent directement leurs cases mobiles avec des clés « m<rangée>,<col> ».
 const MOBILE_COLS = [0, 0, 0, 1, 2, 3, 4, 4, 4];
@@ -1732,7 +1732,7 @@ const MOBILE_PAGE_COLS = id => /^serment\d+$/.test(id) ? { 1: 0, 2: 1, 6: 3, 7: 
 const MOBILE_PLACES = {
   // Profil Joueur : livre des serments sous la tête ; papier (liste de choses à faire) au centre du coffre,
   // arbres (bûche) tout à gauche et montre (agenda) tout à droite, une case vide de chaque côté du papier
-  main: { '2,4': '2,2', '2,5': '4,2', '2,1': '4,0', '2,6': '4,4' },
+  main: { '1,4': '2,2', '2,4': '3,2', '2,5': '5,2', '2,1': '5,0', '2,6': '5,4' },
 };
 const mobileCache = new WeakMap();
 function mobileSlots(id, slots) {
@@ -1741,7 +1741,7 @@ function mobileSlots(id, slots) {
   const place = (r, c, slot) => {
     for (let d = 0; d < 5; d++)   // place libre la plus proche dans la rangée, puis rangées suivantes
       for (const cc of [c - d, c + d]) if (cc >= 0 && cc < 5 && !out[`${r},${cc}`]) { out[`${r},${cc}`] = slot; return; }
-    if (r < 7) place(r + 1, c, slot);
+    if (r < MOBILE_NAV - 1) place(r + 1, c, slot);
   };
   const entries = Object.entries(slots).sort(([a], [b]) => {
     const [ra, ca] = a.replace('m', '').split(',').map(Number), [rb, cb] = b.replace('m', '').split(',').map(Number);
@@ -1754,7 +1754,7 @@ function mobileSlots(id, slots) {
   for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && k[0] !== 'v' && !fixed[k])) {
     const [r, c] = key.split(',').map(Number);
     if (special && special[c] != null) place(r, special[c], slot);
-    else if (r === 5) place(8, MOBILE_NAV_COLS[c], slot);
+    else if (r === 5) place(MOBILE_NAV, MOBILE_NAV_COLS[c], slot);
     else place(r, MOBILE_COLS[c], slot);
   }
   mobileCache.set(slots, out);
@@ -1825,7 +1825,7 @@ function drawCell(ctx, slots, key, x, y, S) {
     const w = slot.span * 18 - 2;
     drawColorBlock(ctx, x, y, w, 16, slot.color, S);
     // texte un peu plus petit que le reste du coffre (2 lignes au plus) pour que le titre tienne dans le bloc
-    const ts = Math.max(1, Math.round(S * 0.55)), k = S / ts, room = (w - 6) * k;
+    const ts = Math.max(1, Math.round(S * 0.6)), k = S / ts, room = (w - 6) * k;
     let lines = wrapText(slot.label, room);
     if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
     const top = (y + 8) * k - lines.length * 4.5 + 0.5;
@@ -1871,8 +1871,8 @@ function coveredBy(slots, key) {
   }
   return null;
 }
-// Liste qui défile : rangées visibles 0 à 7 (la rangée 8, barre du bas, reste fixe). Défilement par page.
-const SCROLL_VIEW = 8;
+// Liste qui défile : rangées visibles 0 à 9 (la rangée 10, barre du bas, reste fixe). Défilement par page.
+const SCROLL_VIEW = MOBILE_NAV;
 const scrolls = {};
 function scrollInfo(L = guiLayout()) {
   const page = PAGES[state.page];
@@ -1882,8 +1882,8 @@ function scrollInfo(L = guiLayout()) {
   return { rows, max, offset: scrolls[state.page] };
 }
 
-// Coffre de 5 x 9 assemblé à partir des morceaux de generic_54 : coins et bords, bande du titre (plus haute
-// si le titre tient sur 2 lignes), 9 rangées de 5 cases, bordure du bas.
+// Coffre de 5 x 11 assemblé à partir des morceaux de generic_54 : coins et bords, bande du titre (plus haute
+// si le titre tient sur 2 lignes), 11 rangées de 5 cases, bordure du bas.
 function drawMobileChest(ctx, S, L) {
   const g = T.generic_54, inner = L.cols * 18, right = 7 + inner;
   const piece = (sx, sy, sw, sh, dx, dy, dw = sw, dh = sh) => ctx.drawImage(g, sx, sy, sw, sh, dx * S, dy * S, dw * S, dh * S);
@@ -3074,7 +3074,7 @@ const NOTIF_SOUNDS = [1, 2, 3, 4].map(i => { const a = new Audio(`assets/sounds/
 const toastBox = document.getElementById('toasts');
 function showToast({ icon = 'clock_00', title, text, color = '#FFFF55', duration = 6000 }) {
   if (!font) return;
-  const S = Math.max(2, Math.min(3, state.S)), H = 32;
+  const S = Math.max(2, Math.min(3, Math.round(state.S))), H = 32;
   const W = Math.max(160, 34 + Math.max(textWidth(font, title), textWidth(font, text)) + 8);
   const cv = document.createElement('canvas');
   cv.width = W * S;
@@ -3635,8 +3635,10 @@ headCanvas.addEventListener('click', ev => {
 
 // Taille du canevas du coffre (l'échelle se calcule avec la hauteur maximale pour ne pas changer d'une page à l'autre).
 function sizeGui() {
-  const L = guiLayout(), maxH = L.mobile ? 18 + (MOBILE_TITLE_LINES - 1) * 9 - 1 + 9 * 18 + 7 : GUI_H;
-  state.S = Math.max(2, Math.min(5, Math.floor(Math.min(viewW() / (L.w + 16), viewH() / (maxH + 16)))));
+  const L = guiLayout(), maxH = L.mobile ? 18 + (MOBILE_TITLE_LINES - 1) * 9 - 1 + MOBILE_ROWS * 18 + 7 : GUI_H;
+  const fit = Math.min(viewW() / (L.w + 16), viewH() / (maxH + 16)), R = guiRatio();
+  // téléphone : échelle au 1/R près (pixels de l'écran entiers), pour remplir au mieux la hauteur
+  state.S = Math.max(2, Math.min(5, Math.floor(fit * R) / R));
   setGuiSize(L);
 }
 let lastMobile = null;
