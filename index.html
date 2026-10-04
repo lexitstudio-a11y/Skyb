@@ -1974,15 +1974,22 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
     text(fitText(desc, (right - ix - 6) * k), ix + 2, y + 18, '#55FF55');
   }
   // titre
-  fr(left, y + 1, w, 14, '#0C2236');
-  fr(left + 1, y + 2, w - 2, 12, '#3D79A8');
-  fr(left + 1, y + 2, w - 2, 1, '#6FA3CF');
-  fr(left + 1, y + 13, w - 2, 1, '#28587F');
+  // titre : couleur du bloc de la D.A Minecraft (dégradé et couleur du texte compris)
+  const color = slot.color || '#3D79A8';
+  fr(left, y + 1, w, 14, shade(color, 0.25));
+  if (slot.gradient) {
+    const g = ctx.createLinearGradient(0, (y + 2) * S, 0, (y + 14) * S);
+    g.addColorStop(0, slot.gradient[0]);
+    g.addColorStop(1, slot.gradient[1]);
+    fr(left + 1, y + 2, w - 2, 12, g);
+  } else fr(left + 1, y + 2, w - 2, 12, color);
+  fr(left + 1, y + 2, w - 2, 1, shade(slot.gradient ? slot.gradient[0] : color, 1.4));
+  fr(left + 1, y + 13, w - 2, 1, shade(slot.gradient ? slot.gradient[1] : color, 0.7));
   const room = (right - ix - 22) * k, label = typeof slot.label === 'function' ? slot.label() : slot.label;
   let lines = wrapText(label, room);
   if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
   const top = y + 8 - lines.length * 4.5 / k + 0.5 / k;
-  lines.forEach((l, i) => text(l, ix + 20, top + i * 9 / k, '#FFFFFF'));
+  lines.forEach((l, i) => text(l, ix + 20, top + i * 9 / k, slot.text || '#FFFFFF'));
   if (hovered) fr(left, y + 1, w, 14, 'rgba(255, 255, 255, 0.25)');
 }
 // Case cachée par un bloc « span » commencé une ou deux cases plus à gauche : renvoie la clé de ce bloc.
