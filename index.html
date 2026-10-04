@@ -654,10 +654,11 @@ function reviewDay(agenda) {
 // Place les agendas (le premier en haut à gauche) dans la zone verte, avec leur bilan juste en dessous :
 // agendas sur les rangées 1 et 3, bilans sur les rangées 2 et 4 (7 journées par paire de rangées).
 function agendaGrid(list, slots, numbered) {
-  list.slice(0, 2 * TODO_COLS).forEach((a, i) => {
-    // téléphone : 5 journées par paire de rangées (rangées 1 à 6), clés mobiles « m… »
+  list.slice(0, agendasPerPage()).forEach((a, i) => {
+    // téléphone : 5 journées par paire de rangées, une rangée vide entre deux paires (rangées 1-2 et 4-5),
+    // clés mobiles « m… »
     const mobile = isMobileLayout(), per = mobile ? 5 : TODO_COLS, m = mobile ? 'm' : '';
-    const row = 1 + 2 * Math.floor(i / per), col = (mobile ? 0 : 1) + i % per, n = numbered ? i + 1 : null;
+    const row = 1 + (mobile ? 3 : 2) * Math.floor(i / per), col = (mobile ? 0 : 1) + i % per, n = numbered ? i + 1 : null;
     slots[`${m}${row},${col}`] = agendaSlot(a, n, numbered ? 'papier_agenda' : 'carte_vide');
     slots[`${m}${row + 1},${col}`] = bilanSlot(a, n);
   });
@@ -689,21 +690,21 @@ function bilanStats() {
   return ['§bBilan des journées', ...rows, '', `§7${notes.length} journée${notes.length > 1 ? 's' : ''} notée${notes.length > 1 ? 's' : ''}`];
 }
 const agendaToWrite = () => { const today = formatDate(new Date()); return agendas.some(a => a.date === today) ? tomorrow() : today; };
-// « Autres Journées » : tous les anciens agendas (aucun n'est supprimé), 14 par page ; flèche en bas à droite
+// « Autres Journées » : tous les anciens agendas (aucun n'est supprimé), 14 par page (10 sur téléphone) ; flèche en bas à droite
 // vers la page suivante, en bas à gauche vers la précédente, et près de la barrière pour revenir à l'agenda.
-const AGENDAS_PER_PAGE = 2 * TODO_COLS;
+const agendasPerPage = () => isMobileLayout() ? 10 : 2 * TODO_COLS;   // téléphone : 10 (2 paires de rangées)
 const olderAgendaPageId = k => k === 1 ? 'agenda-autres' : `agenda-autres-${k}`;
 function olderAgendaSlots(k = 1) {
-  const older = splitAgendas().older, pages = Math.max(1, Math.ceil(older.length / AGENDAS_PER_PAGE));
+  const older = splitAgendas().older, pages = Math.max(1, Math.ceil(older.length / agendasPerPage()));
   const slots = { ...navSlots('agenda') };
   if (k > 1) slots['5,0'] = { item: 'arrow', tooltip: ['§aPage précédente', `§7Page ${k - 1}`], open: olderAgendaPageId(k - 1) };
   if (k < pages) slots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: olderAgendaPageId(k + 1) };
-  return agendaGrid(older.slice((k - 1) * AGENDAS_PER_PAGE, k * AGENDAS_PER_PAGE), slots, false);
+  return agendaGrid(older.slice((k - 1) * agendasPerPage(), k * agendasPerPage()), slots, false);
 }
 function refreshAgenda() {
   PAGES.agenda.slots = agendaSlots();
   for (const id of Object.keys(PAGES)) if (/^agenda-autres-\d+$/.test(id)) delete PAGES[id];
-  const pages = Math.max(1, Math.ceil(splitAgendas().older.length / AGENDAS_PER_PAGE));
+  const pages = Math.max(1, Math.ceil(splitAgendas().older.length / agendasPerPage()));
   for (let k = 1; k <= pages; k++) {
     if (k === 1) PAGES['agenda-autres'].slots = olderAgendaSlots(1);
     else PAGES[olderAgendaPageId(k)] = { title: PAGE_TITLES['agenda-autres'], slots: olderAgendaSlots(k) };
