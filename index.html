@@ -1892,7 +1892,7 @@ function onLeave() {
 // Téléphone : appui long sur un item = son overlay (comme le survol à la souris), sans compter le clic.
 // L'overlay reste affiché jusqu'au prochain toucher ; bouger le doigt annule l'appui long.
 const LONG_PRESS_MS = 450;
-const press = { timer: null, x: 0, y: 0, long: false };
+const press = { timer: null, x: 0, y: 0, long: false, blockUntil: 0 };
 function onTouchStart(ev) {
   if (ev.touches.length !== 1) { clearTimeout(press.timer); return; }
   const t = ev.touches[0];
@@ -1912,7 +1912,11 @@ function onTouchMove(ev) {
 }
 function onTouchEnd(ev) {
   clearTimeout(press.timer);
-  if (press.long) { ev.preventDefault(); press.long = false; }   // pas de clic (ni de survol) simulé après un appui long
+  if (press.long) {   // pas de clic (ni de survol) simulé après un appui long
+    ev.preventDefault();
+    press.long = false;
+    press.blockUntil = Date.now() + 800;   // certains navigateurs envoient quand même le clic : il est ignoré
+  }
 }
 
 function hideTooltip() {
@@ -1950,6 +1954,7 @@ function playSound(sound) {
 const playClick = () => playSound(clickSound);
 
 function onClick(ev) {
+  if (press.long || Date.now() < press.blockUntil) return;   // téléphone : lâcher d'un appui long
   const slot = itemAt(slotAt(ev));
   if (!slot) return;
   playClick();
@@ -3563,7 +3568,12 @@ async function main() {
   canvas.addEventListener('touchstart', onTouchStart, { passive: true });
   canvas.addEventListener('touchmove', onTouchMove, { passive: true });
   canvas.addEventListener('touchend', onTouchEnd);
-  canvas.addEventListener('touchcancel', () => { clearTimeout(press.timer); press.long = false; });
+  canvas.addEventListener('touchcancel', () => { clearTimeout(press.timer); if (press.long) press.blockUntil = Date.now() + 800; press.long = false; });
+  // clic qui suit un appui long (ou arrive pendant) : bloqué avant tout traitement
+  const blockLongClick = ev => { if (press.long || Date.now() < press.blockUntil) { ev.stopImmediatePropagation(); ev.preventDefault(); } };
+  canvas.addEventListener('click', blockLongClick, true);
+  canvas.addEventListener('mousedown', blockLongClick, true);
+  canvas.addEventListener('mouseup', blockLongClick, true);
   canvas.addEventListener('contextmenu', ev => ev.preventDefault());   // pas de menu du navigateur à l'appui long
   markAppReady();
   checkBlockReminders();
