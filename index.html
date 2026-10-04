@@ -171,7 +171,7 @@ function guiLayout() {
   const title = font ? wrapText(pageTitle(state.page), MOBILE_W - 16).slice(0, MOBILE_TITLE_LINES) : [''];
   const top = 18 + (title.length - 1) * 9;
   // page qui défile (plus de rangées que la zone visible) : coffre élargi pour la barre de défilement à droite
-  const page = PAGES[state.page], bar = !!(page && page.scrollRows > MOBILE_NAV);
+  const page = PAGES[state.page], bar = !!(page && pageRows(page) > MOBILE_NAV);
   return { mobile: true, cols: 5, rows: MOBILE_ROWS, w: MOBILE_W + (bar ? SCROLLBAR_EXTRA : 0), h: top - 1 + MOBILE_ROWS * 18 + 7, top, title, bar };
 }
 const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la case
@@ -473,28 +473,45 @@ const todoImage = n => `actions/${(n - 1) % TODO_IMAGES + 1}`;
 // Place une liste d'actions (la première en haut à gauche) dans la zone 4x7.
 // numbers : numéro affiché de chaque action (actions en cours) ; sinon pas de numéro.
 function todoGrid(list, slots, numbers) {
+  if (daRows()) {   // une action par ligne : image à gauche, titre et description à droite (3 rangées par action)
+    list.forEach((todo, i) => {
+      const n = numbers ? numbers[i] : null, r = 1 + 3 * i, cell = todoCell(todo, n);
+      const firstLine = (todo.description || '').split('\n')[0].trim();
+      slots[`v${r},0`] = cell;
+      slots[`v${r},2`] = {
+        span: 3, label: todo.titre || 'Action', color: () => TB_COLORS[(todos.indexOf(todo) * 7 + 3) % TB_COLORS.length],
+        desc: () => todo.fini ? `Terminée le ${todo.fini}` : firstLine || `Ajoutée le ${todo.date}`,
+        tooltip: cell.tooltip, action: cell.action,
+      };
+    });
+    return setRows(slots, 1 + 3 * list.length);
+  }
   const mobile = isMobileLayout();
   list.slice(0, mobile ? (MOBILE_NAV - 1) * 3 : TODO_ROWS * TODO_COLS).forEach((todo, i) => {
     const n = numbers ? numbers[i] : null;
     // téléphone : 3 par rangée (colonnes 1 à 3, rien sur les bords ; rangées 1 à 9), clé mobile « m… » ;
     // ordinateur : 7 par rangée (rangées 1 à 4)
     const key = mobile ? `m${1 + Math.floor(i / 3)},${1 + i % 3}` : `${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`;
-    slots[key] = {
-      image: n ? todoImage(n) : (todo.image || todoImage(1)),
-      count: n,
-      // Fonction : la description est découpée à l'affichage (la police n'est pas encore chargée au démarrage).
-      tooltip: () => [
-        '§a' + (todo.titre || 'Action'),
-        ...(todo.description ? wrapText(todo.description, 180).map(l => '§7' + l) : []), '',
-        `§8Ajoutée le ${todo.date}`,
-        ...(todo.fini
-          ? [`§cTerminée le ${todo.fini}`, `§8Supprimée le ${formatDate(addDays(todo.fini, TODO_KEEP_DAYS))}`, '', '§eClique pour supprimer !']
-          : ['§eClique quand elle est terminée !']),
-      ],
-      action: () => todo.fini ? askTodoDelete(todo) : askTodoDone(todo),
-    };
+    slots[key] = todoCell(todo, n);
   });
   return slots;
+}
+// Case d'une action (image, numéro, overlay, clic).
+function todoCell(todo, n) {
+  return {
+    image: n ? todoImage(n) : (todo.image || todoImage(1)),
+    count: n,
+    // Fonction : la description est découpée à l'affichage (la police n'est pas encore chargée au démarrage).
+    tooltip: () => [
+      '§a' + (todo.titre || 'Action'),
+      ...(todo.description ? wrapText(todo.description, 180).map(l => '§7' + l) : []), '',
+      `§8Ajoutée le ${todo.date}`,
+      ...(todo.fini
+        ? [`§cTerminée le ${todo.fini}`, `§8Supprimée le ${formatDate(addDays(todo.fini, TODO_KEEP_DAYS))}`, '', '§eClique pour supprimer !']
+        : ['§eClique quand elle est terminée !']),
+    ],
+    action: () => todo.fini ? askTodoDelete(todo) : askTodoDone(todo),
+  };
 }
 function todoSlots() {
   const active = todos.filter(t => !t.fini);   // de la plus ancienne à la plus récente
@@ -656,7 +673,22 @@ function reviewDay(agenda) {
 }
 // Place les agendas (le premier en haut à gauche) dans la zone verte, avec leur bilan juste en dessous :
 // agendas sur les rangées 1 et 3, bilans sur les rangées 2 et 4 (7 journées par paire de rangées).
+const BILAN_COLORS = { mauvaise: '#C3291C', bonne: '#5EA83A', tres_bonne: '#E3A82B' };
 function agendaGrid(list, slots, numbered) {
+  if (daRows()) {   // une journée par ligne : agenda et bilan à gauche, date et 1er objectif à droite
+    const start = numbered ? 2 : 1;   // page principale : la balise est sur la rangée 0
+    list.slice(0, agendasPerPage()).forEach((a, i) => {
+      const r = start + 3 * i, n = numbered ? i + 1 : null, cell = agendaSlot(a, n, numbered ? 'papier_agenda' : 'carte_vide');
+      const first = a.texte.split('\n').map(l => l.trim()).find(Boolean);
+      slots[`v${r},0`] = cell;
+      slots[`v${r},1`] = bilanSlot(a, n);
+      slots[`v${r},2`] = {
+        span: 3, inset: 2, label: 'Agenda ' + a.date, color: BILAN_COLORS[a.bilan && a.bilan.note] || '#616161',
+        desc: first || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
+      };
+    });
+    return setRows(slots, start + 3 * Math.min(list.length, agendasPerPage()));
+  }
   list.slice(0, agendasPerPage()).forEach((a, i) => {
     // téléphone : 5 journées par paire de rangées, une rangée vide entre deux paires (rangées 1-2, 4-5 et 7-8),
     // clés mobiles « m… »
@@ -670,7 +702,7 @@ function agendaGrid(list, slots, numbered) {
 function agendaSlots() {
   return agendaGrid(splitAgendas().recent, {
     '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', '§7Les agendas de plus de 7 jours.', '', '§eClique pour voir !'], open: 'agenda-autres' },
-    '0,8': { image: 'beacon', tooltip: bilanStats },
+    [daRows() ? 'v0,4' : '0,8']: { image: 'beacon', tooltip: bilanStats },
     // Tant que l'agenda d'aujourd'hui n'est pas écrit, la tête propose celui d'aujourd'hui (puis celui de demain).
     '5,8': {
       image: 'tete_plus_bleue', action: () => editAgenda(agendaToWrite()),
@@ -755,6 +787,8 @@ function toggleDA() {
   document.documentElement.dataset.da = da;
   hideTooltip();
   refreshArbres();
+  refreshTodo();
+  refreshAgenda();
   renderGui();
   showToast({ icon: 'cadre_da', title: 'D.A changée', text: `D.A ${DA_LABELS[da]}`, duration: 3000 });
 }
@@ -1359,6 +1393,12 @@ function buildArbrePages(a, n) {
     PAGES[histoId(k)] = { title: 'Historique des valeurs', slots: histoSlots };
   }
 }
+// Rangées d'une page qui défile : scrollRows de la page, ou rows de ses cases (listes construites en D.A test).
+function pageRows(page) { return page.scrollRows || (page.slots && page.slots.rows) || 0; }
+// D.A test sur téléphone : listes (actions, agendas) en lignes façon « succès », dans une page qui défile.
+// (fonctions déclarées : utilisées dès la construction des pages, plus haut dans le fichier)
+function daRows() { return da === 'test' && isMobileLayout(); }
+function setRows(slots, rows) { return Object.defineProperty(slots, 'rows', { value: rows }); }
 // Téléphone : liste qui défile (scrollRows rangées, clés « v<rangée>,<col> » ; la barre du bas reste fixe).
 // Rangée 0 : montre et tête verte ; puis 3 rangées par arbre : son icône à gauche et son titre sur les 3 cases
 // de droite (bloc de couleur façon Timeblock), sa barre de progression (5 vitres = 5 niveaux), une rangée vide.
@@ -1989,7 +2029,7 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
   if (slot.xpBelow) xpBar(ctx, ix, y + 14 + dh + 9, right - ix, slot.xpBelow(), S);   // barre d'expérience sous la description
   // titre
   // titre : couleur du bloc de la D.A Minecraft (dégradé et couleur du texte compris)
-  const color = slot.color || '#3D79A8';
+  const color = (typeof slot.color === 'function' ? slot.color() : slot.color) || '#3D79A8';
   fr(left, y + 1, w, 14, shade(color, 0.25));
   if (slot.gradient) {
     const g = ctx.createLinearGradient(0, (y + 2) * S, 0, (y + 14) * S);
@@ -1999,11 +2039,11 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
   } else fr(left + 1, y + 2, w - 2, 12, color);
   fr(left + 1, y + 2, w - 2, 1, shade(slot.gradient ? slot.gradient[0] : color, 1.4));
   fr(left + 1, y + 13, w - 2, 1, shade(slot.gradient ? slot.gradient[1] : color, 0.7));
-  const room = (right - ix - 22) * k, label = typeof slot.label === 'function' ? slot.label() : slot.label;
+  const tx = ix + 18 * (slot.inset || 1) + 2, room = (right - tx - 2) * k, label = typeof slot.label === 'function' ? slot.label() : slot.label;
   let lines = wrapText(label, room);
   if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
   const top = y + 8 - lines.length * 4.5 / k + 0.5 / k;
-  lines.forEach((l, i) => text(l, ix + 20, top + i * 9 / k, slot.text || '#FFFFFF'));
+  lines.forEach((l, i) => text(l, tx, top + i * 9 / k, slot.text || '#FFFFFF'));
   if (hovered) fr(left, y + 1, w, 14, 'rgba(255, 255, 255, 0.25)');
 }
 // D.A test : barre d'expérience Minecraft sur span cases, remplie selon le pourcentage, nombre vert au-dessus.
@@ -2046,8 +2086,8 @@ const SCROLL_VIEW = MOBILE_NAV;
 const scrolls = {};
 function scrollInfo(L = guiLayout()) {
   const page = PAGES[state.page];
-  if (!L.mobile || !page || !page.scrollRows) return null;
-  const rows = Math.max(SCROLL_VIEW, page.scrollRows), max = (rows - SCROLL_VIEW) * 18;
+  if (!L.mobile || !page || !pageRows(page)) return null;
+  const rows = Math.max(SCROLL_VIEW, pageRows(page)), max = (rows - SCROLL_VIEW) * 18;
   scrolls[state.page] = Math.max(0, Math.min(max, scrolls[state.page] || 0));
   return { rows, max, offset: scrolls[state.page] };
 }
