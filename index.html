@@ -714,7 +714,7 @@ function agendaGrid(list, slots, numbered) {
 function agendaSlots() {
   return agendaGrid(splitAgendas().recent, {
     '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', '§7Les agendas de plus de 7 jours.', '', '§eClique pour voir !'], open: 'agenda-autres' },
-    [daRows() ? (isMobileLayout() ? 'v0,4' : 'v0,10') : '0,8']: { image: 'beacon', tooltip: bilanStats },   // D.A test : dans la liste qui défile
+    [daRows() ? (isMobileLayout() ? 'v0,2' : 'v0,10') : '0,8']: { image: 'beacon', tooltip: bilanStats },   // D.A test : dans la liste qui défile
     // Tant que l'agenda d'aujourd'hui n'est pas écrit, la tête propose celui d'aujourd'hui (puis celui de demain).
     '5,8': {
       image: 'tete_plus_bleue', action: () => editAgenda(agendaToWrite()),
@@ -803,6 +803,7 @@ function toggleDA() {
   refreshTodo();
   refreshAgenda();
   if (!PAGES[state.page]) location.hash = state.page.startsWith('arbres') ? 'arbres' : 'main';   // page qui n'existe plus dans cette D.A
+  else if (defaultPage(state.page) !== state.page) location.hash = defaultPage(state.page);   // D.A test : pas de Profil
   sizeGui();
   renderGui();
 }
@@ -1935,8 +1936,13 @@ function mobileSlots(id, slots) {
     const slot = slots[key], [r] = fixed[key].split(',');
     out[`${r},2`] = { span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot), dim: () => !!(slot.look && slot.look().dim), tooltip: slot.tooltip, open: slot.open, action: slot.action };
   }
+  const tabPage = da === 'test' && TABS.some(t => t.page === id), scrolling = PAGES[id] && pageRows(PAGES[id]) > 0;
   for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && k[0] !== 'v' && !fixed[k] && !hidden.includes(k))) {
     const [r, c] = key.split(',').map(Number);
+    if (tabPage && r === 5) {   // onglets en bas : retour / barrière inutiles, boutons des coins en haut
+      if (c === 0 || c === 8) out[`${scrolling ? 'v' : ''}0,${c === 0 ? 0 : 4}`] = slot;
+      continue;
+    }
     if (special && special[c] != null) place(r, special[c], slot);
     else if (r === 5) place(MOBILE_NAV, MOBILE_NAV_COLS[c], slot);
     else place(r, MOBILE_COLS[c], slot);
@@ -2005,7 +2011,50 @@ function renderGui() {
     ctx.restore();
     if (L.bar) drawScrollbar(ctx, S, L, scroll);
   }
+  if (isTabPage(state.page)) drawTabs(ctx, S, L);
   if (menuHead && headMenu.open) drawHeadMenu(ctx, S);
+}
+// --- D.A test sur téléphone : pas de page Profil ; 4 onglets en bas (Arbres, Pilliers, Liste, Agenda) ---
+// Arbres de Progression = page par défaut. Les boutons de la barre du bas de ces pages passent en haut (rangée 0).
+const TABS = [
+  { page: 'arbres', image: 'arbres_progression' },
+  { page: 'serments', item: 'book' },
+  { page: 'todo', item: 'paper' },
+  { page: 'agenda', item: 'clock_00' },
+];
+const daTabs = () => da === 'test' && isMobileLayout();
+const isTabPage = id => daTabs() && TABS.some(t => t.page === id);
+function defaultPage(id) {
+  if (!daTabs() || id !== 'main') return id;
+  history.replaceState(null, '', '#arbres');
+  return 'arbres';
+}
+const TAB_SCALE = 0.8;
+function tabRect(L, i) {   // centre de l'onglet i (pixels du GUI)
+  const w = L.cols * 18 / TABS.length;
+  return { cx: 7 + w * (i + 0.5), cy: L.top - 1 + (L.rows - 1) * 18 + 9, w };
+}
+function drawTabs(ctx, S, L) {
+  TABS.forEach((t, i) => {
+    const { cx, cy } = tabRect(L, i), active = state.page === t.page;
+    ctx.save();
+    ctx.translate(cx * S, cy * S);
+    ctx.scale(TAB_SCALE, TAB_SCALE);
+    ctx.translate(-cx * S, -cy * S);
+    drawCell(ctx, { t: { image: t.image, item: t.item } }, 't', cx - 8, cy - 8, S, 'item');
+    if (active) { ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'; ctx.fillRect((cx - 8) * S, (cy - 8) * S, 16 * S, 16 * S); }
+    ctx.restore();
+  });
+}
+function tabClick(ev) {
+  if (!isTabPage(state.page)) return false;
+  const L = guiLayout(), r = canvas.getBoundingClientRect(), gx = (ev.clientX - r.left) / state.S, gy = (ev.clientY - r.top) / state.S;
+  const { cy, w } = tabRect(L, 0);
+  if (Math.abs(gy - cy) > 9) return false;
+  const i = Math.floor((gx - 7) / w);
+  if (i < 0 || i >= TABS.length) return false;
+  if (TABS[i].page !== state.page) { playClick(); location.hash = TABS[i].page; }
+  return true;
 }
 // --- D.A test sur téléphone : tête du joueur en haut à gauche ; un toucher ouvre un petit menu déroulant ---
 const HEAD_BTN = { x: 6, y: 3, w: 13 };
@@ -2502,7 +2551,7 @@ function showPageFromHash() {
   if (dialog.cfg) closeConfirm();
   if (tb.date) closeTimeblock(false);
   const page = location.hash.slice(1);
-  state.page = PAGES[page] ? page : 'main';
+  state.page = defaultPage(PAGES[page] ? page : 'main');
   headMenu.open = false;
   hideTooltip();
   if (state.page.startsWith('todo')) refreshTodo();   // retire les actions terminées depuis 30 jours
@@ -2528,6 +2577,7 @@ const playClick = () => playSound(clickSound);
 function onClick(ev) {
   if (press.long || Date.now() < press.blockUntil) return;   // téléphone : lâcher d'un appui long
   if (headMenuClick(ev)) return;   // D.A test (téléphone) : tête et son menu
+  if (tabClick(ev)) return;   // D.A test (téléphone) : onglets du bas
   const slot = itemAt(slotAt(ev));
   if (!slot) return;
   playClick();
@@ -4139,7 +4189,7 @@ async function main() {
   HEADS.steve = headFaces(T.steve);   // tête neutre (menu « Modifier le profil »)
   if (profile.skin) loadSkin(profile.skin).then(img => { HEADS.profile = headFaces(img); renderGui(); }, () => {});
   const page = location.hash.slice(1);
-  state.page = PAGES[page] ? page : 'main';
+  state.page = defaultPage(PAGES[page] ? page : 'main');
   resize();
   addEventListener('resize', resize);
   addEventListener('popstate', showPageFromHash);
