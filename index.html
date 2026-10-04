@@ -489,7 +489,7 @@ function todoGrid(list, slots, numbers) {
         span: {
           label: todo.titre || 'Action', color: () => TB_COLORS[(todos.indexOf(todo) * 7 + 3) % TB_COLORS.length],
           desc: () => todo.fini ? `Terminée le ${todo.fini}` : firstLine || `Ajoutée le ${todo.date}`,
-          descFull: () => [...(todo.description ? todo.description.split('\n') : []), `§7Ajoutée le ${todo.date}`, ...(todo.fini ? [`§cTerminée le ${todo.fini}`] : [])],
+          descFull: () => todo.description ? todo.description.split('\n') : [],
           tooltip: cell.tooltip, action: cell.action,
         },
       };
@@ -1953,7 +1953,11 @@ function mobileSlots(id, slots) {
 }
 // Une case est un item (survol, overlay, clic) sauf les vitres.
 // Case survolable : tout sauf les vitres décoratives (une vitre avec une info-bulle l'est aussi).
-const itemAt = key => { const slot = key && currentSlots()[key]; return slot && (!slot.pane || slot.tooltip) ? slot : null; };
+const itemAt = key => {
+  const slot = key && currentSlots()[key];
+  if (slot && slot.enabled && !slot.enabled()) return null;   // ex. description qui ne se déplie pas : rien ne se passe
+  return slot && (!slot.pane || slot.tooltip) ? slot : null;
+};
 let T, font, BLOCKS;
 const canvas = document.getElementById('gui');
 const tip = document.getElementById('tooltip');
@@ -2235,8 +2239,10 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
   if (desc || open) {   // commence sous l'item, comme dans le jeu
     fr(ix - 1, y + 14, right - ix + 1, dh, '#000000');   // aligné sur le bord gauche de la case de l'item
     fr(ix, y + 15, right - ix - 1, dh - 2, '#212121');
-    if (open) open.lines.forEach((l, i) => text(l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
-    else short.forEach((l, i) => text(l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
+    const foldable = slot.data && slot.descFull && descExpandable(slot);
+    if (foldable) drawDescTriangle(ctx, right - 5, y + 20.5, descAngle(slot), S, '#55FF55');   // triangle à droite
+    if (open) open.lines.forEach((l, i) => text(fitText(l, (right - ix - (foldable ? 12 : 6)) * k), ix + 2, y + 18 + i * 9 / k, '#55FF55'));
+    else short.forEach((l, i) => text(foldable ? fitText(l, (right - ix - 12) * k) : l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
   }
   if (slot.progress) {   // fine barre de progression sous le texte (verte, comme le chargement du monde)
     const pct = Math.max(0, Math.min(100, slot.progress())), bw = right - ix - 6;
@@ -2300,7 +2306,7 @@ function drawCompactAdvancement(ctx, slot, ix, left, right, y, S, k, text, hover
 function advDesc(slot, S = state.S * guiRatio()) {
   const full = slot.descFull && slot.descFull();
   if (!full || !full.length || !font) return null;
-  const k = S / Math.max(1, Math.round(S * 0.6)), width = (36 + slot.span * 18 - 2 - 6) * k;
+  const k = S / Math.max(1, Math.round(S * 0.6)), width = (36 + slot.span * 18 - 2 - 12) * k;   // place du triangle à droite
   const lines = wrapTipLines(full, width);
   return { lines, h: 13 + (lines.length - 1) * 9 / k + (slot.progress ? 4 : 0) };
 }
@@ -2308,14 +2314,56 @@ function advDesc(slot, S = state.S * guiRatio()) {
 // une zone invisible qui déplie / replie la description quand on la touche. Renvoie le nombre de rangées occupées.
 function placeAdvancement(slots, r, span, data, refresh) {
   span.expanded = openedDesc.has(data);
+  span.data = data;
   slots[`v${r},2`] = span;
   const open = span.expanded && advDesc(span);
   const rows = open ? Math.max(2, Math.ceil((14 + open.h + 5) / 18)) : 2;
   if (span.descFull) {
-    const toggle = () => { openedDesc.has(data) ? openedDesc.delete(data) : openedDesc.add(data); refresh(); };
-    for (let rr = r + 1; rr < r + rows; rr++) slots[`v${rr},0`] = { span: 5, hidden: true, action: toggle };
+    const toggle = () => {
+      const opening = !openedDesc.has(data);
+      opening ? openedDesc.add(data) : openedDesc.delete(data);
+      descAnim.set(data, { t0: performance.now(), to: opening });
+      refresh();
+      animateDesc();
+    };
+    // la zone ne réagit que si la description a plus à montrer qu'une ligne (sinon : rien, et pas de triangle)
+    for (let rr = r + 1; rr < r + rows; rr++) slots[`v${rr},0`] = { span: 5, hidden: true, action: toggle, enabled: () => descExpandable(span) };
   }
   return rows;
+}
+// Description dépliable : son texte complet tient sur plus d'une ligne.
+function descExpandable(span) {
+  const d = advDesc({ ...span, expanded: true });
+  return !!d && d.lines.length > 1;
+}
+// Triangle des descriptions dépliables : tourne d'un quart de tour (▶ fermé, ▼ ouvert) en 160 ms.
+const descAnim = new WeakMap();
+const DESC_ANIM_MS = 160;
+function descAngle(span) {
+  const a = descAnim.get(span.data), open = !!span.expanded;
+  if (!a) return open ? 1 : 0;
+  const t = Math.min(1, (performance.now() - a.t0) / DESC_ANIM_MS);
+  return a.to ? t : 1 - t;
+}
+let descRaf = 0;
+function animateDesc() {
+  cancelAnimationFrame(descRaf);
+  const t0 = performance.now();
+  const step = now => { renderGui(); if (now - t0 < DESC_ANIM_MS + 20) descRaf = requestAnimationFrame(step); };
+  descRaf = requestAnimationFrame(step);
+}
+function drawDescTriangle(ctx, cx, cy, turn, S, color) {
+  ctx.save();
+  ctx.translate(cx * S, cy * S);
+  ctx.rotate(turn * Math.PI / 2);
+  ctx.beginPath();
+  ctx.moveTo(-1.5 * S, -2.5 * S);
+  ctx.lineTo(2 * S, 0);
+  ctx.lineTo(-1.5 * S, 2.5 * S);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
 }
 // D.A test : barre d'expérience Minecraft sur span cases, remplie selon le pourcentage, nombre vert au-dessus.
 function drawXpBar(ctx, slot, x, y, S, hovered) {
