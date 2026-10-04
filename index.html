@@ -1703,10 +1703,13 @@ const MOBILE_PLACES = {
   // arbres (bûche) à sa gauche et montre (agenda) à sa droite
   main: { '2,4': '2,2', '2,5': '4,2', '2,1': '4,1', '2,6': '4,3' },
 };
+// Rangées décalées sur téléphone (rangée ordinateur -> rangée mobile) :
+// listes d'arbres = arbres une rangée plus bas, pour ne pas coller à la montre et à la tête du haut.
+const MOBILE_PAGE_ROWS = id => /^arbres(-|$)/.test(id) ? { 1: 2, 3: 4 } : null;
 const mobileCache = new WeakMap();
 function mobileSlots(id, slots) {
   if (mobileCache.has(slots)) return mobileCache.get(slots);
-  const out = {}, special = MOBILE_PAGE_COLS(id);
+  const out = {}, special = MOBILE_PAGE_COLS(id), rows = MOBILE_PAGE_ROWS(id) || {};
   const place = (r, c, slot) => {
     for (let d = 0; d < 5; d++)   // place libre la plus proche dans la rangée, puis rangées suivantes
       for (const cc of [c - d, c + d]) if (cc >= 0 && cc < 5 && !out[`${r},${cc}`]) { out[`${r},${cc}`] = slot; return; }
@@ -1723,7 +1726,7 @@ function mobileSlots(id, slots) {
     const [r, c] = key.split(',').map(Number);
     if (special && special[c] != null) place(r, special[c], slot);
     else if (r === 5) place(8, MOBILE_NAV_COLS[c], slot);
-    else place(r, MOBILE_COLS[c], slot);
+    else place(rows[r] ?? r, MOBILE_COLS[c], slot);
   }
   mobileCache.set(slots, out);
   return out;
