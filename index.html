@@ -3823,6 +3823,15 @@ async function freshSession() {
 }
 
 const localData = () => Object.fromEntries(SYNC_KEYS.map(k => [k, localStorage.getItem(k)]).filter(([, v]) => v != null));
+// Compte à qui appartiennent les données de cet appareil (posé à chaque synchronisation). Les données d'un compte
+// ne sont jamais envoyées dans un autre, et elles sont effacées de l'appareil à la déconnexion.
+const OWNER_KEY = 'donnees-compte';
+const dataOwner = () => { try { return localStorage.getItem(OWNER_KEY); } catch { return null; } };
+const setDataOwner = id => { try { id ? localStorage.setItem(OWNER_KEY, id) : localStorage.removeItem(OWNER_KEY); } catch {} };
+function clearLocalData() {
+  for (const k of SYNC_KEYS) { try { localStorage.removeItem(k); } catch {} }
+  setDataOwner(null);
+}
 const hasData = data => !!data && Object.keys(data).length > 0;
 function applyCloudData(row) {
   for (const k of SYNC_KEYS) {
@@ -3830,6 +3839,7 @@ function applyCloudData(row) {
   }
   Object.assign(sync, { at: row.updated_at, dirty: false });
   saveSyncState();
+  setDataOwner(session.user.id);
   location.reload();   // les données sont lues au chargement de la page
 }
 async function pullCloud() {
@@ -3841,6 +3851,8 @@ async function pushCloud() {
   if (pushing) return pushing;   // un seul envoi à la fois
   pushing = (async () => {
     await freshSession();
+    const owner = dataOwner();
+    if (owner && owner !== session.user.id) throw new CloudError('Données d\'un autre compte');   // jamais envoyées ailleurs
     const [row] = await supa('/rest/v1/user_data?on_conflict=user_id', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
@@ -3848,6 +3860,7 @@ async function pushCloud() {
     });
     Object.assign(sync, { at: row.updated_at, dirty: false, savedAt: Date.now() });
     saveSyncState();
+    setDataOwner(session.user.id);
   })().finally(() => { pushing = null; });
   return pushing;
 }
@@ -3887,6 +3900,13 @@ if (location.hash.includes('access_token=')) {
 // Après connexion : si le compte et cet appareil ont tous deux des données, on demande lesquelles garder.
 async function afterLogin() {
   const row = await pullCloud();
+  const owner = dataOwner();
+  if (owner && owner !== session.user.id) {   // l'appareil garde les données d'un autre compte : on les efface
+    clearLocalData();
+    if (row) applyCloudData(row);
+    else { setDataOwner(session.user.id); location.reload(); }
+    return;
+  }
   const local = localData();
   if (row && hasData(row.data) && hasData(local) && JSON.stringify(row.data) !== JSON.stringify(local)) {
     openConfirm({
@@ -3898,6 +3918,17 @@ async function afterLogin() {
       onCancel: () => applyCloudData(row),
     });
   } else if (row && hasData(row.data)) applyCloudData(row);
+  else if (!owner && hasData(local)) {
+    // compte vide et données de cet appareil sans propriétaire connu : on demande avant de les mettre sur ce compte
+    openConfirm({
+      question: 'Garder les données de cet appareil ?',
+      detail: ['Ce compte est vide. Les données déjà présentes', 'sur cet appareil peuvent y être ajoutées.'],
+      noLabel: 'Partir de zéro', yesLabel: 'Les garder', buttonWidth: 120,
+      onNo: () => { clearLocalData(); setDataOwner(session.user.id); location.reload(); },
+      onYes: () => pushCloud().then(renderGui, () => {}),
+      onCancel: () => { clearLocalData(); setDataOwner(session.user.id); location.reload(); },
+    });
+  }
   else await pushCloud();
   renderGui();
 }
@@ -3929,7 +3960,8 @@ async function logout() {
   saveSession();
   Object.assign(sync, { at: null, dirty: false, savedAt: null });
   saveSyncState();
-  renderGui();
+  clearLocalData();   // les données restent sur le compte, mais plus sur cet appareil (le suivant ne les voit pas)
+  location.reload();
 }
 
 // --- Écran de connexion : deux champs (e-mail, mot de passe) façon Minecraft et trois boutons ---
