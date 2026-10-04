@@ -796,7 +796,6 @@ function toggleDA() {
   refreshTodo();
   refreshAgenda();
   renderGui();
-  showToast({ icon: 'cadre_da', title: 'D.A changée', text: `D.A ${DA_LABELS[da]}`, duration: 3000 });
 }
 const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Arbres de Progression' };
 const PAGES = {
@@ -3353,12 +3352,15 @@ function drawTimer() {
 
 // --- Notifications (style « succès » Minecraft) : icône, titre en couleur, description en blanc ---
 // Elles descendent depuis le haut (en haut à droite), restent quelques secondes puis remontent ; un son au hasard parmi 4 (volume réduit).
-const NOTIF_SOUNDS = [1, 2, 3, 4].map(i => { const a = new Audio(`assets/sounds/notif${i}.mp3`); a.preload = 'auto'; a.volume = 0.25; return a; });
+const NOTIF_SOUNDS = [1, 2, 3, 4].map(i => { const a = new Audio(`assets/sounds/notif${i}.mp3`); a.preload = 'auto'; a.volume = 0.1; return a; });
 const toastBox = document.getElementById('toasts');
 function showToast({ icon = 'clock_00', title, text, color = '#FFFF55', duration = 6000 }) {
   if (!font) return;
-  const S = Math.max(2, Math.min(3, Math.round(state.S))), H = 32;
-  const W = Math.max(160, 34 + Math.max(textWidth(font, title), textWidth(font, text)) + 8);
+  const W = Math.max(160, 34 + Math.max(textWidth(font, title), textWidth(font, text)) + 8), H = 32;
+  // téléphone : dessinée en pixels de l'écran et réduite pour tenir dans la largeur (marges comprises)
+  const R = guiRatio(), S = isMobileLayout()
+    ? Math.max(1, Math.min(2 * R, Math.floor((viewW() - 16) * R / W)))
+    : Math.max(2, Math.min(3, Math.round(state.S)));
   const cv = document.createElement('canvas');
   cv.width = W * S;
   cv.height = H * S;
@@ -3373,6 +3375,7 @@ function showToast({ icon = 'clock_00', title, text, color = '#FFFF55', duration
   ctx.drawImage(T[icon], 8 * S, 8 * S, size, size);
   drawText(ctx, font, title, 32, 7, color, S, true);
   drawText(ctx, font, text, 32, 18, '#FFFFFF', S, true);
+  if (R > 1 || isMobileLayout()) { cv.style.width = W * S / R + 'px'; cv.style.height = H * S / R + 'px'; }
   toastBox.append(cv);
   requestAnimationFrame(() => requestAnimationFrame(() => cv.classList.add('shown')));
   playSound(NOTIF_SOUNDS[Math.floor(Math.random() * NOTIF_SOUNDS.length)]);
