@@ -470,10 +470,12 @@ const todoImage = n => `actions/${(n - 1) % TODO_IMAGES + 1}`;
 // Place une liste d'actions (la première en haut à gauche) dans la zone 4x7.
 // numbers : numéro affiché de chaque action (actions en cours) ; sinon pas de numéro.
 function todoGrid(list, slots, numbers) {
-  list.slice(0, TODO_ROWS * TODO_COLS).forEach((todo, i) => {
+  const mobile = isMobileLayout();
+  list.slice(0, mobile ? 7 * 3 : TODO_ROWS * TODO_COLS).forEach((todo, i) => {
     const n = numbers ? numbers[i] : null;
-    // téléphone : 5 par rangée (rangées 1 à 6), clé mobile « m… » ; ordinateur : 7 par rangée (rangées 1 à 4)
-    const key = isMobileLayout() ? `m${1 + Math.floor(i / 5)},${i % 5}` : `${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`;
+    // téléphone : 3 par rangée (colonnes 1 à 3, rien sur les bords ; rangées 1 à 7), clé mobile « m… » ;
+    // ordinateur : 7 par rangée (rangées 1 à 4)
+    const key = mobile ? `m${1 + Math.floor(i / 3)},${1 + i % 3}` : `${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`;
     slots[key] = {
       image: n ? todoImage(n) : (todo.image || todoImage(1)),
       count: n,
