@@ -258,7 +258,8 @@ const SERMENT_PANES = {
 };
 function sermentColumn(col, n) {
   const panes = SERMENT_PANES[n];
-  const slots = { [`0,${col}`]: { item: 'book', tooltip: sermentBookTooltip(n), open: `serment${n}` } };
+  // serment vide (sans titre) : livre assombri
+  const slots = { [`0,${col}`]: { item: 'book', tooltip: sermentBookTooltip(n), open: `serment${n}`, look: () => ({ dim: !sermentSuffix(n) }) } };
   panes.forEach((pane, i) => { slots[`${i + 1},${col}`] = { pane, when: () => da !== 'test' }; });   // D.A test : pas de vitres
   return slots;
 }
@@ -1862,7 +1863,7 @@ function mobileSlots(id, slots) {
   for (const [key, slot] of entries) if (fixed[key]) out[fixed[key]] = slot;
   for (const [key, style] of Object.entries((da2 ? MOBILE_LABELS_DA2[id] : MOBILE_LABELS[id]) || {})) {
     const slot = slots[key], [r] = fixed[key].split(',');
-    out[`${r},2`] = { span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot), tooltip: slot.tooltip, open: slot.open, action: slot.action };
+    out[`${r},2`] = { span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot), dim: () => !!(slot.look && slot.look().dim), tooltip: slot.tooltip, open: slot.open, action: slot.action };
   }
   for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && k[0] !== 'v' && !fixed[k])) {
     const [r, c] = key.split(',').map(Number);
@@ -2069,6 +2070,10 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
   if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
   const top = y + 8 - lines.length * 4.5 / k + 0.5 / k;
   lines.forEach((l, i) => text(l, tx, top + i * 9 / k, slot.text || '#FFFFFF'));
+  if (slot.dim && slot.dim()) {   // assombri comme son item (ex. serment vide)
+    fr(left, y + 1, w, 14, 'rgba(0, 0, 0, 0.5)');
+    if (desc || open) fr(ix, y + 14, right - ix, dh, 'rgba(0, 0, 0, 0.5)');
+  }
   if (hovered) fr(left, y + 1, w, 14, 'rgba(255, 255, 255, 0.25)');
 }
 // Description dépliée d'un bloc « succès » (span 3 en colonne 2) : lignes coupées à la largeur, hauteur du cadre.
