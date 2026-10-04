@@ -1019,7 +1019,11 @@ Object.entries(PAGES).forEach(([id, page]) => { if (!/^(todo|agenda|arbre)/.test
 // l'icône de l'arbre = niveau 1, puis vitres 2 à 5 (vert = terminé, orange = en cours, rouge = pas commencé).
 const ARBRES_KEY = 'arbres';
 const arbres = (() => { try { return JSON.parse(localStorage.getItem(ARBRES_KEY)) || []; } catch { return []; } })();
-const ARBRES_PER_PAGE = 6, ARBRE_CELLS = ['1,2', '1,4', '1,6', '3,2', '3,4', '3,6'];
+// Téléphone (5 × 9) : 9 arbres par page, rangées 2 / 4 / 6, colonnes 0 / 2 / 4 (cases déjà mobiles, préfixe « m »).
+const ARBRE_CELLS = ['1,2', '1,4', '1,6', '3,2', '3,4', '3,6'];
+const ARBRE_CELLS_MOBILE = [2, 4, 6].flatMap(r => [0, 2, 4].map(c => `m${r},${c}`));
+const arbreCells = () => isMobileLayout() ? ARBRE_CELLS_MOBILE : ARBRE_CELLS;
+const arbresPerPage = () => arbreCells().length;
 const arbresPageId = k => k === 1 ? 'arbres' : `arbres-${k}`;   // k : numéro de page (à partir de 1)
 function saveArbres() {
   try { localStorage.setItem(ARBRES_KEY, JSON.stringify(arbres)); } catch {}
@@ -1181,7 +1185,7 @@ function arbreLists() {
 }
 // Page de liste d'où l'on a ouvert chaque arbre (clé : n) : la flèche de retour et la suppression y ramènent.
 const arbreFrom = {};
-const arbreBackPage = n => arbreFrom[n] && PAGES[arbreFrom[n]] ? arbreFrom[n] : arbresPageId(Math.ceil(n / ARBRES_PER_PAGE));
+const arbreBackPage = n => arbreFrom[n] && PAGES[arbreFrom[n]] ? arbreFrom[n] : arbresPageId(Math.ceil(n / arbresPerPage()));
 // Suppression d'un arbre (tête rouge en haut à gauche de sa page), après confirmation ; retour à sa liste.
 function deleteArbre(a) {
   openConfirm({
@@ -1190,13 +1194,13 @@ function deleteArbre(a) {
     noLabel: 'Retour', yesLabel: '§cSupprimer',
     onYes: () => {
       const from = arbreBackPage(arbres.indexOf(a) + 1);
-      const pagesOf = l => Array.from({ length: Math.max(1, Math.ceil(l.trees.length / ARBRES_PER_PAGE)) }, (_, j) => l.pageId(j + 1));
+      const pagesOf = l => Array.from({ length: Math.max(1, Math.ceil(l.trees.length / arbresPerPage())) }, (_, j) => l.pageId(j + 1));
       const list = arbreLists().find(l => pagesOf(l).includes(from)) || arbreLists()[0];
       const pos = list.trees.indexOf(a);
       arbres.splice(arbres.indexOf(a), 1);
       saveArbres();
       refreshArbres();
-      const k = Math.max(1, Math.ceil(pos / ARBRES_PER_PAGE));   // page où il était (ou la précédente)
+      const k = Math.max(1, Math.ceil(pos / arbresPerPage()));   // page où il était (ou la précédente)
       location.hash = PAGES[list.pageId(k)] ? list.pageId(k) : list.back;   // liste vide : retour au round
     },
   });
@@ -1325,16 +1329,16 @@ function refreshArbres() {
   // les numéros changent après une suppression : on reconstruit toutes les pages des arbres
   for (const id of Object.keys(PAGES)) if (/^arbres?-/.test(id)) delete PAGES[id];
   for (const list of arbreLists()) {
-    const pages = Math.max(1, Math.ceil(list.trees.length / ARBRES_PER_PAGE));
+    const pages = Math.max(1, Math.ceil(list.trees.length / arbresPerPage()));
     for (let k = 1; k <= pages; k++) {
       const slots = { ...navSlots(list.back), ...prevPageSlot(k, list.pageId) };
       slots['0,4'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };   // sur toutes les listes d'arbres
       if (list.add) slots['0,8'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
       if (k < pages) slots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: list.pageId(k + 1) };
-      list.trees.slice((k - 1) * ARBRES_PER_PAGE, k * ARBRES_PER_PAGE).forEach((a, i) => {
+      list.trees.slice((k - 1) * arbresPerPage(), k * arbresPerPage()).forEach((a, i) => {
         const n = arbres.indexOf(a) + 1, pct = arbreProgress(a);
         const from = list.pageId(k);
-        slots[ARBRE_CELLS[i]] = {
+        slots[arbreCells()[i]] = {
           ...arbreIcon(a), count: Math.floor(pct / 10) || null,
           tooltip: () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? [...wrapText(a.description, 180).map(l => '§7' + l), ''] : []), progressLine(a, pct), '', '§eClique pour voir !'],
           action: () => { arbreFrom[n] = from; location.hash = `arbre-${n}`; },
@@ -1703,13 +1707,10 @@ const MOBILE_PLACES = {
   // arbres (bûche) à sa gauche et montre (agenda) à sa droite
   main: { '2,4': '2,2', '2,5': '4,2', '2,1': '4,1', '2,6': '4,3' },
 };
-// Rangées décalées sur téléphone (rangée ordinateur -> rangée mobile) :
-// listes d'arbres = arbres une rangée plus bas, pour ne pas coller à la montre et à la tête du haut.
-const MOBILE_PAGE_ROWS = id => /^arbres(-|$)/.test(id) ? { 1: 2, 3: 4 } : null;
 const mobileCache = new WeakMap();
 function mobileSlots(id, slots) {
   if (mobileCache.has(slots)) return mobileCache.get(slots);
-  const out = {}, special = MOBILE_PAGE_COLS(id), rows = MOBILE_PAGE_ROWS(id) || {};
+  const out = {}, special = MOBILE_PAGE_COLS(id);
   const place = (r, c, slot) => {
     for (let d = 0; d < 5; d++)   // place libre la plus proche dans la rangée, puis rangées suivantes
       for (const cc of [c - d, c + d]) if (cc >= 0 && cc < 5 && !out[`${r},${cc}`]) { out[`${r},${cc}`] = slot; return; }
@@ -1726,7 +1727,7 @@ function mobileSlots(id, slots) {
     const [r, c] = key.split(',').map(Number);
     if (special && special[c] != null) place(r, special[c], slot);
     else if (r === 5) place(8, MOBILE_NAV_COLS[c], slot);
-    else place(rows[r] ?? r, MOBILE_COLS[c], slot);
+    else place(r, MOBILE_COLS[c], slot);
   }
   mobileCache.set(slots, out);
   return out;
@@ -3480,7 +3481,7 @@ function resize() {
   if (isMobileLayout() !== lastMobile) {
     const first = lastMobile === null;
     lastMobile = isMobileLayout();
-    if (!first) { refreshTodo(); refreshAgenda(); }
+    if (!first) { refreshTodo(); refreshAgenda(); refreshArbres(); }
   }
   sizeGui();
   state.hovered = null;
