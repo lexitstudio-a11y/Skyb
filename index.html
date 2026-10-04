@@ -1972,9 +1972,10 @@ function onMove(ev) {
     if (slot && slot.tooltip) {
       const lines = typeof slot.tooltip === 'function' ? slot.tooltip() : slot.tooltip;
       // Texte plus petit si l'overlay ne tient pas dans la fenêtre.
-      // téléphone : overlay à l'échelle du coffre, en pixels de l'écran (Retina) ; réduit s'il ne tient pas
+      // téléphone : overlay en pixels de l'écran (Retina), un peu plus de la moitié de l'échelle du coffre ;
+      // réduit s'il ne tient pas
       const R = guiRatio();
-      for (let ts = isMobileLayout() ? Math.round(state.S * R) : tooltipScale(state.S); ; ts--) {
+      for (let ts = isMobileLayout() ? Math.max(2, Math.round(state.S * R * 0.55)) : tooltipScale(state.S); ; ts--) {
         renderTooltip(tip, font, lines, ts);
         tip.style.width = tip.width / R + 'px';
         tip.style.height = tip.height / R + 'px';
