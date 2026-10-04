@@ -3269,9 +3269,11 @@ function renderTimeblock() {
   }
   const btn = [Math.floor(W / 2) - 32, py + ph - 26, 64, 20];
   const photo = [px + pw - 8 - 50, py + ph - 26, 50, 20];   // « Photo » en bas à droite
+  const cal = [px + 8, py + ph - 26, 50, 20];               // « Agenda » en bas à gauche (export vers Google Agenda)
   drawButton(ctx, btn[0], btn[1], btn[2], 'Terminé', tb.hoverDone, S);
   drawButton(ctx, photo[0], photo[1], photo[2], 'Photo', tb.hoverPhoto, S);
-  tb.layout = { S, grid, btn, photo, yOf };
+  drawButton(ctx, cal[0], cal[1], cal[2], 'Agenda', tb.hoverCal, S);
+  tb.layout = { S, grid, btn, photo, cal, yOf };
 }
 
 // --- « Photo » : image 1179 x 2556 (format d'écran d'iPhone) des blocs de la journée, pour un fond d'écran ---
@@ -3282,6 +3284,30 @@ let photoBackground = null;
 function loadPhotoBackground() {
   photoBackground ||= new Promise(res => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = 'assets/background.webp'; });
   return photoBackground;
+}
+// « Agenda » : fichier .ics avec les blocs de la journée, à ouvrir pour les ajouter à Google Agenda (ou à l'agenda
+// du téléphone relié au compte Google). Heures « locales » : elles gardent le fuseau de l'agenda qui les reçoit.
+function exportTimeblockIcs() {
+  const blocks = tbBlocks();
+  if (!blocks.length) { showToast({ title: 'Aucun bloc', text: `Rien à exporter pour le ${tb.date}`, color: '#FF5555', duration: 3000 }); return; }
+  const [d, m, y] = tb.date.split('/'), day = `${y}${m}${d}`;
+  const at = min => `${day}T${String(Math.floor(min / 60)).padStart(2, '0')}${String(min % 60).padStart(2, '0')}00`;
+  const esc = t => String(t || 'Bloc').replace(/[\\;,]/g, c => '\\' + c).replace(/\n/g, '\\n');
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//SkyBlock Menu//Timeblock//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  blocks.forEach((b, i) => lines.push(
+    'BEGIN:VEVENT', `UID:skyblock-${day}-${b.debut}-${i}@skyblock-menu`, `DTSTAMP:${stamp}`,
+    `DTSTART:${at(b.debut)}`, `DTEND:${at(Math.min(b.fin, 24 * 60 - 1))}`, `SUMMARY:${esc(b.titre)}`, 'END:VEVENT'));
+  lines.push('END:VCALENDAR');
+  const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `timeblock-${y}-${m}-${d}.ics`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  showToast({ title: 'Timeblock exporté', text: `${blocks.length} bloc${blocks.length > 1 ? 's' : ''} : ouvre le fichier pour l'ajouter`, duration: 4000 });
 }
 // « Photo » -> aperçu de l'image en fond d'écran d'iPhone -> « Télécharger l'image » -> choix du dossier.
 async function timeblockPhoto() {
@@ -3704,6 +3730,7 @@ timeblockCanvas.addEventListener('pointerdown', ev => {
   const p = tbPoint(ev);
   if (inRect(ev, tb.layout.btn, tb.layout.S)) { playClick(); closeTimeblock(); return; }
   if (inRect(ev, tb.layout.photo, tb.layout.S)) { playClick(); timeblockPhoto(); return; }
+  if (inRect(ev, tb.layout.cal, tb.layout.S)) { playClick(); exportTimeblockIcs(); return; }
   if (!tbInGrid(p)) return;
   timeblockCanvas.setPointerCapture(ev.pointerId);
   const t = tbTimeAt(p.y), block = tbBlockAt(p);
@@ -3720,9 +3747,10 @@ timeblockCanvas.addEventListener('pointermove', ev => {
   const p = tbPoint(ev), d = tb.drag;
   if (!d) {   // curseur selon ce qui est survolé
     const block = tbInGrid(p) && tbBlockAt(p);
-    const onBtn = inRect(ev, tb.layout.btn, tb.layout.S), onPhoto = inRect(ev, tb.layout.photo, tb.layout.S);
+    const onBtn = inRect(ev, tb.layout.btn, tb.layout.S), onPhoto = inRect(ev, tb.layout.photo, tb.layout.S), onCal = inRect(ev, tb.layout.cal, tb.layout.S);
     if (onPhoto !== !!tb.hoverPhoto) { tb.hoverPhoto = onPhoto; renderTimeblock(); }
-    timeblockCanvas.style.cursor = onBtn || onPhoto ? 'pointer' : block ? (p.y > tb.layout.yOf(block.fin) - 4 ? 'ns-resize' : 'move') : tbInGrid(p) ? 'crosshair' : '';
+    if (onCal !== !!tb.hoverCal) { tb.hoverCal = onCal; renderTimeblock(); }
+    timeblockCanvas.style.cursor = onBtn || onPhoto || onCal ? 'pointer' : block ? (p.y > tb.layout.yOf(block.fin) - 4 ? 'ns-resize' : 'move') : tbInGrid(p) ? 'crosshair' : '';
     if (onBtn !== tb.hoverDone) { tb.hoverDone = onBtn; renderTimeblock(); }
     return;
   }
