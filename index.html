@@ -754,6 +754,7 @@ function toggleDA() {
   try { localStorage.setItem(DA_KEY, da); } catch {}
   document.documentElement.dataset.da = da;
   hideTooltip();
+  refreshArbres();
   renderGui();
   showToast({ icon: 'cadre_da', title: 'D.A changée', text: `D.A ${DA_LABELS[da]}`, duration: 3000 });
 }
@@ -1364,7 +1365,8 @@ function arbresScrollPage(list) {
     const open = () => { arbreFrom[n] = list.pageId(1); location.hash = `arbre-${n}`; };
     const tooltip = () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? [...wrapText(a.description, 180).map(l => '§7' + l), ''] : []), progressLine(a, pct), '', '§eClique pour voir !'];
     slots[`v${r},0`] = { ...arbreIcon(a), count: Math.floor(pct / 10) || null, tooltip, action: open };
-    slots[`v${r},2`] = { span: 3, label: a.titre, color: arbreColor(n), tooltip, action: open };
+    slots[`v${r},2`] = { span: 3, label: a.titre, color: arbreColor(n), desc: () => progressLine(a, pct).replace(/^§7Progression : /, '§a'), tooltip, action: open };
+    if (da === 'test') return;   // D.A test : la description (progression) prend la place de la barre de vitres
     for (let level = 1; level <= 5; level++) {
       const st = levelState(a, level);
       slots[`v${r + 1},${level - 1}`] = { pane: LEVEL_PANES[st], tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
@@ -1764,6 +1766,10 @@ const MOBILE_LABELS = {
     '2,1': '#88B253', '2,5': '#EEC14C', '2,6': '#E25D33',
   },
 };
+const slotDesc = slot => {   // 2e ligne de l'overlay (description), sans ses couleurs
+  const lines = typeof slot.tooltip === 'function' ? slot.tooltip() : slot.tooltip;
+  return (lines && lines[1] || '').replace(/§./g, '');
+};
 const slotTitle = slot => {
   const lines = typeof slot.tooltip === 'function' ? slot.tooltip() : slot.tooltip;
   return (lines && lines[0] || '').replace(/§./g, '');
@@ -1787,7 +1793,7 @@ function mobileSlots(id, slots) {
   for (const [key, slot] of entries) if (fixed[key]) out[fixed[key]] = slot;
   for (const [key, style] of Object.entries(MOBILE_LABELS[id] || {})) {
     const slot = slots[key], [r] = fixed[key].split(',');
-    out[`${r},2`] = { span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), tooltip: slot.tooltip, open: slot.open, action: slot.action };
+    out[`${r},2`] = { span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot), tooltip: slot.tooltip, open: slot.open, action: slot.action };
   }
   for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && k[0] !== 'v' && !fixed[k])) {
     const [r, c] = key.split(',').map(Number);
@@ -1837,8 +1843,11 @@ function renderGui() {
   L.title.forEach((line, i) => drawText(ctx, font, line, 8, 6 + i * 9, '#404040', S));
 
   const slots = currentSlots(), scroll = scrollInfo(L);
-  for (let r = scroll ? SCROLL_VIEW : 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `${r},${c}`, 8 + c * 18, TOP + r * 18, S);
+  // D.A test : les blocs de titre (façon succès Minecraft, sous l'item) d'abord, puis les items par-dessus
+  const passes = da === 'test' ? ['span', 'item'] : [null];
+  for (const pass of passes)
+    for (let r = scroll ? SCROLL_VIEW : 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `${r},${c}`, 8 + c * 18, TOP + r * 18, S, pass);
   if (scroll) {
     // Liste qui défile (téléphone) : rangées 0 à 7 du coffre, découpées ; fonds de case redessinés au défilement.
     const off = Math.round(scroll.offset * S) / S, inner = COLS * 18;
@@ -1851,8 +1860,10 @@ function renderGui() {
       const y = TOP + r * 18 - off;
       if (da === 'test') { ctx.fillStyle = CHEST_BG; ctx.fillRect(7 * S, (y - 1) * S, inner * S, 18 * S); }
       else ctx.drawImage(T.generic_54, 7, 17, inner, 18, 7 * S, (y - 1) * S, inner * S, 18 * S);
-      for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `v${r},${c}`, 8 + c * 18, y, S);
     }
+    for (const pass of passes)
+      for (let r = Math.max(0, first - 1); r <= last; r++)   // rangée au-dessus : sa description peut dépasser
+        for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `v${r},${c}`, 8 + c * 18, TOP + r * 18 - off, S, pass);
     ctx.restore();
     if (L.bar) drawScrollbar(ctx, S, L, scroll);
   }
@@ -1888,9 +1899,11 @@ const onScrollbar = t => {
 };
 const CHEST_BG = '#C6C6C6';   // fond gris du coffre (generic_54)
 // Une case du coffre en (x, y) (pixels du GUI). Case « span » : bloc de couleur avec un texte sur plusieurs cases.
-function drawCell(ctx, slots, key, x, y, S) {
+function drawCell(ctx, slots, key, x, y, S, pass = null) {
   const px = x * S, py = y * S;
   const slot = slots[key];
+  if (pass && (pass === 'span') !== !!(slot && slot.span)) return;
+  if (pass === 'span') { drawAdvancement(ctx, slot, x, y, S, key === state.hovered); return; }
   if (slot === undefined && coveredBy(slots, key)) return;   // sous le bloc d'une case voisine
   const look = slot && { ...slot, ...(slot.look && slot.look()) };   // apparence du moment (période en cours…)
   if (da === 'test') {   // D.A test : case vide = rien ; un item garde sa case (creusée, comme en jeu)
@@ -1945,6 +1958,32 @@ function drawCell(ctx, slots, key, x, y, S) {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
     ctx.fillRect(px, py, ((slot && slot.span || 1) * 18 - 2) * S, 16 * S);
   }
+}
+// D.A test : bloc de titre façon « succès » Minecraft, de l'item (2 cases plus à gauche) jusqu'au bord droit :
+// barre bleue avec le titre en blanc, et en dessous une barre sombre avec la description en vert.
+function drawAdvancement(ctx, slot, x, y, S, hovered) {
+  const fr = (rx, ry, rw, rh, c) => { ctx.fillStyle = c; ctx.fillRect(rx * S, ry * S, rw * S, rh * S); };
+  const ix = x - 36, left = ix + 9, right = x + slot.span * 18 - 2, w = right - left;
+  const ts = Math.max(1, Math.round(S * 0.6)), k = S / ts;
+  const text = (t, tx, ty, color) => drawText(ctx, font, t, tx * k + 1, Math.round(ty * k), color, ts, true);
+  // description (sous la barre du titre)
+  const desc = typeof slot.desc === 'function' ? slot.desc() : slot.desc;
+  if (desc) {   // commence sous l'item, comme dans le jeu
+    fr(ix, y + 14, right - ix, 13, '#000000');
+    fr(ix + 1, y + 15, right - ix - 2, 11, '#212121');
+    text(fitText(desc, (right - ix - 6) * k), ix + 2, y + 18, '#55FF55');
+  }
+  // titre
+  fr(left, y + 1, w, 14, '#0C2236');
+  fr(left + 1, y + 2, w - 2, 12, '#3D79A8');
+  fr(left + 1, y + 2, w - 2, 1, '#6FA3CF');
+  fr(left + 1, y + 13, w - 2, 1, '#28587F');
+  const room = (right - ix - 22) * k, label = typeof slot.label === 'function' ? slot.label() : slot.label;
+  let lines = wrapText(label, room);
+  if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
+  const top = y + 8 - lines.length * 4.5 / k + 0.5 / k;
+  lines.forEach((l, i) => text(l, ix + 20, top + i * 9 / k, '#FFFFFF'));
+  if (hovered) fr(left, y + 1, w, 14, 'rgba(255, 255, 255, 0.25)');
 }
 // Case cachée par un bloc « span » commencé une ou deux cases plus à gauche : renvoie la clé de ce bloc.
 function coveredBy(slots, key) {
