@@ -164,12 +164,15 @@ const TEX = 'assets/textures/';
 const GUI_W = 176;
 const GUI_H = 132;          // 125 lignes du haut de generic_54 + 7 lignes de bordure basse
 // Disposition du coffre : 9 x 6 (ordinateur) ou 5 x 11 (téléphone en portrait, titre sur 2 lignes au besoin).
+const SCROLLBAR_EXTRA = 16;   // téléphone : 2 px d'écart + barre de défilement de 14 px
 const MOBILE_W = 14 + 5 * 18, MOBILE_ROWS = 11, MOBILE_NAV = MOBILE_ROWS - 1, MOBILE_TITLE_LINES = 2;
 function guiLayout() {
   if (!isMobileLayout()) return { mobile: false, cols: 9, rows: 6, w: GUI_W, h: GUI_H, top: 18, title: [pageTitle(state.page)] };
   const title = font ? wrapText(pageTitle(state.page), MOBILE_W - 16).slice(0, MOBILE_TITLE_LINES) : [''];
   const top = 18 + (title.length - 1) * 9;
-  return { mobile: true, cols: 5, rows: MOBILE_ROWS, w: MOBILE_W, h: top - 1 + MOBILE_ROWS * 18 + 7, top, title };
+  // page qui défile (plus de rangées que la zone visible) : coffre élargi pour la barre de défilement à droite
+  const page = PAGES[state.page], bar = !!(page && page.scrollRows > MOBILE_NAV);
+  return { mobile: true, cols: 5, rows: MOBILE_ROWS, w: MOBILE_W + (bar ? SCROLLBAR_EXTRA : 0), h: top - 1 + MOBILE_ROWS * 18 + 7, top, title, bar };
 }
 const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la case
 
@@ -1851,8 +1854,38 @@ function renderGui() {
       for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `v${r},${c}`, 8 + c * 18, y, S);
     }
     ctx.restore();
+    if (L.bar) drawScrollbar(ctx, S, L, scroll);
   }
 }
+// Barre de défilement façon Minecraft (inventaire créatif) : rail creusé à droite de la liste, curseur en relief.
+function scrollbarRect(L) {
+  return { x: 9 + L.cols * 18, y: L.top - 1, w: 14, h: SCROLL_VIEW * 18 - 2, thumb: 15 };
+}
+function drawScrollbar(ctx, S, L, scroll) {
+  const b = scrollbarRect(L), fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
+  fr(b.x, b.y, b.w, b.h, '#FFFFFF');            // rail : ombre en haut à gauche, lumière en bas à droite
+  fr(b.x, b.y, b.w - 1, b.h - 1, '#373737');
+  fr(b.x + 1, b.y + 1, b.w - 2, b.h - 2, '#8B8B8B');
+  const ty = Math.round(b.y + 1 + (b.h - 2 - b.thumb) * (scroll.max ? scroll.offset / scroll.max : 0)), tx = b.x + 1, tw = b.w - 2;
+  fr(tx, ty, tw, b.thumb, '#555555');           // curseur : lumière en haut à gauche, ombre en bas à droite
+  fr(tx, ty, tw - 1, b.thumb - 1, '#FFFFFF');
+  fr(tx + 1, ty + 1, tw - 2, b.thumb - 2, '#C6C6C6');
+}
+// Position de défilement quand on fait glisser le curseur de la barre (y en px CSS de l'écran).
+function scrollFromBar(clientY) {
+  const L = guiLayout(), b = scrollbarRect(L), sc = scrollInfo(L);
+  if (!sc) return;
+  const gy = (clientY - canvas.getBoundingClientRect().top) / state.S;
+  scrolls[state.page] = Math.max(0, Math.min(1, (gy - b.y - 1 - b.thumb / 2) / (b.h - 2 - b.thumb))) * sc.max;
+  renderGui();
+}
+const onScrollbar = t => {
+  const L = guiLayout();
+  if (!L.bar) return false;
+  const b = scrollbarRect(L), r = canvas.getBoundingClientRect();
+  const gx = (t.clientX - r.left) / state.S, gy = (t.clientY - r.top) / state.S;
+  return gx >= b.x - 2 && gx <= b.x + b.w + 2 && gy >= b.y && gy <= b.y + b.h;
+};
 const CHEST_BG = '#C6C6C6';   // fond gris du coffre (generic_54)
 // Une case du coffre en (x, y) (pixels du GUI). Case « span » : bloc de couleur avec un texte sur plusieurs cases.
 function drawCell(ctx, slots, key, x, y, S) {
@@ -1937,7 +1970,7 @@ function scrollInfo(L = guiLayout()) {
 // Coffre de 5 x 11 assemblé à partir des morceaux de generic_54 : coins et bords, bande du titre (plus haute
 // si le titre tient sur 2 lignes), 11 rangées de 5 cases, bordure du bas.
 function drawMobileChest(ctx, S, L) {
-  const g = T.generic_54, inner = L.cols * 18, right = 7 + inner;
+  const g = T.generic_54, inner = L.cols * 18 + (L.bar ? SCROLLBAR_EXTRA : 0), right = 7 + inner;
   const piece = (sx, sy, sw, sh, dx, dy, dw = sw, dh = sh) => ctx.drawImage(g, sx, sy, sw, sh, dx * S, dy * S, dw * S, dh * S);
   const head = L.top - 1;   // hauteur de la bande du titre
   piece(0, 0, 7, 10, 0, 0); piece(7, 0, inner, 10, 7, 0); piece(169, 0, 7, 10, right, 0);
@@ -1947,6 +1980,7 @@ function drawMobileChest(ctx, S, L) {
     const y = head + r * 18;
     piece(0, 17, 7, 18, 0, y); piece(7, 17, inner, 18, 7, y); piece(169, 17, 7, 18, right, y);
   }
+  if (L.bar) { ctx.fillStyle = CHEST_BG; ctx.fillRect((7 + L.cols * 18) * S, head * S, SCROLLBAR_EXTRA * S, L.rows * 18 * S); }
   const bottom = head + L.rows * 18;
   piece(0, 215, 7, 7, 0, bottom); piece(7, 215, inner, 7, 7, bottom); piece(169, 215, 7, 7, right, bottom);
 }
@@ -2069,6 +2103,13 @@ function onTouchStart(ev) {
   const t = ev.touches[0];
   stopFling();
   if (!tip.hidden || state.hovered) onLeave();   // un overlay resté affiché disparaît au toucher suivant
+  if (onScrollbar(t)) {   // barre de défilement : le curseur suit le doigt
+    clearTimeout(press.timer);
+    Object.assign(press, { x: t.clientX, y: t.clientY, long: false, drag: null, bar: true });
+    scrollFromBar(t.clientY);
+    return;
+  }
+  press.bar = false;
   const key = slotAt(t), scrollable = scrollInfo() && key && key[0] === 'v';
   Object.assign(press, { x: t.clientX, y: t.clientY, long: false, drag: scrollable ? { y: t.clientY, moving: false, t: performance.now(), v: 0 } : null });
   clearTimeout(press.timer);
@@ -2082,6 +2123,7 @@ function onTouchStart(ev) {
 function onTouchMove(ev) {
   const t = ev.touches[0];
   if (t && Math.hypot(t.clientX - press.x, t.clientY - press.y) > 10) clearTimeout(press.timer);
+  if (t && press.bar) { ev.preventDefault(); scrollFromBar(t.clientY); return; }
   const d = press.drag;
   if (!t || !d || press.long) return;
   if (!d.moving && Math.abs(t.clientY - press.y) > 8) { d.moving = true; d.y = t.clientY; clearTimeout(press.timer); }
@@ -2095,6 +2137,7 @@ function onTouchMove(ev) {
 }
 function onTouchEnd(ev) {
   clearTimeout(press.timer);
+  if (press.bar) { press.bar = false; ev.preventDefault(); press.blockUntil = Date.now() + 400; return; }
   const d = press.drag;
   press.drag = null;
   if (d && d.moving) {
@@ -3714,7 +3757,8 @@ headCanvas.addEventListener('click', ev => {
 // Taille du canevas du coffre (l'échelle se calcule avec la hauteur maximale pour ne pas changer d'une page à l'autre).
 function sizeGui() {
   const L = guiLayout(), maxH = L.mobile ? 18 + (MOBILE_TITLE_LINES - 1) * 9 - 1 + MOBILE_ROWS * 18 + 7 : GUI_H;
-  const fit = Math.min(viewW() / (L.w + 16), viewH() / (maxH + 16)), R = guiRatio();
+  const maxW = L.mobile ? MOBILE_W + SCROLLBAR_EXTRA : L.w;   // même échelle avec ou sans barre de défilement
+  const fit = Math.min(viewW() / (maxW + 16), viewH() / (maxH + 16)), R = guiRatio();
   // téléphone : échelle au 1/R près (pixels de l'écran entiers), pour remplir au mieux la hauteur
   state.S = Math.max(2, Math.min(5, Math.floor(fit * R) / R));
   setGuiSize(L);
