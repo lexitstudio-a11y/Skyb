@@ -2274,26 +2274,27 @@ function drawCompactAdvancement(ctx, slot, ix, left, right, y, S, k, text, hover
   const w = right - left, color = (typeof slot.color === 'function' ? slot.color() : slot.color) || '#3D79A8';
   const open = slot.expanded && advDesc(slot, S);
   if (open) {   // description dépliée : sous la barre de progression
-    fr(ix - 1, y + 20, right - ix + 1, open.h - 4, '#000000');
-    fr(ix, y + 20, right - ix - 1, open.h - 5, '#212121');
-    open.lines.forEach((l, i) => text(l, ix + 2, y + 23 + i * 9 / k, '#55FF55'));
+    fr(ix - 1, y + 21, right - ix + 1, open.h - 4, '#000000');
+    fr(ix, y + 21, right - ix - 1, open.h - 5, '#212121');
+    open.lines.forEach((l, i) => text(l, ix + 2, y + 24 + i * 9 / k, '#55FF55'));
   }
   // barre de progression (verte, comme le chargement du monde) avec son contour noir
   const bx = ix - 1, pct = slot.progress ? Math.max(0, Math.min(100, slot.progress())) : 0, bw = right - bx - 2;   // bx : bord de la case
-  fr(bx, y + 17, right - bx, 4, '#000000');
-  fr(bx + 1, y + 17, bw, 3, '#3C3C3C');
-  if (pct > 0) fr(bx + 1, y + 17, Math.max(1, Math.round(bw * pct / 100)), 3, '#00FF00');
-  // barre de titre : même hauteur que la case de l'item
-  fr(left, y - 1, w, 18, shade(color, 0.25));
-  fr(left + 1, y, w - 2, 16, color);
+  fr(bx, y + 18, right - bx, 3, '#000000');
+  fr(bx + 1, y + 18, bw, 2, '#3C3C3C');
+  if (pct > 0) fr(bx + 1, y + 18, Math.max(1, Math.round(bw * pct / 100)), 2, '#00FF00');
+  // barre de titre : depuis le bord de la case de l'item (qui est dessinée par-dessus), 1 px plus haute que la case,
+  // pour que son contour entoure le bord clair de la case
+  fr(bx, y - 1, right - bx, 19, shade(color, 0.25));
+  fr(left + 1, y, w - 2, 17, color);
   fr(left + 1, y, w - 2, 1, shade(color, 1.4));
-  fr(left + 1, y + 15, w - 2, 1, shade(color, 0.7));
+  fr(left + 1, y + 16, w - 2, 1, shade(color, 0.7));
   const tx = ix + 18 * (slot.inset || 1) + 2, room = (right - tx - 2) * k, label = typeof slot.label === 'function' ? slot.label() : slot.label;
   let lines = wrapText(label, room);
   if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
-  const top = y + 8 - lines.length * 4.5 / k + 0.5 / k;
+  const top = y + 8.5 - lines.length * 4.5 / k + 0.5 / k;
   lines.forEach((l, i) => text(l, tx, top + i * 9 / k, slot.text || '#FFFFFF'));
-  if (hovered) fr(left, y - 1, w, 18, 'rgba(255, 255, 255, 0.25)');
+  if (hovered) fr(left, y - 1, w, 19, 'rgba(255, 255, 255, 0.25)');
 }
 // Description dépliée d'un bloc « succès » (span 3 en colonne 2) : lignes coupées à la largeur, hauteur du cadre.
 function advDesc(slot, S = state.S * guiRatio()) {
