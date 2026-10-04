@@ -1942,6 +1942,18 @@ function slotAt(ev) {
   return L.mobile ? coveredBy(currentSlots(), `${row},${c}`) || `${row},${c}` : `${row},${c}`;
 }
 
+// Lignes d'overlay coupées à la largeur w (pixels de la police), en gardant leur couleur (§x) sur la suite.
+function wrapTipLines(lines, w) {
+  return lines.flatMap(line => {
+    if (textWidth(font, line) <= w) return [line];
+    let codes = '';
+    return wrapText(line, w).map(part => {
+      const out = codes + part;
+      for (const m of part.matchAll(/§(.)/g)) codes = /[0-9a-g]/i.test(m[1]) ? '§' + m[1] : codes + '§' + m[1];
+      return out;
+    });
+  });
+}
 // Taille affichée de l'overlay (en px CSS ; le canvas peut être en pixels de l'écran)
 const tipW = () => parseFloat(tip.style.width) || tip.width;
 const tipH = () => parseFloat(tip.style.height) || tip.height;
@@ -1972,10 +1984,16 @@ function onMove(ev) {
     if (slot && slot.tooltip) {
       const lines = typeof slot.tooltip === 'function' ? slot.tooltip() : slot.tooltip;
       // Texte plus petit si l'overlay ne tient pas dans la fenêtre.
-      // téléphone : overlay en pixels de l'écran (Retina), un peu plus de la moitié de l'échelle du coffre ;
-      // réduit s'il ne tient pas
       const R = guiRatio();
-      for (let ts = isMobileLayout() ? Math.max(2, Math.round(state.S * R * 0.55)) : tooltipScale(state.S); ; ts--) {
+      if (isMobileLayout()) {
+        // téléphone : même taille de texte pour tous les overlays (pixels de l'écran) ; une ligne trop longue
+        // passe à la ligne suivante au lieu de réduire le texte, et le cadre s'ajuste au contenu
+        const ts = Math.max(2, Math.round(state.S * R * 0.55));
+        renderTooltip(tip, font, wrapTipLines(lines, (viewW() - 8) * R / ts - 2 * (3 + TOOLTIP_PADDING)), ts);
+        tip.style.width = tip.width / R + 'px';
+        tip.style.height = tip.height / R + 'px';
+      }
+      else for (let ts = tooltipScale(state.S); ; ts--) {
         renderTooltip(tip, font, lines, ts);
         tip.style.width = tip.width / R + 'px';
         tip.style.height = tip.height / R + 'px';
