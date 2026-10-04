@@ -802,9 +802,8 @@ function toggleDA() {
   refreshArbres();
   refreshTodo();
   refreshAgenda();
-  // page qui n'existe plus dans cette D.A (ex. « arbres-2 »), ou Profil en D.A test sur téléphone : on change de page
-  // directement (defaultPage met déjà l'adresse à jour, sans événement de navigation)
-  const target = defaultPage(PAGES[state.page] ? state.page : state.page.startsWith('arbres') ? 'arbres' : 'main');
+  // changer de D.A ramène toujours aux Arbres de Progression (sans passer par un événement de navigation)
+  const target = 'arbres';
   if (target !== state.page) {
     if (location.hash.slice(1) !== target) history.replaceState(null, '', target === 'main' ? location.pathname + location.search : '#' + target);
     state.page = target;
