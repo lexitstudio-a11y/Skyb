@@ -259,7 +259,7 @@ const SERMENT_PANES = {
 function sermentColumn(col, n) {
   const panes = SERMENT_PANES[n];
   const slots = { [`0,${col}`]: { item: 'book', tooltip: sermentBookTooltip(n), open: `serment${n}` } };
-  panes.forEach((pane, i) => { slots[`${i + 1},${col}`] = { pane }; });
+  panes.forEach((pane, i) => { slots[`${i + 1},${col}`] = { pane, when: () => da !== 'test' }; });   // D.A test : pas de vitres
   return slots;
 }
 
@@ -1833,9 +1833,19 @@ const slotTitle = slot => {
   const lines = typeof slot.tooltip === 'function' ? slot.tooltip() : slot.tooltip;
   return (lines && lines[0] || '').replace(/§./g, '');
 };
-const mobileCache = new WeakMap();
+// D.A test : places et blocs de titre propres à cette D.A (remplacent ceux du dessus pour la page).
+const MOBILE_PLACES_DA2 = {
+  // Les Pilliers Temporels : un serment par ligne (livre à gauche, titre et description à droite), sans les vitres
+  serments: { '0,2': '2,0', '0,4': '4,0', '0,6': '6,0' },
+};
+const MOBILE_LABELS_DA2 = {
+  serments: { '0,2': '#4599DF', '0,4': '#88B253', '0,6': '#E25D33' },
+};
+const mobileCache = { minecraft: new WeakMap(), test: new WeakMap() };   // une disposition par D.A
 function mobileSlots(id, slots) {
-  if (mobileCache.has(slots)) return mobileCache.get(slots);
+  const cache = mobileCache[da];
+  if (cache.has(slots)) return cache.get(slots);
+  const da2 = da === 'test' && MOBILE_PLACES_DA2[id];
   const out = {}, special = MOBILE_PAGE_COLS(id);
   const place = (r, c, slot) => {
     for (let d = 0; d < 5; d++)   // place libre la plus proche dans la rangée, puis rangées suivantes
@@ -1848,9 +1858,9 @@ function mobileSlots(id, slots) {
   });
   for (const [key, slot] of entries.filter(([k]) => k[0] === 'm')) out[key.slice(1)] = slot;   // cases déjà mobiles
   for (const [key, slot] of entries.filter(([k]) => k[0] === 'v')) out[key] = slot;   // liste qui défile
-  const fixed = MOBILE_PLACES[id] || {};
+  const fixed = (da2 ? MOBILE_PLACES_DA2[id] : MOBILE_PLACES[id]) || {};
   for (const [key, slot] of entries) if (fixed[key]) out[fixed[key]] = slot;
-  for (const [key, style] of Object.entries(MOBILE_LABELS[id] || {})) {
+  for (const [key, style] of Object.entries((da2 ? MOBILE_LABELS_DA2[id] : MOBILE_LABELS[id]) || {})) {
     const slot = slots[key], [r] = fixed[key].split(',');
     out[`${r},2`] = { span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot), tooltip: slot.tooltip, open: slot.open, action: slot.action };
   }
@@ -1860,7 +1870,7 @@ function mobileSlots(id, slots) {
     else if (r === 5) place(MOBILE_NAV, MOBILE_NAV_COLS[c], slot);
     else place(r, MOBILE_COLS[c], slot);
   }
-  mobileCache.set(slots, out);
+  cache.set(slots, out);
   return out;
 }
 // Une case est un item (survol, overlay, clic) sauf les vitres.
