@@ -161,8 +161,8 @@ const evY = ev => ev.clientY;
 
 // Interface "Profil Joueur" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
 const TEX = 'assets/textures/';
-// Ordinateur : coffre de 12 x 7 (les pages sont décrites en 9 x 6 et replacées, voir deskSlots).
-const DESK_COLS = 12, DESK_ROWS = 7;
+// Ordinateur : coffre de 11 x 7 (les pages sont décrites en 9 x 6 et replacées, voir deskSlots).
+const DESK_COLS = 11, DESK_ROWS = 7;
 const GUI_W = 14 + DESK_COLS * 18;
 const GUI_H = 17 + DESK_ROWS * 18 + 7;   // bande du titre + rangées + bordure basse
 // Disposition du coffre : 9 x 6 (ordinateur) ou 5 x 11 (téléphone en portrait, titre sur 2 lignes au besoin).
@@ -713,7 +713,7 @@ function agendaGrid(list, slots, numbered) {
 function agendaSlots() {
   return agendaGrid(splitAgendas().recent, {
     '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', '§7Les agendas de plus de 7 jours.', '', '§eClique pour voir !'], open: 'agenda-autres' },
-    [daRows() ? (isMobileLayout() ? 'v0,4' : 'v0,11') : '0,8']: { image: 'beacon', tooltip: bilanStats },   // D.A test : dans la liste qui défile
+    [daRows() ? (isMobileLayout() ? 'v0,4' : 'v0,10') : '0,8']: { image: 'beacon', tooltip: bilanStats },   // D.A test : dans la liste qui défile
     // Tant que l'agenda d'aujourd'hui n'est pas écrit, la tête propose celui d'aujourd'hui (puis celui de demain).
     '5,8': {
       image: 'tete_plus_bleue', action: () => editAgenda(agendaToWrite()),
@@ -1411,7 +1411,7 @@ function pageRows(page) { return page.scrollRows || (page.slots && page.slots.ro
 // (fonctions déclarées : utilisées dès la construction des pages, plus haut dans le fichier)
 function daRows() { return da === 'test'; }
 // Lignes façon « succès » d'une liste qui défile, à partir de la rangée start. Téléphone : une par ligne (titre sur
-// 3 cases, description dépliable) ; ordinateur : deux par ligne (colonnes 0 et 7, titre sur 3 cases aussi).
+// 3 cases, description dépliable) ; ordinateur : deux par ligne (colonnes 0 et 6, titre sur 3 cases aussi).
 // entries : { icons: [[décalage de colonne, case], …], span: bloc de titre (sans sa largeur), data, refresh }.
 // Renvoie le nombre de rangées de la liste.
 function placeLines(slots, start, entries) {
@@ -1424,7 +1424,7 @@ function placeLines(slots, start, entries) {
     return r;
   }
   entries.forEach((e, i) => {
-    const c = i % 2 ? 7 : 0, r = start + 2 * Math.floor(i / 2);
+    const c = i % 2 ? 6 : 0, r = start + 2 * Math.floor(i / 2);
     for (const [dc, cell] of e.icons) slots[`v${r},${c + dc}`] = cell;
     slots[`v${r},${c + 2}`] = { ...e.span, span: 3 };
   });
@@ -1439,7 +1439,7 @@ function arbresScrollPage(list) {
   const pitch = da === 'test' ? 2 : 3;   // D.A test : blocs « succès » plus rapprochés (2 rangées par arbre)
   const slots = { ...navSlots(list.back) }, mobile = isMobileLayout(), lines = [];
   slots[mobile ? 'v0,2' : 'v0,5'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };
-  if (list.add) slots[mobile ? 'v0,4' : 'v0,11'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
+  if (list.add) slots[mobile ? 'v0,4' : 'v0,10'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
   let row = 2;
   list.trees.forEach(a => {
     const n = arbres.indexOf(a) + 1, pct = arbreProgress(a), r = row;
@@ -1871,14 +1871,14 @@ const MOBILE_LABELS_DA2 = {
   serments: { '0,2': '#4599DF', '0,4': '#88B253', '0,6': '#E25D33' },
 };
 const mobileCache = { minecraft: new WeakMap(), test: new WeakMap() };   // une disposition par D.A
-// D.A test sur ordinateur : mêmes lignes façon « succès » que sur téléphone, deux par ligne (item en colonne 0 ou 7,
-// titre sur les 3 cases à partir de la colonne 2 ou 9). Clé 9 x 6 -> place dans le coffre de 12 x 7.
+// D.A test sur ordinateur : mêmes lignes façon « succès » que sur téléphone, deux par ligne (item en colonne 0 ou 6,
+// titre sur les 3 cases à partir de la colonne 2 ou 8). Clé 9 x 6 -> place dans le coffre de 11 x 7.
 const PC_PLACES_DA2 = {
-  main: { '1,4': '0,11', '2,4': '1,0', '2,1': '1,7', '2,5': '3,0', '2,6': '3,7' },
-  serments: { '0,2': '1,0', '0,4': '1,7', '0,6': '3,0' },
+  main: { '1,4': '0,10', '2,4': '1,0', '2,1': '1,6', '2,5': '3,0', '2,6': '3,6' },
+  serments: { '0,2': '1,0', '0,4': '1,6', '0,6': '3,0' },
 };
-// Ordinateur : cases décrites en 9 x 6 replacées dans le coffre de 12 x 7 : bords gauche / droit aux bords
-// (colonnes 0 et 11), le reste décalé d'une colonne ; barre du bas (rangée 5) en rangée 6. Clés « v » : déjà placées.
+// Ordinateur : cases décrites en 9 x 6 replacées dans le coffre de 11 x 7 : bords gauche / droit aux bords
+// (colonnes 0 et 10), le reste décalé d'une colonne (le centre reste au centre) ; barre du bas (rangée 5) en rangée 6. Clés « v » : déjà placées.
 const deskCol = c => c === 0 ? 0 : c === 8 ? DESK_COLS - 1 : c + 1;
 const deskKey = key => { const [r, c] = key.split(',').map(Number); return `${r === 5 ? DESK_ROWS - 1 : r},${deskCol(c)}`; };
 const deskCache = { minecraft: new WeakMap(), test: new WeakMap() };
