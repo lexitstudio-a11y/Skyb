@@ -174,7 +174,7 @@ function guiLayout() {
     const page = PAGES[state.page], bar = !!(page && pageRows(page) > DESK_ROWS - 1);   // liste qui défile (D.A test) : barre à droite
     return { mobile: false, cols: DESK_COLS, rows: DESK_ROWS, view: DESK_ROWS - 1, w: GUI_W + (bar ? SCROLLBAR_EXTRA : 0), h: GUI_H, top: 18, title: [pageTitle(state.page)], bar };
   }
-  const title = font ? wrapText(pageTitle(state.page), MOBILE_W - 16).slice(0, MOBILE_TITLE_LINES) : [''];
+  const title = font ? wrapText(pageTitle(state.page), MOBILE_W - 16 - (da === 'test' ? HEAD_BTN.w + 2 : 0)).slice(0, MOBILE_TITLE_LINES) : [''];
   const top = 18 + (title.length - 1) * 9;
   // page qui défile (plus de rangées que la zone visible) : coffre élargi pour la barre de défilement à droite
   const page = PAGES[state.page], bar = !!(page && pageRows(page) > MOBILE_NAV);
@@ -806,6 +806,7 @@ function toggleDA() {
   sizeGui();
   renderGui();
 }
+const playJukebox = () => window.open('https://www.youtube.com/watch?v=x3bBQasjbfs', '_blank', 'noopener');
 const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Arbres de Progression' };
 const PAGES = {
   main: {
@@ -829,7 +830,7 @@ const PAGES = {
       },
       '2,6': { item: 'clock_00', tooltip: ['§aAgenda de la journée', ...LORE], open: 'agenda' },
       '5,8': { item: 'ender_pearl', tooltip: () => accountTooltip(), action: () => openAccount() },
-      '5,0': { image: 'jukebox', tooltip: ['§aJukebox', '§7Lance la musique.', '', '§eClique pour écouter !'], action: () => window.open('https://www.youtube.com/watch?v=x3bBQasjbfs', '_blank', 'noopener') },
+      '5,0': { image: 'jukebox', tooltip: ['§aJukebox', '§7Lance la musique.', '', '§eClique pour écouter !'], action: playJukebox },
     },
   },
   serments: {
@@ -1865,10 +1866,14 @@ const slotTitle = slot => {
 };
 // D.A test : places et blocs de titre propres à cette D.A (remplacent ceux du dessus pour la page).
 const MOBILE_PLACES_DA2 = {
+  // Profil : les 4 lignes ; cadre, tête, jukebox et perle de l'Ender passent dans le menu de la tête (en haut à gauche)
+  main: { '2,4': '2,0', '2,1': '4,0', '2,5': '6,0', '2,6': '8,0' },
   // Les Pilliers Temporels : un serment par ligne (livre à gauche, titre et description à droite), sans les vitres
   serments: { '0,2': '2,0', '0,4': '4,0', '0,6': '6,0' },
 };
+const MOBILE_HIDE_DA2 = { main: ['0,0', '1,4', '5,0', '5,8'] };
 const MOBILE_LABELS_DA2 = {
+  main: MOBILE_LABELS.main,
   serments: { '0,2': '#4599DF', '0,4': '#88B253', '0,6': '#E25D33' },
 };
 const mobileCache = { minecraft: new WeakMap(), test: new WeakMap() };   // une disposition par D.A
@@ -1925,11 +1930,12 @@ function mobileSlots(id, slots) {
   for (const [key, slot] of entries.filter(([k]) => k[0] === 'v')) out[key] = slot;   // liste qui défile
   const fixed = (da2 ? MOBILE_PLACES_DA2[id] : MOBILE_PLACES[id]) || {};
   for (const [key, slot] of entries) if (fixed[key]) out[fixed[key]] = slot;
+  const hidden = (da2 && MOBILE_HIDE_DA2[id]) || [];
   for (const [key, style] of Object.entries((da2 ? MOBILE_LABELS_DA2[id] : MOBILE_LABELS[id]) || {})) {
     const slot = slots[key], [r] = fixed[key].split(',');
     out[`${r},2`] = { span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot), dim: () => !!(slot.look && slot.look().dim), tooltip: slot.tooltip, open: slot.open, action: slot.action };
   }
-  for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && k[0] !== 'v' && !fixed[k])) {
+  for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && k[0] !== 'v' && !fixed[k] && !hidden.includes(k))) {
     const [r, c] = key.split(',').map(Number);
     if (special && special[c] != null) place(r, special[c], slot);
     else if (r === 5) place(MOBILE_NAV, MOBILE_NAV_COLS[c], slot);
@@ -1970,7 +1976,9 @@ function renderGui() {
     ctx.fillStyle = CHEST_BG;
     ctx.fillRect(7 * S, (TOP - 1) * S, COLS * 18 * S, ROWS * 18 * S);
   }
-  L.title.forEach((line, i) => drawText(ctx, font, line, 8, 6 + i * 9, '#404040', S));
+  const menuHead = L.mobile && da === 'test';   // D.A test sur téléphone : tête du joueur en haut à gauche (menu)
+  L.title.forEach((line, i) => drawText(ctx, font, line, menuHead ? HEAD_BTN.x + HEAD_BTN.w + 3 : 8, 6 + i * 9, '#404040', S));
+  if (menuHead && HEADS.profile) drawCube(ctx, HEADS.profile, (HEAD_BTN.x - 1) * S, (HEAD_BTN.y - 1.5) * S, S, HEAD_BTN.w / 16 * 0.95);
 
   const slots = currentSlots(), scroll = scrollInfo(L);
   // D.A test : les blocs de titre (façon succès Minecraft, sous l'item) d'abord, puis les items par-dessus
@@ -1997,6 +2005,59 @@ function renderGui() {
     ctx.restore();
     if (L.bar) drawScrollbar(ctx, S, L, scroll);
   }
+  if (menuHead && headMenu.open) drawHeadMenu(ctx, S);
+}
+// --- D.A test sur téléphone : tête du joueur en haut à gauche ; un toucher ouvre un petit menu déroulant ---
+const HEAD_BTN = { x: 6, y: 3, w: 13 };
+const headMenu = { open: false, hover: -1 };
+const headMenuItems = () => [
+  { head: 'steve', label: 'Modifier le profil', action: editProfile },
+  { image: 'cadre_da', label: 'Changer de D.A', action: toggleDA },
+  { image: 'jukebox', label: 'Jukebox', action: playJukebox },
+  { item: 'ender_pearl', label: session ? 'Compte' : 'Connexion', action: openAccount },
+];
+function headMenuRect(S = state.S * guiRatio()) {
+  const k = S / Math.max(1, Math.round(S * 0.6)), items = headMenuItems();
+  const w = Math.ceil(30 + Math.max(...items.map(i => textWidth(font, i.label))) / k);
+  return { x: 5, y: 17, w, h: 8 + items.length * 18, items, k };
+}
+function drawHeadMenu(ctx, S) {
+  const m = headMenuRect(S), ts = Math.max(1, Math.round(S * 0.6));
+  drawPanel(ctx, m.x, m.y, m.w, m.h, S);
+  m.items.forEach((it, i) => {
+    const y = m.y + 4 + i * 18, px = (m.x + 4) * S, py = (y + 1) * S;
+    ctx.drawImage(T.generic_54, 7, 17, 18, 18, px - S, py - S, 18 * S, 18 * S);   // case de l'icône
+    if (it.head) drawCube(ctx, HEADS[it.head], px, py, S, 0.85 * ITEM_SCALE);
+    else {
+      const img = T[it.image || it.item], size = 16 * S * ITEM_SCALE * (it.image ? 0.9 : 1);
+      const kk = size / Math.max(img.width, img.height), iw = img.width * kk, ih = img.height * kk;
+      ctx.imageSmoothingEnabled = !!it.image;
+      ctx.drawImage(img, px + (16 * S - iw) / 2, py + (16 * S - ih) / 2, iw, ih);
+      ctx.imageSmoothingEnabled = false;
+    }
+    drawText(ctx, font, it.label, Math.round((m.x + 24) * m.k), Math.round((y + 6) * m.k), '#404040', ts);
+    if (i === headMenu.hover) { ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'; ctx.fillRect((m.x + 3) * S, y * S, (m.w - 6) * S, 18 * S); }
+  });
+}
+// Clic / toucher pour la tête et son menu ; renvoie true s'il est pris (le reste du coffre ne réagit pas).
+function headMenuAt(ev) {
+  const r = canvas.getBoundingClientRect(), gx = (ev.clientX - r.left) / state.S, gy = (ev.clientY - r.top) / state.S;
+  const onHead = gx >= HEAD_BTN.x - 2 && gx <= HEAD_BTN.x + HEAD_BTN.w + 2 && gy >= 0 && gy <= HEAD_BTN.y + HEAD_BTN.w + 2;
+  if (!headMenu.open) return onHead ? 'head' : null;
+  const m = headMenuRect(), i = Math.floor((gy - m.y - 4) / 18);
+  if (onHead) return 'head';
+  return gx >= m.x && gx <= m.x + m.w && i >= 0 && i < m.items.length ? i : 'outside';
+}
+function headMenuClick(ev) {
+  if (!(isMobileLayout() && da === 'test')) return false;
+  const at = headMenuAt(ev);
+  if (at === null) return false;
+  if (at === 'head') { playClick(); headMenu.open = !headMenu.open; headMenu.hover = -1; hideTooltip(); renderGui(); return true; }
+  headMenu.open = false;
+  headMenu.hover = -1;
+  if (typeof at === 'number') { playClick(); renderGui(); headMenuItems()[at].action(); }
+  else renderGui();
+  return true;
 }
 // Barre de défilement façon Minecraft (inventaire créatif) : rail creusé à droite de la liste, curseur en relief.
 function scrollbarRect(L) {
@@ -2308,6 +2369,11 @@ function placeTooltip(ev) {
 }
 
 function onMove(ev) {
+  if (headMenu.open && isMobileLayout() && da === 'test') {   // menu ouvert : surbrillance de la ligne survolée
+    const at = headMenuAt(ev), hover = typeof at === 'number' ? at : -1;
+    if (hover !== headMenu.hover) { headMenu.hover = hover; renderGui(); }
+    return;
+  }
   const key = slotAt(ev);
   const slot = itemAt(key);
   const hovered = slot ? key : null;
@@ -2437,6 +2503,7 @@ function showPageFromHash() {
   if (tb.date) closeTimeblock(false);
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
+  headMenu.open = false;
   hideTooltip();
   if (state.page.startsWith('todo')) refreshTodo();   // retire les actions terminées depuis 30 jours
   if (state.page.startsWith('agenda')) refreshAgenda();   // les agendas de plus de 7 jours changent de page
@@ -2460,6 +2527,7 @@ const playClick = () => playSound(clickSound);
 
 function onClick(ev) {
   if (press.long || Date.now() < press.blockUntil) return;   // téléphone : lâcher d'un appui long
+  if (headMenuClick(ev)) return;   // D.A test (téléphone) : tête et son menu
   const slot = itemAt(slotAt(ev));
   if (!slot) return;
   playClick();
@@ -4068,6 +4136,7 @@ async function main() {
   refreshArbres();
   refreshAgenda();   // pages « Autres Journées » 2, 3… (créées selon le nombre d'anciens agendas)
   HEADS.profile = headFaces(T.steve);
+  HEADS.steve = headFaces(T.steve);   // tête neutre (menu « Modifier le profil »)
   if (profile.skin) loadSkin(profile.skin).then(img => { HEADS.profile = headFaces(img); renderGui(); }, () => {});
   const page = location.hash.slice(1);
   state.page = PAGES[page] ? page : 'main';
