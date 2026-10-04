@@ -802,8 +802,14 @@ function toggleDA() {
   refreshArbres();
   refreshTodo();
   refreshAgenda();
-  if (!PAGES[state.page]) location.hash = state.page.startsWith('arbres') ? 'arbres' : 'main';   // page qui n'existe plus dans cette D.A
-  else if (defaultPage(state.page) !== state.page) location.hash = defaultPage(state.page);   // D.A test : pas de Profil
+  // page qui n'existe plus dans cette D.A (ex. « arbres-2 »), ou Profil en D.A test sur téléphone : on change de page
+  // directement (defaultPage met déjà l'adresse à jour, sans événement de navigation)
+  const target = defaultPage(PAGES[state.page] ? state.page : state.page.startsWith('arbres') ? 'arbres' : 'main');
+  if (target !== state.page) {
+    if (location.hash.slice(1) !== target) history.replaceState(null, '', target === 'main' ? location.pathname + location.search : '#' + target);
+    state.page = target;
+    headMenu.open = false;
+  }
   sizeGui();
   renderGui();
 }
