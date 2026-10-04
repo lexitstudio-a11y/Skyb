@@ -161,15 +161,17 @@ const evY = ev => ev.clientY;
 
 // Interface "Profil Joueur" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
 const TEX = 'assets/textures/';
-const GUI_W = 176;
-const GUI_H = 132;          // 125 lignes du haut de generic_54 + 7 lignes de bordure basse
+// Ordinateur : coffre de 12 x 7 (les pages sont décrites en 9 x 6 et replacées, voir deskSlots).
+const DESK_COLS = 12, DESK_ROWS = 7;
+const GUI_W = 14 + DESK_COLS * 18;
+const GUI_H = 17 + DESK_ROWS * 18 + 7;   // bande du titre + rangées + bordure basse
 // Disposition du coffre : 9 x 6 (ordinateur) ou 5 x 11 (téléphone en portrait, titre sur 2 lignes au besoin).
 const SCROLLBAR_EXTRA = 10;   // téléphone : 2 px d'écart + barre de défilement de 8 px
 const MOBILE_W = 14 + 5 * 18, MOBILE_ROWS = 11, MOBILE_NAV = MOBILE_ROWS - 1, MOBILE_TITLE_LINES = 2;
 function guiLayout() {
   if (!isMobileLayout()) {
-    const page = PAGES[state.page], bar = !!(page && pageRows(page) > 5);   // liste qui défile (D.A test) : barre à droite
-    return { mobile: false, cols: 9, rows: 6, view: 5, w: GUI_W + (bar ? SCROLLBAR_EXTRA : 0), h: GUI_H, top: 18, title: [pageTitle(state.page)], bar };
+    const page = PAGES[state.page], bar = !!(page && pageRows(page) > DESK_ROWS - 1);   // liste qui défile (D.A test) : barre à droite
+    return { mobile: false, cols: DESK_COLS, rows: DESK_ROWS, view: DESK_ROWS - 1, w: GUI_W + (bar ? SCROLLBAR_EXTRA : 0), h: GUI_H, top: 18, title: [pageTitle(state.page)], bar };
   }
   const title = font ? wrapText(pageTitle(state.page), MOBILE_W - 16).slice(0, MOBILE_TITLE_LINES) : [''];
   const top = 18 + (title.length - 1) * 9;
@@ -689,7 +691,6 @@ function agendaGrid(list, slots, numbered) {
       const lines = a.texte.split('\n').map(l => l.trim()).filter(Boolean);
       return {
         icons: [[0, cell], [1, bilanSlot(a, n)]], data: a, refresh: refreshAgenda,
-        pcSpan: { label: a.date },   // ordinateur : bloc plus étroit, seulement la date
         span: {
           inset: 2, label: 'Agenda ' + a.date, color: BILAN_COLORS[a.bilan && a.bilan.note] || '#616161',
           desc: lines[0] || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
@@ -712,7 +713,7 @@ function agendaGrid(list, slots, numbered) {
 function agendaSlots() {
   return agendaGrid(splitAgendas().recent, {
     '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', '§7Les agendas de plus de 7 jours.', '', '§eClique pour voir !'], open: 'agenda-autres' },
-    [daRows() ? (isMobileLayout() ? 'v0,4' : 'v0,8') : '0,8']: { image: 'beacon', tooltip: bilanStats },   // D.A test : dans la liste qui défile
+    [daRows() ? (isMobileLayout() ? 'v0,4' : 'v0,11') : '0,8']: { image: 'beacon', tooltip: bilanStats },   // D.A test : dans la liste qui défile
     // Tant que l'agenda d'aujourd'hui n'est pas écrit, la tête propose celui d'aujourd'hui (puis celui de demain).
     '5,8': {
       image: 'tete_plus_bleue', action: () => editAgenda(agendaToWrite()),
@@ -1345,8 +1346,7 @@ function buildArbrePages(a, n) {
       ...navSlots(`arbre-${n}-type`),
     },
   };
-  // D.A test sur ordinateur : bloc une rangée plus haut, pour que la barre d'expérience tienne au-dessus de la barre du bas
-  const xpRow = da === 'test' && !isMobileLayout() ? 2 : 3;
+  const xpRow = 3;   // rangée du bloc de l'arbre (icône, vitres ou barre d'expérience)
   const arbreSlots = {
     '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
     '1,5': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§cnon définie'}`, '§7Affichée après les nombres (ex. 20J).', '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
@@ -1411,7 +1411,7 @@ function pageRows(page) { return page.scrollRows || (page.slots && page.slots.ro
 // (fonctions déclarées : utilisées dès la construction des pages, plus haut dans le fichier)
 function daRows() { return da === 'test'; }
 // Lignes façon « succès » d'une liste qui défile, à partir de la rangée start. Téléphone : une par ligne (titre sur
-// 3 cases, description dépliable) ; ordinateur : deux par ligne (colonnes 0 et 5, titre sur 2 cases).
+// 3 cases, description dépliable) ; ordinateur : deux par ligne (colonnes 0 et 7, titre sur 3 cases aussi).
 // entries : { icons: [[décalage de colonne, case], …], span: bloc de titre (sans sa largeur), data, refresh }.
 // Renvoie le nombre de rangées de la liste.
 function placeLines(slots, start, entries) {
@@ -1424,9 +1424,9 @@ function placeLines(slots, start, entries) {
     return r;
   }
   entries.forEach((e, i) => {
-    const c = i % 2 ? 5 : 0, r = start + 2 * Math.floor(i / 2);
+    const c = i % 2 ? 7 : 0, r = start + 2 * Math.floor(i / 2);
     for (const [dc, cell] of e.icons) slots[`v${r},${c + dc}`] = cell;
-    slots[`v${r},${c + 2}`] = { ...e.span, ...(e.pcSpan || {}), span: 2 };
+    slots[`v${r},${c + 2}`] = { ...e.span, span: 3 };
   });
   return start + 2 * Math.ceil(entries.length / 2);
 }
@@ -1438,8 +1438,8 @@ const arbreColor = n => TB_COLORS[(n * 7) % TB_COLORS.length];
 function arbresScrollPage(list) {
   const pitch = da === 'test' ? 2 : 3;   // D.A test : blocs « succès » plus rapprochés (2 rangées par arbre)
   const slots = { ...navSlots(list.back) }, mobile = isMobileLayout(), lines = [];
-  slots[mobile ? 'v0,2' : 'v0,4'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };
-  if (list.add) slots[mobile ? 'v0,4' : 'v0,8'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
+  slots[mobile ? 'v0,2' : 'v0,5'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };
+  if (list.add) slots[mobile ? 'v0,4' : 'v0,11'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
   let row = 2;
   list.trees.forEach(a => {
     const n = arbres.indexOf(a) + 1, pct = arbreProgress(a), r = row;
@@ -1826,8 +1826,7 @@ const state = { S: 3, hovered: null, page: 'main' };
 // Cases de la page ; une case avec when() ne s'affiche que si when() est vrai (contenu qui dépend de la date).
 function currentSlots() {
   let slots = PAGES[state.page].slots;
-  if (isMobileLayout()) slots = mobileSlots(state.page, slots);
-  else if (da === 'test') slots = pcSlots(state.page, slots);
+  slots = isMobileLayout() ? mobileSlots(state.page, slots) : deskSlots(state.page, slots);
   if (!Object.values(slots).some(s => s.when)) return slots;
   return Object.fromEntries(Object.entries(slots).filter(([, s]) => !s.when || s.when()));
 }
@@ -1872,31 +1871,37 @@ const MOBILE_LABELS_DA2 = {
   serments: { '0,2': '#4599DF', '0,4': '#88B253', '0,6': '#E25D33' },
 };
 const mobileCache = { minecraft: new WeakMap(), test: new WeakMap() };   // une disposition par D.A
-// D.A test sur ordinateur : mêmes lignes façon « succès » que sur téléphone, deux par ligne (item en colonne 0 ou 5,
-// titre sur les 2 cases à partir de la colonne 2 ou 7). Clé ordinateur -> nouvelle place de l'item.
+// D.A test sur ordinateur : mêmes lignes façon « succès » que sur téléphone, deux par ligne (item en colonne 0 ou 7,
+// titre sur les 3 cases à partir de la colonne 2 ou 9). Clé 9 x 6 -> place dans le coffre de 12 x 7.
 const PC_PLACES_DA2 = {
-  main: { '1,4': '0,8', '2,4': '1,0', '2,1': '1,5', '2,5': '3,0', '2,6': '3,5' },
-  serments: { '0,2': '1,0', '0,4': '1,5', '0,6': '3,0' },
+  main: { '1,4': '0,11', '2,4': '1,0', '2,1': '1,7', '2,5': '3,0', '2,6': '3,7' },
+  serments: { '0,2': '1,0', '0,4': '1,7', '0,6': '3,0' },
 };
-const pcCache = new WeakMap();
-function pcSlots(id, slots) {
-  const places = PC_PLACES_DA2[id];
-  if (!places) return slots;
-  if (pcCache.has(slots)) return pcCache.get(slots);
-  const out = {}, labels = { ...(MOBILE_LABELS[id] || {}), ...(MOBILE_LABELS_DA2[id] || {}) };
-  for (const [key, slot] of Object.entries(slots)) {
-    const to = places[key] || key;
+// Ordinateur : cases décrites en 9 x 6 replacées dans le coffre de 12 x 7 : bords gauche / droit aux bords
+// (colonnes 0 et 11), le reste décalé d'une colonne ; barre du bas (rangée 5) en rangée 6. Clés « v » : déjà placées.
+const deskCol = c => c === 0 ? 0 : c === 8 ? DESK_COLS - 1 : c + 1;
+const deskKey = key => { const [r, c] = key.split(',').map(Number); return `${r === 5 ? DESK_ROWS - 1 : r},${deskCol(c)}`; };
+const deskCache = { minecraft: new WeakMap(), test: new WeakMap() };
+function deskSlots(id, slots) {
+  const cache = deskCache[da];
+  if (cache.has(slots)) return cache.get(slots);
+  const places = (da === 'test' && PC_PLACES_DA2[id]) || {}, out = {};
+  const labels = { ...(MOBILE_LABELS[id] || {}), ...(MOBILE_LABELS_DA2[id] || {}) };
+  const entries = Object.entries(slots).sort(([a], [b]) => !!places[b] - !!places[a]);   // places choisies d'abord
+  for (const [key, slot] of entries) {
+    if (key[0] === 'v') { out[key] = slot; continue; }
+    const to = places[key] || deskKey(key);
     if (!places[key] && out[to]) continue;   // case déjà prise par un bloc de titre
     out[to] = slot;
-    if (places[key] && labels[key]) {
+    if (places[key] && labels[key]) {   // D.A test : bloc de titre sur les 3 cases à partir de 2 colonnes à droite
       const [r, c] = to.split(',').map(Number), style = labels[key];
       out[`${r},${c + 2}`] = {
-        span: 2, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot),
+        span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot),
         dim: () => !!(slot.look && slot.look().dim), tooltip: slot.tooltip, open: slot.open, action: slot.action,
       };
     }
   }
-  pcCache.set(slots, out);
+  cache.set(slots, out);
   return out;
 }
 function mobileSlots(id, slots) {
@@ -1957,11 +1962,7 @@ function renderGui() {
     setGuiSize(L);
     ctx.imageSmoothingEnabled = false;
   }
-  if (!L.mobile && !L.bar) {
-    // Fond du coffre : haut de generic_54 (titre + 6 rangées) + bordure arrondie du bas.
-    ctx.drawImage(T.generic_54, 0, 0, GUI_W, 125, 0, 0, GUI_W * S, 125 * S);
-    ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
-  } else drawMobileChest(ctx, S, L);
+  drawMobileChest(ctx, S, L);   // coffre assemblé à partir des morceaux de generic_54 (ordinateur et téléphone)
   if (da === 'test') {   // D.A test : pas de cases vides, seulement le fond du coffre (les items gardent leur case)
     ctx.fillStyle = CHEST_BG;
     ctx.fillRect(7 * S, (TOP - 1) * S, COLS * 18 * S, ROWS * 18 * S);
@@ -2202,7 +2203,13 @@ function scrollInfo(L = guiLayout()) {
 // si le titre tient sur 2 lignes), 11 rangées de 5 cases, bordure du bas.
 function drawMobileChest(ctx, S, L) {
   const g = T.generic_54, inner = L.cols * 18 + (L.bar ? SCROLLBAR_EXTRA : 0), right = 7 + inner;
-  const piece = (sx, sy, sw, sh, dx, dy, dw = sw, dh = sh) => ctx.drawImage(g, sx, sy, sw, sh, dx * S, dy * S, dw * S, dh * S);
+  const piece = (sx, sy, sw, sh, dx, dy, dw = sw, dh = sh) => {
+    if (sx === 7 && sw > 162) {   // bande intérieure plus large que la texture (9 cases) : par morceaux de 9 cases
+      for (let o = 0; o < sw; o += 162) { const w = Math.min(162, sw - o); ctx.drawImage(g, 7, sy, w, sh, (dx + o) * S, dy * S, w * S, dh * S); }
+      return;
+    }
+    ctx.drawImage(g, sx, sy, sw, sh, dx * S, dy * S, dw * S, dh * S);
+  };
   const head = L.top - 1;   // hauteur de la bande du titre
   piece(0, 0, 7, 10, 0, 0); piece(7, 0, inner, 10, 7, 0); piece(169, 0, 7, 10, right, 0);
   piece(0, 10, 7, 1, 0, 10, 7, head - 17); piece(7, 10, inner, 1, 7, 10, inner, head - 17); piece(169, 10, 7, 1, right, 10, 7, head - 17);
