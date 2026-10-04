@@ -28,13 +28,6 @@
     justify-content: center;
     overflow: hidden;
   }
-  /* Téléphone en portrait : l'app tournée pour s'afficher en paysage (taille et rotation posées en JS). */
-  html.rotated body {
-    position: fixed;
-    top: 0;
-    left: 0;
-    transform-origin: 0 0;
-  }
   #tooltip {
     position: fixed;
     pointer-events: none;
@@ -154,28 +147,27 @@
   <canvas id="dialogCanvas"></canvas>
 </div>
 <script>
-// Téléphone tenu en portrait : toute l'app est tournée d'un quart de tour (classe « rotated » sur <html>) pour
-// s'afficher en paysage. Les tailles d'écran et positions de la souris / du doigt passent par ces fonctions,
-// qui les donnent dans le repère de l'app tournée.
+// Téléphone tenu en portrait : disposition mobile (coffre de 5 colonnes sur 9 rangées, voir mobileSlots).
+// Ordinateur et téléphone en paysage : coffre de 9 x 6 habituel.
 const touchScreen = matchMedia('(pointer: coarse)');
-const isRotated = () => touchScreen.matches && window.innerHeight > window.innerWidth;
-const viewW = () => isRotated() ? window.innerHeight : window.innerWidth;
-const viewH = () => isRotated() ? window.innerWidth : window.innerHeight;
-const evX = ev => isRotated() ? ev.clientY : ev.clientX;
-const evY = ev => isRotated() ? window.innerWidth - ev.clientX : ev.clientY;
-function applyOrientation() {
-  const on = isRotated();
-  document.documentElement.classList.toggle('rotated', on);
-  Object.assign(document.body.style, on
-    ? { width: `${window.innerHeight}px`, height: `${window.innerWidth}px`, transform: `translateX(${window.innerWidth}px) rotate(90deg)` }
-    : { width: '', height: '', transform: '' });
-}
+const isMobileLayout = () => touchScreen.matches && window.innerHeight > window.innerWidth;
+const viewW = () => window.innerWidth;
+const viewH = () => window.innerHeight;
+const evX = ev => ev.clientX;
+const evY = ev => ev.clientY;
 
 // Interface "Profil Joueur" (coffre 6x9) reconstruite avec les textures Minecraft 1.20.4.
 const TEX = 'assets/textures/';
 const GUI_W = 176;
 const GUI_H = 132;          // 125 lignes du haut de generic_54 + 7 lignes de bordure basse
-const ROWS = 6, COLS = 9;
+// Disposition du coffre : 9 x 6 (ordinateur) ou 5 x 9 (téléphone en portrait, titre sur 2 lignes au besoin).
+const MOBILE_W = 14 + 5 * 18, MOBILE_TITLE_LINES = 2;
+function guiLayout() {
+  if (!isMobileLayout()) return { mobile: false, cols: 9, rows: 6, w: GUI_W, h: GUI_H, top: 18, title: [pageTitle(state.page)] };
+  const title = font ? wrapText(pageTitle(state.page), MOBILE_W - 16).slice(0, MOBILE_TITLE_LINES) : [''];
+  const top = 18 + (title.length - 1) * 9;
+  return { mobile: true, cols: 5, rows: 9, w: MOBILE_W, h: top - 1 + 9 * 18 + 7, top, title };
+}
 const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la case
 
 // Pages de l'interface. Chaque page : un titre + le contenu des cases (ligne, colonne) ;
@@ -477,7 +469,9 @@ const todoImage = n => `actions/${(n - 1) % TODO_IMAGES + 1}`;
 function todoGrid(list, slots, numbers) {
   list.slice(0, TODO_ROWS * TODO_COLS).forEach((todo, i) => {
     const n = numbers ? numbers[i] : null;
-    slots[`${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`] = {
+    // téléphone : 5 par rangée (rangées 1 à 6), clé mobile « m… » ; ordinateur : 7 par rangée (rangées 1 à 4)
+    const key = isMobileLayout() ? `m${1 + Math.floor(i / 5)},${i % 5}` : `${1 + Math.floor(i / TODO_COLS)},${1 + i % TODO_COLS}`;
+    slots[key] = {
       image: n ? todoImage(n) : (todo.image || todoImage(1)),
       count: n,
       // Fonction : la description est découpée à l'affichage (la police n'est pas encore chargée au démarrage).
@@ -656,9 +650,11 @@ function reviewDay(agenda) {
 // agendas sur les rangées 1 et 3, bilans sur les rangées 2 et 4 (7 journées par paire de rangées).
 function agendaGrid(list, slots, numbered) {
   list.slice(0, 2 * TODO_COLS).forEach((a, i) => {
-    const row = 1 + 2 * Math.floor(i / TODO_COLS), col = 1 + i % TODO_COLS, n = numbered ? i + 1 : null;
-    slots[`${row},${col}`] = agendaSlot(a, n, numbered ? 'papier_agenda' : 'carte_vide');
-    slots[`${row + 1},${col}`] = bilanSlot(a, n);
+    // téléphone : 5 journées par paire de rangées (rangées 1 à 6), clés mobiles « m… »
+    const mobile = isMobileLayout(), per = mobile ? 5 : TODO_COLS, m = mobile ? 'm' : '';
+    const row = 1 + 2 * Math.floor(i / per), col = (mobile ? 0 : 1) + i % per, n = numbered ? i + 1 : null;
+    slots[`${m}${row},${col}`] = agendaSlot(a, n, numbered ? 'papier_agenda' : 'carte_vide');
+    slots[`${m}${row + 1},${col}`] = bilanSlot(a, n);
   });
   return slots;
 }
@@ -1687,9 +1683,42 @@ function renderTooltip(tipCanvas, font, lines, S) {
 const state = { S: 3, hovered: null, page: 'main' };
 // Cases de la page ; une case avec when() ne s'affiche que si when() est vrai (contenu qui dépend de la date).
 function currentSlots() {
-  const slots = PAGES[state.page].slots;
+  let slots = PAGES[state.page].slots;
+  if (isMobileLayout()) slots = mobileSlots(state.page, slots);
   if (!Object.values(slots).some(s => s.when)) return slots;
   return Object.fromEntries(Object.entries(slots).filter(([, s]) => !s.when || s.when()));
+}
+// --- Disposition téléphone : les pages sont décrites en 9 x 6 (rangée 5 = barre du bas) et replacées en 5 x 9 ---
+// Colonnes : 0-2 -> 0, 3 -> 1, 4 -> 2, 5 -> 3, 6-8 -> 4 (le centre reste au centre, les bords vont aux bords).
+// Barre du bas (rangée 5) -> rangée 8 : 0 -> 0 (bouton à gauche), 3 -> 1 (retour), 4 -> 2 (barrière), 5 -> 3, 8 -> 4.
+// Deux cases qui tombent au même endroit : la seconde prend la place libre la plus proche de la rangée.
+// Les pages en grille (actions, agendas) donnent directement leurs cases mobiles avec des clés « m<rangée>,<col> ».
+const MOBILE_COLS = [0, 0, 0, 1, 2, 3, 4, 4, 4];
+const MOBILE_NAV_COLS = [0, 0, 1, 1, 2, 3, 3, 4, 4];
+// Pages de serment : 4 tableaux (colonnes 1-2) et 12 rounds (colonnes 6-7, rangées 0 à 5) gardent leurs rangées.
+const MOBILE_PAGE_COLS = id => /^serment\d+$/.test(id) ? { 1: 0, 2: 1, 6: 3, 7: 4 } : null;
+const mobileCache = new WeakMap();
+function mobileSlots(id, slots) {
+  if (mobileCache.has(slots)) return mobileCache.get(slots);
+  const out = {}, special = MOBILE_PAGE_COLS(id);
+  const place = (r, c, slot) => {
+    for (let d = 0; d < 5; d++)   // place libre la plus proche dans la rangée, puis rangées suivantes
+      for (const cc of [c - d, c + d]) if (cc >= 0 && cc < 5 && !out[`${r},${cc}`]) { out[`${r},${cc}`] = slot; return; }
+    if (r < 7) place(r + 1, c, slot);
+  };
+  const entries = Object.entries(slots).sort(([a], [b]) => {
+    const [ra, ca] = a.replace('m', '').split(',').map(Number), [rb, cb] = b.replace('m', '').split(',').map(Number);
+    return (a[0] === 'm') - (b[0] === 'm') || ra - rb || ca - cb;
+  });
+  for (const [key, slot] of entries.filter(([k]) => k[0] === 'm')) out[key.slice(1)] = slot;   // cases déjà mobiles
+  for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm')) {
+    const [r, c] = key.split(',').map(Number);
+    if (special && special[c] != null) place(r, special[c], slot);
+    else if (r === 5) place(8, MOBILE_NAV_COLS[c], slot);
+    else place(r, MOBILE_COLS[c], slot);
+  }
+  mobileCache.set(slots, out);
+  return out;
 }
 // Une case est un item (survol, overlay, clic) sauf les vitres.
 // Case survolable : tout sauf les vitres décoratives (une vitre avec une info-bulle l'est aussi).
@@ -1704,15 +1733,22 @@ function renderGui() {
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Fond du coffre : haut de generic_54 (titre + 6 rangées) + bordure arrondie du bas.
-  ctx.drawImage(T.generic_54, 0, 0, GUI_W, 125, 0, 0, GUI_W * S, 125 * S);
-  ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
-
-  drawText(ctx, font, pageTitle(state.page), 8, 6, '#404040', S);
+  const L = guiLayout(), { cols: COLS, rows: ROWS, top: TOP } = L;
+  if (canvas.width !== L.w * S || canvas.height !== L.h * S) {   // titre sur 1 ou 2 lignes (mobile) : hauteur différente
+    canvas.width = L.w * S;
+    canvas.height = L.h * S;
+    ctx.imageSmoothingEnabled = false;
+  }
+  if (!L.mobile) {
+    // Fond du coffre : haut de generic_54 (titre + 6 rangées) + bordure arrondie du bas.
+    ctx.drawImage(T.generic_54, 0, 0, GUI_W, 125, 0, 0, GUI_W * S, 125 * S);
+    ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
+  } else drawMobileChest(ctx, S, L);
+  L.title.forEach((line, i) => drawText(ctx, font, line, 8, 6 + i * 9, '#404040', S));
 
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const px = (8 + c * 18) * S, py = (18 + r * 18) * S;
+      const px = (8 + c * 18) * S, py = (TOP + r * 18) * S;
       const key = `${r},${c}`;
       const slot = currentSlots()[key];
       const look = slot && { ...slot, ...(slot.look && slot.look()) };   // apparence du moment (période en cours…)
@@ -1739,7 +1775,7 @@ function renderGui() {
       const count = look && (typeof look.count === 'function' ? look.count() : look.count);
       if (count != null) {
         const txt = String(count);
-        drawText(ctx, font, txt, 8 + c * 18 + 17 - textWidth(font, txt), 18 + r * 18 + 9, look.countColor || '#FFFFFF', S, true);
+        drawText(ctx, font, txt, 8 + c * 18 + 17 - textWidth(font, txt), TOP + r * 18 + 9, look.countColor || '#FFFFFF', S, true);
       }
 
       // Surbrillance blanche de la case survolée, comme en jeu.
@@ -1749,6 +1785,23 @@ function renderGui() {
       }
     }
   }
+}
+
+// Coffre de 5 x 9 assemblé à partir des morceaux de generic_54 : coins et bords, bande du titre (plus haute
+// si le titre tient sur 2 lignes), 9 rangées de 5 cases, bordure du bas.
+function drawMobileChest(ctx, S, L) {
+  const g = T.generic_54, inner = L.cols * 18, right = 7 + inner;
+  const piece = (sx, sy, sw, sh, dx, dy, dw = sw, dh = sh) => ctx.drawImage(g, sx, sy, sw, sh, dx * S, dy * S, dw * S, dh * S);
+  const head = L.top - 1;   // hauteur de la bande du titre
+  piece(0, 0, 7, 10, 0, 0); piece(7, 0, inner, 10, 7, 0); piece(169, 0, 7, 10, right, 0);
+  piece(0, 10, 7, 1, 0, 10, 7, head - 17); piece(7, 10, inner, 1, 7, 10, inner, head - 17); piece(169, 10, 7, 1, right, 10, 7, head - 17);
+  piece(0, 10, 7, 7, 0, head - 7); piece(7, 10, inner, 7, 7, head - 7); piece(169, 10, 7, 7, right, head - 7);
+  for (let r = 0; r < L.rows; r++) {
+    const y = head + r * 18;
+    piece(0, 17, 7, 18, 0, y); piece(7, 17, inner, 18, 7, y); piece(169, 17, 7, 18, right, y);
+  }
+  const bottom = head + L.rows * 18;
+  piece(0, 215, 7, 7, 0, bottom); piece(7, 215, inner, 7, 7, bottom); piece(169, 215, 7, 7, right, bottom);
 }
 
 // Version assombrie d'une texture (seuls ses pixels visibles sont foncés), mise en cache.
@@ -1769,9 +1822,10 @@ function dimmed(img) {
 
 // Case (ligne, colonne) sous la souris, ou null.
 function slotAt(ev) {
+  const L = guiLayout();
   const gx = (evX(ev) - canvas.offsetLeft) / state.S, gy = (evY(ev) - canvas.offsetTop) / state.S;
-  const c = Math.floor((gx - 7) / 18), row = Math.floor((gy - 17) / 18);
-  if (c < 0 || c >= COLS || row < 0 || row >= ROWS) return null;
+  const c = Math.floor((gx - 7) / 18), row = Math.floor((gy - L.top + 1) / 18);
+  if (c < 0 || c >= L.cols || row < 0 || row >= L.rows) return null;
   return `${row},${c}`;
 }
 
@@ -1990,7 +2044,8 @@ function bookRows(text) {
 }
 function renderBook() {
   const cfg = sign.cfg;
-  const S = Math.max(1, Math.min(5, Math.floor(viewH() / 228), Math.floor(viewW() / 200)));
+  // téléphone en portrait : le livre (192 de large) peut occuper presque toute la largeur
+  const S = Math.max(1, Math.min(5, Math.floor(viewH() / 228), Math.floor(viewW() / (isMobileLayout() ? 194 : 200))));
   const { ctx, W, H } = prepareScreen(signCanvas, S);
   const left = Math.floor((W - 192) / 2), top = Math.max(2, Math.floor((H - 222) / 2));
   ctx.drawImage(T.book_gui, 0, 0, 192, 192, left * S, top * S, 192 * S, 192 * S);
@@ -2380,13 +2435,15 @@ function fitText(text, w) {
 }
 
 function tbScale() {
+  // téléphone en portrait : fenêtre plus étroite (voir renderTimeblock) pour un affichage plus grand
+  if (isMobileLayout()) return Math.max(1, Math.min(3, Math.floor(viewW() / 190), Math.floor(viewH() / 250)));
   return Math.max(1, Math.min(3, Math.floor(viewW() / 236), Math.floor(viewH() / 250)));
 }
 function renderTimeblock() {
   const S = tbScale();
   const { ctx, W, H } = prepareScreen(timeblockCanvas, S);
   const TB_TOP = 28;   // hauteur du bandeau de titre au-dessus de la journée
-  const pw = 220, ph = Math.min(H - 8, TB_TOP + TB_CONTENT + 36);
+  const pw = Math.min(220, W - 6), ph = Math.min(H - 8, TB_TOP + TB_CONTENT + 36);
   const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph) / 2));
   const grid = { x: px + 38, y: py + TB_TOP, w: pw - 38 - 8, h: ph - TB_TOP - 34 };
   const maxScroll = Math.max(0, TB_CONTENT - grid.h);
@@ -3399,11 +3456,22 @@ headCanvas.addEventListener('click', ev => {
   else headInput.focus();
 });
 
+// Taille du canevas du coffre (l'échelle se calcule avec la hauteur maximale pour ne pas changer d'une page à l'autre).
+function sizeGui() {
+  const L = guiLayout(), maxH = L.mobile ? 18 + (MOBILE_TITLE_LINES - 1) * 9 - 1 + 9 * 18 + 7 : GUI_H;
+  state.S = Math.max(2, Math.min(5, Math.floor(Math.min(viewW() / (L.w + 16), viewH() / (maxH + 16)))));
+  canvas.width = L.w * state.S;
+  canvas.height = L.h * state.S;
+}
+let lastMobile = null;
 function resize() {
-  applyOrientation();
-  state.S = Math.max(2, Math.min(5, Math.floor(Math.min(viewW() / (GUI_W + 16), viewH() / (GUI_H + 16)))));
-  canvas.width = GUI_W * state.S;
-  canvas.height = GUI_H * state.S;
+  // passage portrait / paysage sur téléphone : les pages en grille se recalculent pour la bonne disposition
+  if (isMobileLayout() !== lastMobile) {
+    const first = lastMobile === null;
+    lastMobile = isMobileLayout();
+    if (!first) { refreshTodo(); refreshAgenda(); }
+  }
+  sizeGui();
   state.hovered = null;
   tip.hidden = true;
   renderGui();
