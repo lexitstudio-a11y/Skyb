@@ -1735,9 +1735,13 @@ const MOBILE_PLACES = {
   main: { '1,4': '1,2', '2,4': '3,0', '2,1': '5,0', '2,5': '7,0', '2,6': '9,0' },
 };
 // Téléphone : titre dans un bloc de couleur (façon Timeblock) sur les 3 cases de droite, à côté de l'item
-// placé en colonne 0 (clé ordinateur -> couleur) ; même overlay et même clic que l'item.
+// placé en colonne 0 (clé ordinateur -> couleur, ou { color, gradient: [haut, bas], text }) ; même overlay
+// et même clic que l'item.
 const MOBILE_LABELS = {
-  main: { '2,4': '#4599DF', '2,1': '#88B253', '2,5': '#EEC14C', '2,6': '#E25D33' },
+  main: {
+    '2,4': { color: '#1A2F80', gradient: ['#3456C8', '#0A1650'], text: '#FFFF55' },   // Pilliers Temporels : bleu foncé, texte jaune
+    '2,1': '#88B253', '2,5': '#EEC14C', '2,6': '#E25D33',
+  },
 };
 const slotTitle = slot => {
   const lines = typeof slot.tooltip === 'function' ? slot.tooltip() : slot.tooltip;
@@ -1760,9 +1764,9 @@ function mobileSlots(id, slots) {
   for (const [key, slot] of entries.filter(([k]) => k[0] === 'v')) out[key] = slot;   // liste qui défile
   const fixed = MOBILE_PLACES[id] || {};
   for (const [key, slot] of entries) if (fixed[key]) out[fixed[key]] = slot;
-  for (const [key, color] of Object.entries(MOBILE_LABELS[id] || {})) {
+  for (const [key, style] of Object.entries(MOBILE_LABELS[id] || {})) {
     const slot = slots[key], [r] = fixed[key].split(',');
-    out[`${r},2`] = { span: 3, color, label: () => slotTitle(slot), tooltip: slot.tooltip, open: slot.open, action: slot.action };
+    out[`${r},2`] = { span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), tooltip: slot.tooltip, open: slot.open, action: slot.action };
   }
   for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && k[0] !== 'v' && !fixed[k])) {
     const [r, c] = key.split(',').map(Number);
@@ -1837,12 +1841,19 @@ function drawCell(ctx, slots, key, x, y, S) {
   else if (slot.span) {
     const w = slot.span * 18 - 2;
     drawColorBlock(ctx, x, y, w, 16, slot.color, S);
+    if (slot.gradient) {   // fond en dégradé vertical (dans le contour du bloc)
+      const g = ctx.createLinearGradient(0, (y + 2) * S, 0, (y + 14) * S);
+      g.addColorStop(0, slot.gradient[0]);
+      g.addColorStop(1, slot.gradient[1]);
+      ctx.fillStyle = g;
+      ctx.fillRect((x + 2) * S, (y + 2) * S, (w - 4) * S, 12 * S);
+    }
     // texte un peu plus petit que le reste du coffre (2 lignes au plus) pour que le titre tienne dans le bloc
     const ts = Math.max(1, Math.round(S * 0.6)), k = S / ts, room = (w - 6) * k;
     let lines = wrapText(typeof slot.label === 'function' ? slot.label() : slot.label, room);
     if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
     const top = (y + 8) * k - lines.length * 4.5 + 0.5;
-    lines.forEach((l, i) => drawText(ctx, font, l, (x + 3) * k + 1, Math.round(top + i * 9), '#FFFFFF', ts, true));
+    lines.forEach((l, i) => drawText(ctx, font, l, (x + 3) * k + 1, Math.round(top + i * 9), slot.text || '#FFFFFF', ts, true));
   }
   else {
     if (look.item) {
