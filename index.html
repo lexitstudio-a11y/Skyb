@@ -164,7 +164,7 @@ const TEX = 'assets/textures/';
 const GUI_W = 176;
 const GUI_H = 132;          // 125 lignes du haut de generic_54 + 7 lignes de bordure basse
 // Disposition du coffre : 9 x 6 (ordinateur) ou 5 x 11 (téléphone en portrait, titre sur 2 lignes au besoin).
-const SCROLLBAR_EXTRA = 16;   // téléphone : 2 px d'écart + barre de défilement de 14 px
+const SCROLLBAR_EXTRA = 10;   // téléphone : 2 px d'écart + barre de défilement de 8 px
 const MOBILE_W = 14 + 5 * 18, MOBILE_ROWS = 11, MOBILE_NAV = MOBILE_ROWS - 1, MOBILE_TITLE_LINES = 2;
 function guiLayout() {
   if (!isMobileLayout()) return { mobile: false, cols: 9, rows: 6, w: GUI_W, h: GUI_H, top: 18, title: [pageTitle(state.page)] };
@@ -1859,7 +1859,7 @@ function renderGui() {
 }
 // Barre de défilement façon Minecraft (inventaire créatif) : rail creusé à droite de la liste, curseur en relief.
 function scrollbarRect(L) {
-  return { x: 9 + L.cols * 18, y: L.top - 1, w: 14, h: SCROLL_VIEW * 18 - 2, thumb: 15 };
+  return { x: 9 + L.cols * 18, y: L.top - 1, w: SCROLLBAR_EXTRA - 2, h: SCROLL_VIEW * 18 - 2, thumb: 15 };
 }
 function drawScrollbar(ctx, S, L, scroll) {
   const b = scrollbarRect(L), fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
