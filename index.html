@@ -740,12 +740,29 @@ function renameSlot(n) {
   };
 }
 
+// Direction artistique (D.A) : « minecraft » (version actuelle) ou « test » (nouvelle D.A en essai).
+// Choix gardé sur l'appareil ; <html data-da="…"> permet au style et au dessin de suivre la D.A choisie.
+const DA_KEY = 'da';
+const DA_LABELS = { minecraft: 'Minecraft', test: 'Test' };
+let da = (() => { try { return DA_LABELS[localStorage.getItem(DA_KEY)] ? localStorage.getItem(DA_KEY) : 'minecraft'; } catch { return 'minecraft'; } })();
+document.documentElement.dataset.da = da;
+function toggleDA() {
+  da = da === 'minecraft' ? 'test' : 'minecraft';
+  try { localStorage.setItem(DA_KEY, da); } catch {}
+  document.documentElement.dataset.da = da;
+  hideTooltip();
+  renderGui();
+  showToast({ icon: 'cadre_da', title: 'D.A changée', text: `D.A ${DA_LABELS[da]}`, duration: 3000 });
+}
 const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Arbres de Progression' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
     slots: {
-      '0,0': { image: 'cadre_da', tooltip: ['§aAlterner D.A', ...LORE] },
+      '0,0': {
+        image: 'cadre_da', action: toggleDA,
+        tooltip: () => ['§aAlterner D.A', `§7D.A actuelle : §e${DA_LABELS[da]}`, "§7Passe d'une direction artistique", "§7à l'autre (l'ancienne est gardée).", '', '§eClique pour changer !'],
+      },
       '1,4': { head: 'profile', tooltip: profileTooltip, action: editProfile },
       '2,1': { image: 'arbres_progression', tooltip: ['§aArbres de Progression', ...LORE], open: 'arbres' },
       '2,4': { item: 'book', tooltip: ['§aLes Pilliers Temporels', ...LORE], open: 'serments' },
