@@ -1942,19 +1942,22 @@ function slotAt(ev) {
   return L.mobile ? coveredBy(currentSlots(), `${row},${c}`) || `${row},${c}` : `${row},${c}`;
 }
 
+// Taille affichée de l'overlay (en px CSS ; le canvas peut être en pixels de l'écran)
+const tipW = () => parseFloat(tip.style.width) || tip.width;
+const tipH = () => parseFloat(tip.style.height) || tip.height;
 function placeTooltip(ev) {
   const S = state.S, margin = 4;
   if (ev.touch) {   // appui long : centré au-dessus du doigt (en dessous s'il n'y a pas la place), pour rester visible
-    const x = evX(ev) - tip.width / 2, above = evY(ev) - 14 * S - tip.height;
-    const y = above >= margin ? above : Math.min(evY(ev) + 14 * S, viewH() - tip.height - margin);
-    tip.style.left = Math.max(margin, Math.min(x, viewW() - tip.width - margin)) + 'px';
+    const x = evX(ev) - tipW() / 2, above = evY(ev) - 14 * S - tipH();
+    const y = above >= margin ? above : Math.min(evY(ev) + 14 * S, viewH() - tipH() - margin);
+    tip.style.left = Math.max(margin, Math.min(x, viewW() - tipW() - margin)) + 'px';
     tip.style.top = Math.max(margin, y) + 'px';
     return;
   }
   let x = evX(ev) + 12 * S, y = evY(ev) - 12 * S;
-  if (x + tip.width > viewW() - margin) x = evX(ev) - 12 * S - tip.width;
-  y = Math.max(margin, Math.min(y, viewH() - tip.height - margin));
-  x = Math.min(x, viewW() - tip.width - margin);   // ne dépasse pas à droite
+  if (x + tipW() > viewW() - margin) x = evX(ev) - 12 * S - tipW();
+  y = Math.max(margin, Math.min(y, viewH() - tipH() - margin));
+  x = Math.min(x, viewW() - tipW() - margin);   // ne dépasse pas à droite
   tip.style.left = Math.max(margin, x) + 'px';
   tip.style.top = y + 'px';
 }
@@ -1969,9 +1972,13 @@ function onMove(ev) {
     if (slot && slot.tooltip) {
       const lines = typeof slot.tooltip === 'function' ? slot.tooltip() : slot.tooltip;
       // Texte plus petit si l'overlay ne tient pas dans la fenêtre.
-      for (let ts = tooltipScale(state.S); ; ts--) {
+      // téléphone : overlay à l'échelle du coffre, en pixels de l'écran (Retina) ; réduit s'il ne tient pas
+      const R = guiRatio();
+      for (let ts = isMobileLayout() ? Math.round(state.S * R) : tooltipScale(state.S); ; ts--) {
         renderTooltip(tip, font, lines, ts);
-        if (ts <= 1 || (tip.width <= viewW() - 8 && tip.height <= viewH() - 8)) break;
+        tip.style.width = tip.width / R + 'px';
+        tip.style.height = tip.height / R + 'px';
+        if (ts <= 1 || (tipW() <= viewW() - 8 && tipH() <= viewH() - 8)) break;
       }
       tip.hidden = false;
     } else tip.hidden = true;
