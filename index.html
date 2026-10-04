@@ -1874,7 +1874,8 @@ const mobileCache = { minecraft: new WeakMap(), test: new WeakMap() };   // une 
 // D.A test sur ordinateur : mêmes lignes façon « succès » que sur téléphone, deux par ligne (item en colonne 0 ou 6,
 // titre sur les 3 cases à partir de la colonne 2 ou 8). Clé 9 x 6 -> place dans le coffre de 11 x 7.
 const PC_PLACES_DA2 = {
-  main: { '1,4': '0,10', '2,4': '1,0', '2,1': '1,6', '2,5': '3,0', '2,6': '3,6' },
+  // Profil : Pilliers Temporels en haut au centre, puis Arbres / Liste de choses à faire / Agenda côte à côte (blocs étroits)
+  main: { '1,4': '0,10', '2,4': '1,3', '2,1': { to: '3,0', narrow: true }, '2,5': { to: '3,4', narrow: true }, '2,6': { to: '3,8', narrow: true } },
   serments: { '0,2': '1,0', '0,4': '1,6', '0,6': '3,0' },
 };
 // Ordinateur : cases décrites en 9 x 6 replacées dans le coffre de 11 x 7 : bords gauche / droit aux bords
@@ -1890,13 +1891,14 @@ function deskSlots(id, slots) {
   const entries = Object.entries(slots).sort(([a], [b]) => !!places[b] - !!places[a]);   // places choisies d'abord
   for (const [key, slot] of entries) {
     if (key[0] === 'v') { out[key] = slot; continue; }
-    const to = places[key] || deskKey(key);
-    if (!places[key] && out[to]) continue;   // case déjà prise par un bloc de titre
+    const place = places[key], narrow = place && place.narrow, to = place ? (narrow ? place.to : place) : deskKey(key);
+    if (!place && out[to]) continue;   // case déjà prise par un bloc de titre
     out[to] = slot;
-    if (places[key] && labels[key]) {   // D.A test : bloc de titre sur les 3 cases à partir de 2 colonnes à droite
+    if (place && labels[key]) {   // D.A test : bloc de titre sur 3 cases, 2 colonnes à droite (étroit : 2 cases collées à l'item)
       const [r, c] = to.split(',').map(Number), style = labels[key];
-      out[`${r},${c + 2}`] = {
-        span: 3, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot),
+      out[`${r},${c + (narrow ? 1 : 2)}`] = {
+        span: narrow ? 2 : 3, ...(narrow ? { gap: 0, narrow: true } : {}),
+        ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot),
         dim: () => !!(slot.look && slot.look().dim), tooltip: slot.tooltip, open: slot.open, action: slot.action,
       };
     }
@@ -2091,18 +2093,21 @@ function drawCell(ctx, slots, key, x, y, S, pass = null) {
 // barre bleue avec le titre en blanc, et en dessous une barre sombre avec la description en vert.
 function drawAdvancement(ctx, slot, x, y, S, hovered) {
   const fr = (rx, ry, rw, rh, c) => { ctx.fillStyle = c; ctx.fillRect(rx * S, ry * S, rw * S, rh * S); };
-  const ix = x - 36, left = ix + 9, right = x + slot.span * 18 - 2, w = right - left;
-  const ts = Math.max(1, Math.round(S * 0.6)), k = S / ts;
+  // item à gauche, 1 case d'écart (gap) avant le bloc ; bloc étroit (narrow) : texte plus petit, description sur 2 lignes
+  const ix = x - 18 * (1 + (slot.gap ?? 1)), left = ix + 9, right = x + slot.span * 18 - 2, w = right - left;
+  const ts = Math.max(1, Math.round(S * (slot.narrow ? 0.5 : 0.6))), k = S / ts;
   const text = (t, tx, ty, color) => drawText(ctx, font, t, tx * k + 1, Math.round(ty * k), color, ts, true);
   // description (sous la barre du titre)
   const desc = typeof slot.desc === 'function' ? slot.desc() : slot.desc;
   const open = slot.expanded && advDesc(slot, S);   // description dépliée : tout le texte, sur plusieurs lignes
-  const dh = open ? open.h : slot.progress ? 17 : 13;   // plus haute avec la fine barre sous le texte
+  let short = desc ? [fitText(desc, (right - ix - 6) * k)] : [];
+  if (desc && slot.narrow) { short = wrapText(desc, (right - ix - 6) * k); if (short.length > 2) short = [short[0], fitText(short.slice(1).join(' '), (right - ix - 6) * k)]; }
+  const dh = open ? open.h : (slot.progress ? 17 : 13) + (short.length - 1) * 9 / k;   // plus haute avec la fine barre sous le texte
   if (desc || open) {   // commence sous l'item, comme dans le jeu
     fr(ix, y + 14, right - ix, dh, '#000000');
     fr(ix + 1, y + 15, right - ix - 2, dh - 2, '#212121');
     if (open) open.lines.forEach((l, i) => text(l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
-    else text(fitText(desc, (right - ix - 6) * k), ix + 2, y + 18, '#55FF55');
+    else short.forEach((l, i) => text(l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
   }
   if (slot.progress) {   // fine barre de progression sous le texte (verte, comme le chargement du monde)
     const pct = Math.max(0, Math.min(100, slot.progress())), bw = right - ix - 6;
