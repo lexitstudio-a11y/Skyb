@@ -167,12 +167,15 @@ const GUI_H = 132;          // 125 lignes du haut de generic_54 + 7 lignes de bo
 const SCROLLBAR_EXTRA = 10;   // téléphone : 2 px d'écart + barre de défilement de 8 px
 const MOBILE_W = 14 + 5 * 18, MOBILE_ROWS = 11, MOBILE_NAV = MOBILE_ROWS - 1, MOBILE_TITLE_LINES = 2;
 function guiLayout() {
-  if (!isMobileLayout()) return { mobile: false, cols: 9, rows: 6, w: GUI_W, h: GUI_H, top: 18, title: [pageTitle(state.page)] };
+  if (!isMobileLayout()) {
+    const page = PAGES[state.page], bar = !!(page && pageRows(page) > 5);   // liste qui défile (D.A test) : barre à droite
+    return { mobile: false, cols: 9, rows: 6, view: 5, w: GUI_W + (bar ? SCROLLBAR_EXTRA : 0), h: GUI_H, top: 18, title: [pageTitle(state.page)], bar };
+  }
   const title = font ? wrapText(pageTitle(state.page), MOBILE_W - 16).slice(0, MOBILE_TITLE_LINES) : [''];
   const top = 18 + (title.length - 1) * 9;
   // page qui défile (plus de rangées que la zone visible) : coffre élargi pour la barre de défilement à droite
   const page = PAGES[state.page], bar = !!(page && pageRows(page) > MOBILE_NAV);
-  return { mobile: true, cols: 5, rows: MOBILE_ROWS, w: MOBILE_W + (bar ? SCROLLBAR_EXTRA : 0), h: top - 1 + MOBILE_ROWS * 18 + 7, top, title, bar };
+  return { mobile: true, cols: 5, rows: MOBILE_ROWS, view: MOBILE_NAV, w: MOBILE_W + (bar ? SCROLLBAR_EXTRA : 0), h: top - 1 + MOBILE_ROWS * 18 + 7, top, title, bar };
 }
 const ITEM_SCALE = 0.85;   // taille des items (hors vitres) par rapport à la case
 
@@ -475,19 +478,19 @@ const todoImage = n => `actions/${(n - 1) % TODO_IMAGES + 1}`;
 // numbers : numéro affiché de chaque action (actions en cours) ; sinon pas de numéro.
 function todoGrid(list, slots, numbers) {
   if (daRows()) {   // une action par ligne : image à gauche, titre et description à droite (2 rangées par action)
-    let r = 1;
-    list.forEach((todo, i) => {
-      const n = numbers ? numbers[i] : null, cell = todoCell(todo, n);
+    return setRows(slots, placeLines(slots, isMobileLayout() ? 1 : 0, list.map((todo, i) => {
+      const cell = todoCell(todo, numbers ? numbers[i] : null);
       const firstLine = (todo.description || '').split('\n')[0].trim();
-      slots[`v${r},0`] = cell;
-      r += placeAdvancement(slots, r, {
-        span: 3, label: todo.titre || 'Action', color: () => TB_COLORS[(todos.indexOf(todo) * 7 + 3) % TB_COLORS.length],
-        desc: () => todo.fini ? `Terminée le ${todo.fini}` : firstLine || `Ajoutée le ${todo.date}`,
-        descFull: () => [...(todo.description ? todo.description.split('\n') : []), `§7Ajoutée le ${todo.date}`, ...(todo.fini ? [`§cTerminée le ${todo.fini}`] : [])],
-        tooltip: cell.tooltip, action: cell.action,
-      }, todo, refreshTodo);
-    });
-    return setRows(slots, r);
+      return {
+        icons: [[0, cell]], data: todo, refresh: refreshTodo,
+        span: {
+          label: todo.titre || 'Action', color: () => TB_COLORS[(todos.indexOf(todo) * 7 + 3) % TB_COLORS.length],
+          desc: () => todo.fini ? `Terminée le ${todo.fini}` : firstLine || `Ajoutée le ${todo.date}`,
+          descFull: () => [...(todo.description ? todo.description.split('\n') : []), `§7Ajoutée le ${todo.date}`, ...(todo.fini ? [`§cTerminée le ${todo.fini}`] : [])],
+          tooltip: cell.tooltip, action: cell.action,
+        },
+      };
+    })));
   }
   const mobile = isMobileLayout();
   list.slice(0, mobile ? (MOBILE_NAV - 1) * 3 : TODO_ROWS * TODO_COLS).forEach((todo, i) => {
@@ -679,21 +682,22 @@ function reviewDay(agenda) {
 const BILAN_COLORS = { mauvaise: '#C3291C', bonne: '#5EA83A', tres_bonne: '#E3A82B' };
 function agendaGrid(list, slots, numbered) {
   if (daRows()) {   // une journée par ligne : agenda et bilan à gauche, date et 1er objectif à droite
-    const start = numbered ? 2 : 1;   // page principale : la balise est sur la rangée 0
-    let r = start;
-    list.slice(0, agendasPerPage()).forEach((a, i) => {
+    // page principale sur téléphone : la balise est sur la rangée 0
+    const start = isMobileLayout() ? (numbered ? 2 : 1) : (numbered ? 1 : 0);
+    return setRows(slots, placeLines(slots, start, list.slice(0, agendasPerPage()).map((a, i) => {
       const n = numbered ? i + 1 : null, cell = agendaSlot(a, n, numbered ? 'papier_agenda' : 'carte_vide');
       const lines = a.texte.split('\n').map(l => l.trim()).filter(Boolean);
-      slots[`v${r},0`] = cell;
-      slots[`v${r},1`] = bilanSlot(a, n);
-      r += placeAdvancement(slots, r, {
-        span: 3, inset: 2, label: 'Agenda ' + a.date, color: BILAN_COLORS[a.bilan && a.bilan.note] || '#616161',
-        desc: lines[0] || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
-        descFull: () => [...(lines.length ? lines.map(l => '- ' + l) : ['Aucun objectif.']),
-          ...(a.bilan && BILANS[a.bilan.note] ? ['', BILANS[a.bilan.note].label, ...(a.bilan.texte ? a.bilan.texte.split('\n').map(l => '§7' + l) : [])] : [])],
-      }, a, refreshAgenda);
-    });
-    return setRows(slots, r);
+      return {
+        icons: [[0, cell], [1, bilanSlot(a, n)]], data: a, refresh: refreshAgenda,
+        pcSpan: { label: a.date },   // ordinateur : bloc plus étroit, seulement la date
+        span: {
+          inset: 2, label: 'Agenda ' + a.date, color: BILAN_COLORS[a.bilan && a.bilan.note] || '#616161',
+          desc: lines[0] || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
+          descFull: () => [...(lines.length ? lines.map(l => '- ' + l) : ['Aucun objectif.']),
+            ...(a.bilan && BILANS[a.bilan.note] ? ['', BILANS[a.bilan.note].label, ...(a.bilan.texte ? a.bilan.texte.split('\n').map(l => '§7' + l) : [])] : [])],
+        },
+      };
+    })));
   }
   list.slice(0, agendasPerPage()).forEach((a, i) => {
     // téléphone : 5 journées par paire de rangées, une rangée vide entre deux paires (rangées 1-2, 4-5 et 7-8),
@@ -708,7 +712,7 @@ function agendaGrid(list, slots, numbered) {
 function agendaSlots() {
   return agendaGrid(splitAgendas().recent, {
     '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', '§7Les agendas de plus de 7 jours.', '', '§eClique pour voir !'], open: 'agenda-autres' },
-    [daRows() ? 'v0,4' : '0,8']: { image: 'beacon', tooltip: bilanStats },
+    [daRows() ? (isMobileLayout() ? 'v0,4' : 'v0,8') : '0,8']: { image: 'beacon', tooltip: bilanStats },   // D.A test : dans la liste qui défile
     // Tant que l'agenda d'aujourd'hui n'est pas écrit, la tête propose celui d'aujourd'hui (puis celui de demain).
     '5,8': {
       image: 'tete_plus_bleue', action: () => editAgenda(agendaToWrite()),
@@ -796,6 +800,8 @@ function toggleDA() {
   refreshArbres();
   refreshTodo();
   refreshAgenda();
+  if (!PAGES[state.page]) location.hash = state.page.startsWith('arbres') ? 'arbres' : 'main';   // page qui n'existe plus dans cette D.A
+  sizeGui();
   renderGui();
 }
 const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Arbres de Progression' };
@@ -1090,7 +1096,7 @@ const arbres = (() => { try { return JSON.parse(localStorage.getItem(ARBRES_KEY)
 // Téléphone (5 × 9) : 9 arbres par page, rangées 2 / 4 / 6, colonnes 0 / 2 / 4 (cases déjà mobiles, préfixe « m »).
 // Téléphone : une seule page qui défile (voir arbresScrollSlots), donc tous les arbres sur la page 1.
 const ARBRE_CELLS = ['1,2', '1,4', '1,6', '3,2', '3,4', '3,6'];
-const arbresPerPage = () => isMobileLayout() ? Infinity : ARBRE_CELLS.length;
+const arbresPerPage = () => isMobileLayout() || da === 'test' ? Infinity : ARBRE_CELLS.length;
 const arbresPageId = k => k === 1 ? 'arbres' : `arbres-${k}`;   // k : numéro de page (à partir de 1)
 function saveArbres() {
   try { localStorage.setItem(ARBRES_KEY, JSON.stringify(arbres)); } catch {}
@@ -1403,7 +1409,27 @@ function buildArbrePages(a, n) {
 function pageRows(page) { return page.scrollRows || (page.slots && page.slots.rows) || 0; }
 // D.A test sur téléphone : listes (actions, agendas) en lignes façon « succès », dans une page qui défile.
 // (fonctions déclarées : utilisées dès la construction des pages, plus haut dans le fichier)
-function daRows() { return da === 'test' && isMobileLayout(); }
+function daRows() { return da === 'test'; }
+// Lignes façon « succès » d'une liste qui défile, à partir de la rangée start. Téléphone : une par ligne (titre sur
+// 3 cases, description dépliable) ; ordinateur : deux par ligne (colonnes 0 et 5, titre sur 2 cases).
+// entries : { icons: [[décalage de colonne, case], …], span: bloc de titre (sans sa largeur), data, refresh }.
+// Renvoie le nombre de rangées de la liste.
+function placeLines(slots, start, entries) {
+  if (isMobileLayout()) {
+    let r = start;
+    for (const e of entries) {
+      for (const [dc, cell] of e.icons) slots[`v${r},${dc}`] = cell;
+      r += placeAdvancement(slots, r, { ...e.span, span: 3 }, e.data, e.refresh);
+    }
+    return r;
+  }
+  entries.forEach((e, i) => {
+    const c = i % 2 ? 5 : 0, r = start + 2 * Math.floor(i / 2);
+    for (const [dc, cell] of e.icons) slots[`v${r},${c + dc}`] = cell;
+    slots[`v${r},${c + 2}`] = { ...e.span, ...(e.pcSpan || {}), span: 2 };
+  });
+  return start + 2 * Math.ceil(entries.length / 2);
+}
 function setRows(slots, rows) { return Object.defineProperty(slots, 'rows', { value: rows }); }
 // Téléphone : liste qui défile (scrollRows rangées, clés « v<rangée>,<col> » ; la barre du bas reste fixe).
 // Rangée 0 : montre et tête verte ; puis 3 rangées par arbre : son icône à gauche et son titre sur les 3 cases
@@ -1411,27 +1437,29 @@ function setRows(slots, rows) { return Object.defineProperty(slots, 'rows', { va
 const arbreColor = n => TB_COLORS[(n * 7) % TB_COLORS.length];
 function arbresScrollPage(list) {
   const pitch = da === 'test' ? 2 : 3;   // D.A test : blocs « succès » plus rapprochés (2 rangées par arbre)
-  const slots = { ...navSlots(list.back) };
-  slots['v0,2'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };
-  if (list.add) slots['v0,4'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
+  const slots = { ...navSlots(list.back) }, mobile = isMobileLayout(), lines = [];
+  slots[mobile ? 'v0,2' : 'v0,4'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };
+  if (list.add) slots[mobile ? 'v0,4' : 'v0,8'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
   let row = 2;
   list.trees.forEach(a => {
     const n = arbres.indexOf(a) + 1, pct = arbreProgress(a), r = row;
     row += pitch;
     const open = () => { arbreFrom[n] = list.pageId(1); location.hash = `arbre-${n}`; };
     const tooltip = () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? [...wrapText(a.description, 180).map(l => '§7' + l), ''] : []), progressLine(a, pct), '', '§eClique pour voir !'];
-    slots[`v${r},0`] = { ...arbreIcon(a), count: Math.floor(pct / 10) || null, tooltip, action: open };
+    const icon = { ...arbreIcon(a), count: Math.floor(pct / 10) || null, tooltip, action: open };
     const span = {
       span: 3, label: a.titre, color: arbreColor(n), desc: () => progressLine(a, pct).replace(/^§7Progression : /, '§a'), progress: () => pct, tooltip, action: open,
       descFull: () => [progressLine(a, pct).replace(/^§7Progression : /, '§a'), ...(a.description ? a.description.split('\n') : [])],
     };
-    if (da === 'test') { row += placeAdvancement(slots, r, span, a, refreshArbres) - pitch; return; }   // la description remplace les vitres
+    if (da === 'test') { lines.push({ icons: [[0, icon]], span, data: a, refresh: refreshArbres }); return; }   // la description remplace les vitres
+    slots[`v${r},0`] = icon;
     slots[`v${r},2`] = span;
     for (let level = 1; level <= 5; level++) {
       const st = levelState(a, level);
       slots[`v${r + 1},${level - 1}`] = { pane: LEVEL_PANES[st], tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
     }
   });
+  if (da === 'test') row = placeLines(slots, mobile ? 2 : 1, lines);
   return { title: list.title, slots, scrollRows: row };
 }
 function refreshArbres() {
@@ -1439,7 +1467,7 @@ function refreshArbres() {
   for (const id of Object.keys(PAGES)) if (/^arbres?-/.test(id)) delete PAGES[id];
   for (const list of arbreLists()) {
     if (list.add) list.trees.forEach(a => buildArbrePages(a, arbres.indexOf(a) + 1));   // une seule fois par arbre
-    if (isMobileLayout()) { PAGES[list.pageId(1)] = arbresScrollPage(list); continue; }
+    if (isMobileLayout() || da === 'test') { PAGES[list.pageId(1)] = arbresScrollPage(list); continue; }   // une page qui défile
     const pages = Math.max(1, Math.ceil(list.trees.length / arbresPerPage()));
     for (let k = 1; k <= pages; k++) {
       const slots = { ...navSlots(list.back), ...prevPageSlot(k, list.pageId) };
@@ -1799,6 +1827,7 @@ const state = { S: 3, hovered: null, page: 'main' };
 function currentSlots() {
   let slots = PAGES[state.page].slots;
   if (isMobileLayout()) slots = mobileSlots(state.page, slots);
+  else if (da === 'test') slots = pcSlots(state.page, slots);
   if (!Object.values(slots).some(s => s.when)) return slots;
   return Object.fromEntries(Object.entries(slots).filter(([, s]) => !s.when || s.when()));
 }
@@ -1843,6 +1872,33 @@ const MOBILE_LABELS_DA2 = {
   serments: { '0,2': '#4599DF', '0,4': '#88B253', '0,6': '#E25D33' },
 };
 const mobileCache = { minecraft: new WeakMap(), test: new WeakMap() };   // une disposition par D.A
+// D.A test sur ordinateur : mêmes lignes façon « succès » que sur téléphone, deux par ligne (item en colonne 0 ou 5,
+// titre sur les 2 cases à partir de la colonne 2 ou 7). Clé ordinateur -> nouvelle place de l'item.
+const PC_PLACES_DA2 = {
+  main: { '1,4': '0,8', '2,4': '1,0', '2,1': '1,5', '2,5': '3,0', '2,6': '3,5' },
+  serments: { '0,2': '1,0', '0,4': '1,5', '0,6': '3,0' },
+};
+const pcCache = new WeakMap();
+function pcSlots(id, slots) {
+  const places = PC_PLACES_DA2[id];
+  if (!places) return slots;
+  if (pcCache.has(slots)) return pcCache.get(slots);
+  const out = {}, labels = { ...(MOBILE_LABELS[id] || {}), ...(MOBILE_LABELS_DA2[id] || {}) };
+  for (const [key, slot] of Object.entries(slots)) {
+    const to = places[key] || key;
+    if (!places[key] && out[to]) continue;   // case déjà prise par un bloc de titre
+    out[to] = slot;
+    if (places[key] && labels[key]) {
+      const [r, c] = to.split(',').map(Number), style = labels[key];
+      out[`${r},${c + 2}`] = {
+        span: 2, ...(typeof style === 'string' ? { color: style } : style), label: () => slotTitle(slot), desc: () => slotDesc(slot),
+        dim: () => !!(slot.look && slot.look().dim), tooltip: slot.tooltip, open: slot.open, action: slot.action,
+      };
+    }
+  }
+  pcCache.set(slots, out);
+  return out;
+}
 function mobileSlots(id, slots) {
   const cache = mobileCache[da];
   if (cache.has(slots)) return cache.get(slots);
@@ -1901,7 +1957,7 @@ function renderGui() {
     setGuiSize(L);
     ctx.imageSmoothingEnabled = false;
   }
-  if (!L.mobile) {
+  if (!L.mobile && !L.bar) {
     // Fond du coffre : haut de generic_54 (titre + 6 rangées) + bordure arrondie du bas.
     ctx.drawImage(T.generic_54, 0, 0, GUI_W, 125, 0, 0, GUI_W * S, 125 * S);
     ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
@@ -1916,16 +1972,16 @@ function renderGui() {
   // D.A test : les blocs de titre (façon succès Minecraft, sous l'item) d'abord, puis les items par-dessus
   const passes = da === 'test' ? ['span', 'item'] : [null];
   for (const pass of passes)
-    for (let r = scroll ? SCROLL_VIEW : 0; r < ROWS; r++)
+    for (let r = scroll ? L.view : 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `${r},${c}`, 8 + c * 18, TOP + r * 18, S, pass);
   if (scroll) {
     // Liste qui défile (téléphone) : rangées 0 à 7 du coffre, découpées ; fonds de case redessinés au défilement.
     const off = Math.round(scroll.offset * S) / S, inner = COLS * 18;
     ctx.save();
     ctx.beginPath();
-    ctx.rect(7 * S, (TOP - 1) * S, inner * S, SCROLL_VIEW * 18 * S);
+    ctx.rect(7 * S, (TOP - 1) * S, inner * S, L.view * 18 * S);
     ctx.clip();
-    const first = Math.floor(off / 18), last = Math.min(scroll.rows - 1, Math.floor((off + SCROLL_VIEW * 18) / 18));
+    const first = Math.floor(off / 18), last = Math.min(scroll.rows - 1, Math.floor((off + L.view * 18) / 18));
     for (let r = first; r <= last; r++) {
       const y = TOP + r * 18 - off;
       if (da === 'test') { ctx.fillStyle = CHEST_BG; ctx.fillRect(7 * S, (y - 1) * S, inner * S, 18 * S); }
@@ -1940,7 +1996,7 @@ function renderGui() {
 }
 // Barre de défilement façon Minecraft (inventaire créatif) : rail creusé à droite de la liste, curseur en relief.
 function scrollbarRect(L) {
-  return { x: 9 + L.cols * 18, y: L.top - 1, w: SCROLLBAR_EXTRA - 2, h: SCROLL_VIEW * 18 - 2, thumb: 15 };
+  return { x: 9 + L.cols * 18, y: L.top - 1, w: SCROLLBAR_EXTRA - 2, h: L.view * 18 - 2, thumb: 15 };
 }
 function drawScrollbar(ctx, S, L, scroll) {
   const b = scrollbarRect(L), fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
@@ -2132,13 +2188,12 @@ function coveredBy(slots, key) {
   }
   return null;
 }
-// Liste qui défile : rangées visibles 0 à 9 (la rangée 10, barre du bas, reste fixe). Défilement par page.
-const SCROLL_VIEW = MOBILE_NAV;
+// Liste qui défile : toutes les rangées sauf la dernière (barre du bas, fixe). Défilement par page.
 const scrolls = {};
 function scrollInfo(L = guiLayout()) {
   const page = PAGES[state.page];
-  if (!L.mobile || !page || !pageRows(page)) return null;
-  const rows = Math.max(SCROLL_VIEW, pageRows(page)), max = (rows - SCROLL_VIEW) * 18;
+  if (!page || !pageRows(page)) return null;
+  const rows = Math.max(L.view, pageRows(page)), max = (rows - L.view) * 18;
   scrolls[state.page] = Math.max(0, Math.min(max, scrolls[state.page] || 0));
   return { rows, max, offset: scrolls[state.page] };
 }
@@ -2184,7 +2239,7 @@ function slotAt(ev) {
   const c = Math.floor((gx - 7) / 18), row = Math.floor((gy - L.top + 1) / 18);
   if (c < 0 || c >= L.cols || row < 0 || row >= L.rows) return null;
   const scroll = scrollInfo(L);
-  if (scroll && row < SCROLL_VIEW) {   // liste qui défile : rangée de la liste sous le doigt
+  if (scroll && row < L.view) {   // liste qui défile : rangée de la liste sous le doigt
     const key = `v${Math.floor((gy - L.top + 1 + scroll.offset) / 18)},${c}`;
     return coveredBy(currentSlots(), key) || key;
   }
@@ -3937,7 +3992,8 @@ headCanvas.addEventListener('click', ev => {
 // Taille du canevas du coffre (l'échelle se calcule avec la hauteur maximale pour ne pas changer d'une page à l'autre).
 function sizeGui() {
   const L = guiLayout(), maxH = L.mobile ? 18 + (MOBILE_TITLE_LINES - 1) * 9 - 1 + MOBILE_ROWS * 18 + 7 : GUI_H;
-  const maxW = L.mobile ? MOBILE_W + SCROLLBAR_EXTRA : L.w;   // même échelle avec ou sans barre de défilement
+  // même échelle avec ou sans barre de défilement (ordinateur : seulement en D.A test, où des listes défilent)
+  const maxW = L.mobile ? MOBILE_W + SCROLLBAR_EXTRA : GUI_W + (da === 'test' ? SCROLLBAR_EXTRA : 0);
   const fit = Math.min(viewW() / (maxW + 16), viewH() / (maxH + 16)), R = guiRatio();
   // téléphone : échelle au 1/R près (pixels de l'écran entiers), pour remplir au mieux la hauteur
   state.S = Math.max(2, Math.min(5, Math.floor(fit * R) / R));
@@ -4001,7 +4057,20 @@ async function main() {
   canvas.addEventListener('click', blockLongClick, true);
   canvas.addEventListener('mousedown', blockLongClick, true);
   canvas.addEventListener('mouseup', blockLongClick, true);
-  canvas.addEventListener('contextmenu', ev => ev.preventDefault());   // pas de menu du navigateur à l'appui long
+  canvas.addEventListener('contextmenu', ev => ev.preventDefault());
+  // Ordinateur : la molette fait défiler les listes ; le curseur de la barre se fait glisser à la souris
+  canvas.addEventListener('wheel', ev => {
+    if (!scrollInfo()) return;
+    ev.preventDefault();
+    scrollBy(state.page, ev.deltaY / state.S);
+    state.hovered = undefined;
+    renderGui();
+    onMove(ev);
+  }, { passive: false });
+  let barDrag = false;
+  canvas.addEventListener('mousedown', ev => { if (onScrollbar(ev)) { barDrag = true; scrollFromBar(ev.clientY); ev.preventDefault(); } });
+  addEventListener('mousemove', ev => { if (barDrag) scrollFromBar(ev.clientY); });
+  addEventListener('mouseup', () => { barDrag = false; });   // pas de menu du navigateur à l'appui long
   markAppReady();
   checkBlockReminders();
   setInterval(checkBlockReminders, 15000);
