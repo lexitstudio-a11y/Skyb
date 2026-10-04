@@ -1699,8 +1699,9 @@ const MOBILE_NAV_COLS = [0, 0, 1, 1, 2, 3, 3, 4, 4];
 const MOBILE_PAGE_COLS = id => /^serment\d+$/.test(id) ? { 1: 0, 2: 1, 6: 3, 7: 4 } : null;
 // Places choisies à la main sur téléphone (clé ordinateur -> clé mobile), avant le placement automatique.
 const MOBILE_PLACES = {
-  // Profil Joueur : papier au milieu, arbres (bûche) à sa gauche, montre à sa droite ; livre des serments au centre du coffre
-  main: { '2,1': '2,1', '2,4': '4,2', '2,5': '2,2', '2,6': '2,3' },
+  // Profil Joueur : livre des serments sous la tête, arbres (bûche) à sa gauche, montre à sa droite ;
+  // papier (liste de choses à faire) au centre du coffre
+  main: { '2,1': '2,1', '2,4': '2,2', '2,6': '2,3', '2,5': '4,2' },
 };
 const mobileCache = new WeakMap();
 function mobileSlots(id, slots) {
