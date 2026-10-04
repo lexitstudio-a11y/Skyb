@@ -1767,16 +1767,24 @@ let T, font, BLOCKS;
 const canvas = document.getElementById('gui');
 const tip = document.getElementById('tooltip');
 
+// Téléphone : le coffre est dessiné à la résolution de l'écran (Retina), pour des textes plus fins (titres des arbres).
+const guiRatio = () => isMobileLayout() ? Math.max(1, Math.min(3, Math.round(window.devicePixelRatio || 1))) : 1;
+function setGuiSize(L) {
+  const R = guiRatio();
+  canvas.width = L.w * state.S * R;
+  canvas.height = L.h * state.S * R;
+  canvas.style.width = L.w * state.S + 'px';
+  canvas.style.height = L.h * state.S + 'px';
+}
 function renderGui() {
-  const S = state.S;
+  const S = state.S * guiRatio();
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const L = guiLayout(), { cols: COLS, rows: ROWS, top: TOP } = L;
   if (canvas.width !== L.w * S || canvas.height !== L.h * S) {   // titre sur 1 ou 2 lignes (mobile) : hauteur différente
-    canvas.width = L.w * S;
-    canvas.height = L.h * S;
+    setGuiSize(L);
     ctx.imageSmoothingEnabled = false;
   }
   if (!L.mobile) {
@@ -1817,7 +1825,7 @@ function drawCell(ctx, slots, key, x, y, S) {
     const w = slot.span * 18 - 2;
     drawColorBlock(ctx, x, y, w, 16, slot.color, S);
     // texte un peu plus petit que le reste du coffre (2 lignes au plus) pour que le titre tienne dans le bloc
-    const ts = Math.max(1, Math.round(S * 2 / 3)), k = S / ts, room = (w - 6) * k;
+    const ts = Math.max(1, Math.round(S * 0.55)), k = S / ts, room = (w - 6) * k;
     let lines = wrapText(slot.label, room);
     if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
     const top = (y + 8) * k - lines.length * 4.5 + 0.5;
@@ -3629,8 +3637,7 @@ headCanvas.addEventListener('click', ev => {
 function sizeGui() {
   const L = guiLayout(), maxH = L.mobile ? 18 + (MOBILE_TITLE_LINES - 1) * 9 - 1 + 9 * 18 + 7 : GUI_H;
   state.S = Math.max(2, Math.min(5, Math.floor(Math.min(viewW() / (L.w + 16), viewH() / (maxH + 16)))));
-  canvas.width = L.w * state.S;
-  canvas.height = L.h * state.S;
+  setGuiSize(L);
 }
 let lastMobile = null;
 function resize() {
