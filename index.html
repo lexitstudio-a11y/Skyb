@@ -1827,6 +1827,10 @@ function renderGui() {
     ctx.drawImage(T.generic_54, 0, 0, GUI_W, 125, 0, 0, GUI_W * S, 125 * S);
     ctx.drawImage(T.generic_54, 0, 215, GUI_W, 7, 0, 125 * S, GUI_W * S, 7 * S);
   } else drawMobileChest(ctx, S, L);
+  if (da === 'test') {   // D.A test : pas de cases vides, seulement le fond du coffre (les items gardent leur case)
+    ctx.fillStyle = CHEST_BG;
+    ctx.fillRect(7 * S, (TOP - 1) * S, COLS * 18 * S, ROWS * 18 * S);
+  }
   L.title.forEach((line, i) => drawText(ctx, font, line, 8, 6 + i * 9, '#404040', S));
 
   const slots = currentSlots(), scroll = scrollInfo(L);
@@ -1842,18 +1846,24 @@ function renderGui() {
     const first = Math.floor(off / 18), last = Math.min(scroll.rows - 1, Math.floor((off + SCROLL_VIEW * 18) / 18));
     for (let r = first; r <= last; r++) {
       const y = TOP + r * 18 - off;
-      ctx.drawImage(T.generic_54, 7, 17, inner, 18, 7 * S, (y - 1) * S, inner * S, 18 * S);
+      if (da === 'test') { ctx.fillStyle = CHEST_BG; ctx.fillRect(7 * S, (y - 1) * S, inner * S, 18 * S); }
+      else ctx.drawImage(T.generic_54, 7, 17, inner, 18, 7 * S, (y - 1) * S, inner * S, 18 * S);
       for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `v${r},${c}`, 8 + c * 18, y, S);
     }
     ctx.restore();
   }
 }
+const CHEST_BG = '#C6C6C6';   // fond gris du coffre (generic_54)
 // Une case du coffre en (x, y) (pixels du GUI). Case « span » : bloc de couleur avec un texte sur plusieurs cases.
 function drawCell(ctx, slots, key, x, y, S) {
   const px = x * S, py = y * S;
   const slot = slots[key];
   if (slot === undefined && coveredBy(slots, key)) return;   // sous le bloc d'une case voisine
   const look = slot && { ...slot, ...(slot.look && slot.look()) };   // apparence du moment (période en cours…)
+  if (da === 'test') {   // D.A test : case vide = rien ; un item garde sa case (creusée, comme en jeu)
+    if (!slot) return;
+    if (!slot.span) ctx.drawImage(T.generic_54, 7, 17, 18, 18, px - S, py - S, 18 * S, 18 * S);
+  }
   if (!slot) ctx.drawImage(T.black_stained_glass, px, py, 16 * S, 16 * S);
   else if (slot.pane) ctx.drawImage(T[slot.pane], px, py, 16 * S, 16 * S);
   else if (slot.span) {
