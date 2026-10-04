@@ -1026,10 +1026,9 @@ Object.entries(PAGES).forEach(([id, page]) => { if (!/^(todo|agenda|arbre)/.test
 const ARBRES_KEY = 'arbres';
 const arbres = (() => { try { return JSON.parse(localStorage.getItem(ARBRES_KEY)) || []; } catch { return []; } })();
 // Téléphone (5 × 9) : 9 arbres par page, rangées 2 / 4 / 6, colonnes 0 / 2 / 4 (cases déjà mobiles, préfixe « m »).
+// Téléphone : une seule page qui défile (voir arbresScrollSlots), donc tous les arbres sur la page 1.
 const ARBRE_CELLS = ['1,2', '1,4', '1,6', '3,2', '3,4', '3,6'];
-const ARBRE_CELLS_MOBILE = [2, 4, 6].flatMap(r => [0, 2, 4].map(c => `m${r},${c}`));
-const arbreCells = () => isMobileLayout() ? ARBRE_CELLS_MOBILE : ARBRE_CELLS;
-const arbresPerPage = () => arbreCells().length;
+const arbresPerPage = () => isMobileLayout() ? Infinity : ARBRE_CELLS.length;
 const arbresPageId = k => k === 1 ? 'arbres' : `arbres-${k}`;   // k : numéro de page (à partir de 1)
 function saveArbres() {
   try { localStorage.setItem(ARBRES_KEY, JSON.stringify(arbres)); } catch {}
@@ -1191,7 +1190,7 @@ function arbreLists() {
 }
 // Page de liste d'où l'on a ouvert chaque arbre (clé : n) : la flèche de retour et la suppression y ramènent.
 const arbreFrom = {};
-const arbreBackPage = n => arbreFrom[n] && PAGES[arbreFrom[n]] ? arbreFrom[n] : arbresPageId(Math.ceil(n / arbresPerPage()));
+const arbreBackPage = n => arbreFrom[n] && PAGES[arbreFrom[n]] ? arbreFrom[n] : arbresPageId(Math.max(1, Math.ceil(n / arbresPerPage())));
 // Suppression d'un arbre (tête rouge en haut à gauche de sa page), après confirmation ; retour à sa liste.
 function deleteArbre(a) {
   openConfirm({
@@ -1331,10 +1330,33 @@ function buildArbrePages(a, n) {
     PAGES[histoId(k)] = { title: 'Historique des valeurs', slots: histoSlots };
   }
 }
+// Téléphone : liste qui défile (scrollRows rangées, clés « v<rangée>,<col> » ; la barre du bas reste fixe).
+// Rangée 0 : montre et tête verte ; puis 3 rangées par arbre : son icône à gauche et son titre sur les 3 cases
+// de droite (bloc de couleur façon Timeblock), sa barre de progression (5 vitres = 5 niveaux), une rangée vide.
+const arbreColor = n => TB_COLORS[(n * 7) % TB_COLORS.length];
+function arbresScrollPage(list) {
+  const slots = { ...navSlots(list.back) };
+  slots['v0,2'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };
+  if (list.add) slots['v0,4'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
+  list.trees.forEach((a, i) => {
+    const n = arbres.indexOf(a) + 1, pct = arbreProgress(a), r = 2 + 3 * i;
+    const open = () => { arbreFrom[n] = list.pageId(1); location.hash = `arbre-${n}`; };
+    const tooltip = () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? [...wrapText(a.description, 180).map(l => '§7' + l), ''] : []), progressLine(a, pct), '', '§eClique pour voir !'];
+    slots[`v${r},0`] = { ...arbreIcon(a), count: Math.floor(pct / 10) || null, tooltip, action: open };
+    slots[`v${r},2`] = { span: 3, label: a.titre, color: arbreColor(n), tooltip, action: open };
+    for (let level = 1; level <= 5; level++) {
+      const st = levelState(a, level);
+      slots[`v${r + 1},${level - 1}`] = { pane: LEVEL_PANES[st], tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
+    }
+  });
+  return { title: list.title, slots, scrollRows: 2 + 3 * list.trees.length };
+}
 function refreshArbres() {
   // les numéros changent après une suppression : on reconstruit toutes les pages des arbres
   for (const id of Object.keys(PAGES)) if (/^arbres?-/.test(id)) delete PAGES[id];
   for (const list of arbreLists()) {
+    if (list.add) list.trees.forEach(a => buildArbrePages(a, arbres.indexOf(a) + 1));   // une seule fois par arbre
+    if (isMobileLayout()) { PAGES[list.pageId(1)] = arbresScrollPage(list); continue; }
     const pages = Math.max(1, Math.ceil(list.trees.length / arbresPerPage()));
     for (let k = 1; k <= pages; k++) {
       const slots = { ...navSlots(list.back), ...prevPageSlot(k, list.pageId) };
@@ -1344,12 +1366,11 @@ function refreshArbres() {
       list.trees.slice((k - 1) * arbresPerPage(), k * arbresPerPage()).forEach((a, i) => {
         const n = arbres.indexOf(a) + 1, pct = arbreProgress(a);
         const from = list.pageId(k);
-        slots[arbreCells()[i]] = {
+        slots[ARBRE_CELLS[i]] = {
           ...arbreIcon(a), count: Math.floor(pct / 10) || null,
           tooltip: () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? [...wrapText(a.description, 180).map(l => '§7' + l), ''] : []), progressLine(a, pct), '', '§eClique pour voir !'],
           action: () => { arbreFrom[n] = from; location.hash = `arbre-${n}`; },
         };
-        if (list.add) buildArbrePages(a, n);   // une seule fois par arbre (la liste principale les contient tous)
       });
       PAGES[list.pageId(k)] = { title: list.title, slots };
     }
@@ -1727,9 +1748,10 @@ function mobileSlots(id, slots) {
     return (a[0] === 'm') - (b[0] === 'm') || ra - rb || ca - cb;
   });
   for (const [key, slot] of entries.filter(([k]) => k[0] === 'm')) out[key.slice(1)] = slot;   // cases déjà mobiles
+  for (const [key, slot] of entries.filter(([k]) => k[0] === 'v')) out[key] = slot;   // liste qui défile
   const fixed = MOBILE_PLACES[id] || {};
   for (const [key, slot] of entries) if (fixed[key]) out[fixed[key]] = slot;
-  for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && !fixed[k])) {
+  for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && k[0] !== 'v' && !fixed[k])) {
     const [r, c] = key.split(',').map(Number);
     if (special && special[c] != null) place(r, special[c], slot);
     else if (r === 5) place(8, MOBILE_NAV_COLS[c], slot);
@@ -1764,45 +1786,92 @@ function renderGui() {
   } else drawMobileChest(ctx, S, L);
   L.title.forEach((line, i) => drawText(ctx, font, line, 8, 6 + i * 9, '#404040', S));
 
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const px = (8 + c * 18) * S, py = (TOP + r * 18) * S;
-      const key = `${r},${c}`;
-      const slot = currentSlots()[key];
-      const look = slot && { ...slot, ...(slot.look && slot.look()) };   // apparence du moment (période en cours…)
-      if (!slot) ctx.drawImage(T.black_stained_glass, px, py, 16 * S, 16 * S);
-      else if (slot.pane) ctx.drawImage(T[slot.pane], px, py, 16 * S, 16 * S);
-      else {
-        if (look.item) {
-          const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
-          ctx.drawImage(look.dim ? dimmed(T[look.item]) : T[look.item], px + off, py + off, size, size);
-        }
-        else if (look.block) drawCube(ctx, BLOCKS[look.block], px, py, S, (look.block === 'chest' ? 0.9 : 1) * ITEM_SCALE);
-        else if (look.head) drawCube(ctx, HEADS[look.head], px, py, S, 0.85 * ITEM_SCALE);
-        else if (look.image) {
-          // Image fournie telle quelle (rendu déjà en 3D) : réduite pour tenir dans la case, proportions gardées.
-          const img = T[look.image], size = 16 * S * ITEM_SCALE * 0.9;
-          const k = size / Math.max(img.width, img.height), w = img.width * k, h = img.height * k;
-          ctx.imageSmoothingEnabled = true;
-          ctx.drawImage(img, px + (16 * S - w) / 2, py + (16 * S - h) / 2, w, h);
-          ctx.imageSmoothingEnabled = false;
-        }
-      }
-
-      // Nombre en bas à droite de la case (comme la taille d'une pile en jeu), en blanc avec ombre.
-      const count = look && (typeof look.count === 'function' ? look.count() : look.count);
-      if (count != null) {
-        const txt = String(count);
-        drawText(ctx, font, txt, 8 + c * 18 + 17 - textWidth(font, txt), TOP + r * 18 + 9, look.countColor || '#FFFFFF', S, true);
-      }
-
-      // Surbrillance blanche de la case survolée, comme en jeu.
-      if (key === state.hovered) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-        ctx.fillRect(px, py, 16 * S, 16 * S);
-      }
+  const slots = currentSlots(), scroll = scrollInfo(L);
+  for (let r = scroll ? SCROLL_VIEW : 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `${r},${c}`, 8 + c * 18, TOP + r * 18, S);
+  if (scroll) {
+    // Liste qui défile (téléphone) : rangées 0 à 7 du coffre, découpées ; fonds de case redessinés au défilement.
+    const off = Math.round(scroll.offset * S) / S, inner = COLS * 18;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(7 * S, (TOP - 1) * S, inner * S, SCROLL_VIEW * 18 * S);
+    ctx.clip();
+    const first = Math.floor(off / 18), last = Math.min(scroll.rows - 1, Math.floor((off + SCROLL_VIEW * 18) / 18));
+    for (let r = first; r <= last; r++) {
+      const y = TOP + r * 18 - off;
+      ctx.drawImage(T.generic_54, 7, 17, inner, 18, 7 * S, (y - 1) * S, inner * S, 18 * S);
+      for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `v${r},${c}`, 8 + c * 18, y, S);
+    }
+    ctx.restore();
+  }
+}
+// Une case du coffre en (x, y) (pixels du GUI). Case « span » : bloc de couleur avec un texte sur plusieurs cases.
+function drawCell(ctx, slots, key, x, y, S) {
+  const px = x * S, py = y * S;
+  const slot = slots[key];
+  if (slot === undefined && coveredBy(slots, key)) return;   // sous le bloc d'une case voisine
+  const look = slot && { ...slot, ...(slot.look && slot.look()) };   // apparence du moment (période en cours…)
+  if (!slot) ctx.drawImage(T.black_stained_glass, px, py, 16 * S, 16 * S);
+  else if (slot.pane) ctx.drawImage(T[slot.pane], px, py, 16 * S, 16 * S);
+  else if (slot.span) {
+    const w = slot.span * 18 - 2;
+    drawColorBlock(ctx, x, y, w, 16, slot.color, S);
+    // texte un peu plus petit que le reste du coffre (2 lignes au plus) pour que le titre tienne dans le bloc
+    const ts = Math.max(1, Math.round(S * 2 / 3)), k = S / ts, room = (w - 6) * k;
+    let lines = wrapText(slot.label, room);
+    if (lines.length > 2) lines = [lines[0], fitText(lines.slice(1).join(' '), room)];
+    const top = (y + 8) * k - lines.length * 4.5 + 0.5;
+    lines.forEach((l, i) => drawText(ctx, font, l, (x + 3) * k + 1, Math.round(top + i * 9), '#FFFFFF', ts, true));
+  }
+  else {
+    if (look.item) {
+      const size = 16 * S * ITEM_SCALE, off = (16 * S - size) / 2;
+      ctx.drawImage(look.dim ? dimmed(T[look.item]) : T[look.item], px + off, py + off, size, size);
+    }
+    else if (look.block) drawCube(ctx, BLOCKS[look.block], px, py, S, (look.block === 'chest' ? 0.9 : 1) * ITEM_SCALE);
+    else if (look.head) drawCube(ctx, HEADS[look.head], px, py, S, 0.85 * ITEM_SCALE);
+    else if (look.image) {
+      // Image fournie telle quelle (rendu déjà en 3D) : réduite pour tenir dans la case, proportions gardées.
+      const img = T[look.image], size = 16 * S * ITEM_SCALE * 0.9;
+      const k = size / Math.max(img.width, img.height), w = img.width * k, h = img.height * k;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(img, px + (16 * S - w) / 2, py + (16 * S - h) / 2, w, h);
+      ctx.imageSmoothingEnabled = false;
     }
   }
+
+  // Nombre en bas à droite de la case (comme la taille d'une pile en jeu), en blanc avec ombre.
+  const count = look && (typeof look.count === 'function' ? look.count() : look.count);
+  if (count != null) {
+    const txt = String(count);
+    drawText(ctx, font, txt, x + 17 - textWidth(font, txt), y + 9, look.countColor || '#FFFFFF', S, true);
+  }
+
+  // Surbrillance blanche de la case survolée, comme en jeu.
+  if (key === state.hovered) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillRect(px, py, ((slot && slot.span || 1) * 18 - 2) * S, 16 * S);
+  }
+}
+// Case cachée par un bloc « span » commencé une ou deux cases plus à gauche : renvoie la clé de ce bloc.
+function coveredBy(slots, key) {
+  const m = key.match(/^(v?\d+),(\d+)$/);
+  if (!m) return null;
+  for (let d = 1; d < 5; d++) {
+    const k = `${m[1]},${m[2] - d}`, sl = slots[k];
+    if (sl) return sl.span > d ? k : null;
+  }
+  return null;
+}
+// Liste qui défile : rangées visibles 0 à 7 (la rangée 8, barre du bas, reste fixe). Défilement par page.
+const SCROLL_VIEW = 8;
+const scrolls = {};
+function scrollInfo(L = guiLayout()) {
+  const page = PAGES[state.page];
+  if (!L.mobile || !page || !page.scrollRows) return null;
+  const rows = Math.max(SCROLL_VIEW, page.scrollRows), max = (rows - SCROLL_VIEW) * 18;
+  scrolls[state.page] = Math.max(0, Math.min(max, scrolls[state.page] || 0));
+  return { rows, max, offset: scrolls[state.page] };
 }
 
 // Coffre de 5 x 9 assemblé à partir des morceaux de generic_54 : coins et bords, bande du titre (plus haute
@@ -1844,6 +1913,11 @@ function slotAt(ev) {
   const gx = (evX(ev) - canvas.offsetLeft) / state.S, gy = (evY(ev) - canvas.offsetTop) / state.S;
   const c = Math.floor((gx - 7) / 18), row = Math.floor((gy - L.top + 1) / 18);
   if (c < 0 || c >= L.cols || row < 0 || row >= L.rows) return null;
+  const scroll = scrollInfo(L);
+  if (scroll && row < SCROLL_VIEW) {   // liste qui défile : rangée de la liste sous le doigt
+    const key = `v${Math.floor((gy - L.top + 1 + scroll.offset) / 18)},${c}`;
+    return coveredBy(currentSlots(), key) || key;
+  }
   return `${row},${c}`;
 }
 
@@ -1895,12 +1969,22 @@ function onLeave() {
 // Téléphone : appui long sur un item = son overlay (comme le survol à la souris), sans compter le clic.
 // L'overlay reste affiché jusqu'au prochain toucher ; bouger le doigt annule l'appui long.
 const LONG_PRESS_MS = 450;
-const press = { timer: null, x: 0, y: 0, long: false, blockUntil: 0 };
+const press = { timer: null, x: 0, y: 0, long: false, blockUntil: 0, drag: null };
+// Liste qui défile : glisser le doigt fait défiler (avec élan au lâcher) ; un glissement ne compte pas comme un clic.
+const fling = { v: 0, raf: 0, page: null };
+function stopFling() { cancelAnimationFrame(fling.raf); fling.v = 0; }
+function scrollBy(page, dy) {
+  scrolls[page] = (scrolls[page] || 0) + dy;
+  const sc = scrollInfo();   // borne le défilement
+  return sc && (sc.offset === 0 || sc.offset === sc.max);
+}
 function onTouchStart(ev) {
   if (ev.touches.length !== 1) { clearTimeout(press.timer); return; }
   const t = ev.touches[0];
+  stopFling();
   if (!tip.hidden || state.hovered) onLeave();   // un overlay resté affiché disparaît au toucher suivant
-  Object.assign(press, { x: t.clientX, y: t.clientY, long: false });
+  const key = slotAt(t), scrollable = scrollInfo() && key && key[0] === 'v';
+  Object.assign(press, { x: t.clientX, y: t.clientY, long: false, drag: scrollable ? { y: t.clientY, moving: false, t: performance.now(), v: 0 } : null });
   clearTimeout(press.timer);
   press.timer = setTimeout(() => {
     press.long = true;
@@ -1912,9 +1996,38 @@ function onTouchStart(ev) {
 function onTouchMove(ev) {
   const t = ev.touches[0];
   if (t && Math.hypot(t.clientX - press.x, t.clientY - press.y) > 10) clearTimeout(press.timer);
+  const d = press.drag;
+  if (!t || !d || press.long) return;
+  if (!d.moving && Math.abs(t.clientY - press.y) > 8) { d.moving = true; d.y = t.clientY; clearTimeout(press.timer); }
+  if (!d.moving) return;
+  ev.preventDefault();
+  const dy = (d.y - t.clientY) / state.S, now = performance.now();
+  d.v = dy / Math.max(1, now - d.t) * 0.6 + d.v * 0.4;   // vitesse (pixels du GUI par ms), lissée
+  d.y = t.clientY; d.t = now;
+  scrollBy(state.page, dy);
+  renderGui();
 }
 function onTouchEnd(ev) {
   clearTimeout(press.timer);
+  const d = press.drag;
+  press.drag = null;
+  if (d && d.moving) {
+    ev.preventDefault();
+    press.blockUntil = Date.now() + 400;   // pas de clic à la fin d'un glissement
+    if (performance.now() - d.t > 80) return;   // doigt arrêté avant le lâcher : pas d'élan
+    fling.v = d.v; fling.page = state.page;
+    let last = performance.now();
+    const step = now => {
+      if (state.page !== fling.page || Math.abs(fling.v) < 0.01) return;
+      const dt = Math.min(32, now - last); last = now;
+      const edge = scrollBy(fling.page, fling.v * dt);
+      fling.v *= Math.pow(0.995, dt);
+      renderGui();
+      if (!edge) fling.raf = requestAnimationFrame(step);
+    };
+    fling.raf = requestAnimationFrame(step);
+    return;
+  }
   if (press.long) {   // pas de clic (ni de survol) simulé après un appui long
     ev.preventDefault();
     press.long = false;
@@ -3569,7 +3682,7 @@ async function main() {
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseleave', onLeave);
   canvas.addEventListener('touchstart', onTouchStart, { passive: true });
-  canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+  canvas.addEventListener('touchmove', onTouchMove, { passive: false });
   canvas.addEventListener('touchend', onTouchEnd);
   canvas.addEventListener('touchcancel', () => { clearTimeout(press.timer); if (press.long) press.blockUntil = Date.now() + 800; press.long = false; });
   // clic qui suit un appui long (ou arrive pendant) : bloqué avant tout traitement
