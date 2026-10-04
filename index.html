@@ -117,6 +117,9 @@
   canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
+    -webkit-touch-callout: none;   /* pas de menu « Enregistrer l'image » à l'appui long */
+    -webkit-user-select: none;
+    user-select: none;
   }
 </style>
 </head>
@@ -1843,6 +1846,13 @@ function slotAt(ev) {
 
 function placeTooltip(ev) {
   const S = state.S, margin = 4;
+  if (ev.touch) {   // appui long : centré au-dessus du doigt (en dessous s'il n'y a pas la place), pour rester visible
+    const x = evX(ev) - tip.width / 2, above = evY(ev) - 14 * S - tip.height;
+    const y = above >= margin ? above : Math.min(evY(ev) + 14 * S, viewH() - tip.height - margin);
+    tip.style.left = Math.max(margin, Math.min(x, viewW() - tip.width - margin)) + 'px';
+    tip.style.top = Math.max(margin, y) + 'px';
+    return;
+  }
   let x = evX(ev) + 12 * S, y = evY(ev) - 12 * S;
   if (x + tip.width > viewW() - margin) x = evX(ev) - 12 * S - tip.width;
   y = Math.max(margin, Math.min(y, viewH() - tip.height - margin));
@@ -1877,6 +1887,32 @@ function onLeave() {
   tip.hidden = true;
   canvas.style.cursor = '';
   renderGui();
+}
+
+// Téléphone : appui long sur un item = son overlay (comme le survol à la souris), sans compter le clic.
+// L'overlay reste affiché jusqu'au prochain toucher ; bouger le doigt annule l'appui long.
+const LONG_PRESS_MS = 450;
+const press = { timer: null, x: 0, y: 0, long: false };
+function onTouchStart(ev) {
+  if (ev.touches.length !== 1) { clearTimeout(press.timer); return; }
+  const t = ev.touches[0];
+  if (!tip.hidden || state.hovered) onLeave();   // un overlay resté affiché disparaît au toucher suivant
+  Object.assign(press, { x: t.clientX, y: t.clientY, long: false });
+  clearTimeout(press.timer);
+  press.timer = setTimeout(() => {
+    press.long = true;
+    state.hovered = undefined;   // force le rendu de l'overlay même si la case était déjà survolée
+    onMove({ clientX: press.x, clientY: press.y, touch: true });
+    canvas.style.cursor = '';
+  }, LONG_PRESS_MS);
+}
+function onTouchMove(ev) {
+  const t = ev.touches[0];
+  if (t && Math.hypot(t.clientX - press.x, t.clientY - press.y) > 10) clearTimeout(press.timer);
+}
+function onTouchEnd(ev) {
+  clearTimeout(press.timer);
+  if (press.long) { ev.preventDefault(); press.long = false; }   // pas de clic (ni de survol) simulé après un appui long
 }
 
 function hideTooltip() {
@@ -3524,6 +3560,11 @@ async function main() {
   canvas.addEventListener('click', onClick);
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseleave', onLeave);
+  canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+  canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+  canvas.addEventListener('touchend', onTouchEnd);
+  canvas.addEventListener('touchcancel', () => { clearTimeout(press.timer); press.long = false; });
+  canvas.addEventListener('contextmenu', ev => ev.preventDefault());   // pas de menu du navigateur à l'appui long
   markAppReady();
   checkBlockReminders();
   setInterval(checkBlockReminders, 15000);
