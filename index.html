@@ -1299,6 +1299,8 @@ function buildArbrePages(a, n) {
       ...navSlots(`arbre-${n}-type`),
     },
   };
+  // D.A test sur ordinateur : bloc une rangée plus haut, pour que la barre d'expérience tienne au-dessus de la barre du bas
+  const xpRow = da === 'test' && !isMobileLayout() ? 2 : 3;
   const arbreSlots = {
     '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
     '1,5': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§cnon définie'}`, '§7Affichée après les nombres (ex. 20J).', '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
@@ -1316,12 +1318,15 @@ function buildArbrePages(a, n) {
       tooltip: () => ['§aHistorique', `§7${(a.historique || []).length} valeur${(a.historique || []).length > 1 ? 's' : ''} enregistrée${(a.historique || []).length > 1 ? 's' : ''}`, '', '§eClique pour voir !'],
     },
     ...originBook(a),
-    '3,2': { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, ...originLines(a), progressLine(a, pct), '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
+    [`${xpRow},2`]: { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, ...originLines(a), progressLine(a, pct), '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
     ...navSlots('main'),
     '5,3': { item: 'arrow', tooltip: () => ['§aRetour', `§7Vers ${pageTitle(arbreBackPage(n))}`], action: () => { location.hash = arbreBackPage(n); } },
   };
-  if (da === 'test')   // D.A test : barre d'expérience Minecraft (pourcentage au-dessus) à la place des vitres
-    arbreSlots['3,3'] = { span: 4, xp: () => arbreProgress(a), tooltip: () => [`§a${a.titre}`, progressLine(a, arbreProgress(a))] };
+  if (da === 'test')   // D.A test : bloc « succès » (titre, progression) et barre d'expérience en dessous, à la place des vitres
+    arbreSlots[`${xpRow},4`] = {
+      span: 3, label: a.titre, color: arbreColor(n), desc: () => progressLine(a, arbreProgress(a)).replace(/^§7Progression : /, '§a'),
+      xpBelow: () => arbreProgress(a), tooltip: () => [`§a${a.titre}`, progressLine(a, arbreProgress(a))],
+    };
   else for (let level = 2; level <= 5; level++) {
     const st = levelState(a, level);
     arbreSlots[`3,${level + 1}`] = { pane: LEVEL_PANES[st], count: level, tooltip: [`§aNiveau ${level}`, `§7De ${(level - 1) * 20}% à ${level * 20}%`, LEVEL_LABELS[st]] };
@@ -1970,16 +1975,18 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
   const text = (t, tx, ty, color) => drawText(ctx, font, t, tx * k + 1, Math.round(ty * k), color, ts, true);
   // description (sous la barre du titre)
   const desc = typeof slot.desc === 'function' ? slot.desc() : slot.desc;
+  const dh = slot.progress ? 17 : 13;   // plus haute avec la fine barre sous le texte
   if (desc) {   // commence sous l'item, comme dans le jeu
-    fr(ix, y + 14, right - ix, 13, '#000000');
-    fr(ix + 1, y + 15, right - ix - 2, 11, '#212121');
+    fr(ix, y + 14, right - ix, dh, '#000000');
+    fr(ix + 1, y + 15, right - ix - 2, dh - 2, '#212121');
     text(fitText(desc, (right - ix - 6) * k), ix + 2, y + 18, '#55FF55');
   }
-  if (slot.progress) {   // fine barre de progression (verte sur noir, comme le chargement du monde)
-    const pct = Math.max(0, Math.min(100, slot.progress()));
-    fr(ix, y + 28, right - ix, 2, '#000000');
-    if (pct > 0) fr(ix, y + 28, Math.max(1, Math.round((right - ix) * pct / 100)), 2, '#00FF00');
+  if (slot.progress) {   // fine barre de progression sous le texte (verte, comme le chargement du monde)
+    const pct = Math.max(0, Math.min(100, slot.progress())), bw = right - ix - 6;
+    fr(ix + 3, y + 26, bw, 2, '#3C3C3C');
+    if (pct > 0) fr(ix + 3, y + 26, Math.max(1, Math.round(bw * pct / 100)), 2, '#00FF00');
   }
+  if (slot.xpBelow) xpBar(ctx, ix, y + 14 + dh + 9, right - ix, slot.xpBelow(), S);   // barre d'expérience sous la description
   // titre
   // titre : couleur du bloc de la D.A Minecraft (dégradé et couleur du texte compris)
   const color = slot.color || '#3D79A8';
@@ -2001,8 +2008,14 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
 }
 // D.A test : barre d'expérience Minecraft sur span cases, remplie selon le pourcentage, nombre vert au-dessus.
 function drawXpBar(ctx, slot, x, y, S, hovered) {
+  const w = slot.span * 18 - 2;
+  xpBar(ctx, x, y + 10, w, slot.xp(), S);
+  if (hovered) { ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; ctx.fillRect(x * S, (y + 10) * S, w * S, 5 * S); }
+}
+// Barre d'expérience (5 px de haut en by, largeur w) et son pourcentage au-dessus.
+function xpBar(ctx, x, by, w, pctRaw, S) {
   const fr = (rx, ry, rw, rh, c) => { ctx.fillStyle = c; ctx.fillRect(rx * S, ry * S, rw * S, rh * S); };
-  const pct = Math.max(0, Math.min(100, slot.xp())), w = slot.span * 18 - 2, by = y + 10;
+  const pct = Math.max(0, Math.min(100, pctRaw));
   fr(x, by, w, 5, '#000000');                       // contour
   fr(x + 1, by + 1, w - 2, 3, '#2E2E2E');           // barre vide
   const fill = Math.round((w - 2) * pct / 100);
@@ -2017,7 +2030,6 @@ function drawXpBar(ctx, slot, x, y, S, hovered) {
   const tx = Math.round((x + w / 2) * k - textWidth(font, txt) / 2), ty = Math.round((by - 1) * k) - 8;
   for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) drawText(ctx, font, txt, tx + ox, ty + oy, '#000000', ts);
   drawText(ctx, font, txt, tx, ty, '#80FF20', ts);
-  if (hovered) fr(x, by, w, 5, 'rgba(255, 255, 255, 0.3)');
 }
 // Case cachée par un bloc « span » commencé une ou deux cases plus à gauche : renvoie la clé de ce bloc.
 function coveredBy(slots, key) {
