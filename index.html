@@ -1697,6 +1697,11 @@ const MOBILE_COLS = [0, 0, 0, 1, 2, 3, 4, 4, 4];
 const MOBILE_NAV_COLS = [0, 0, 1, 1, 2, 3, 3, 4, 4];
 // Pages de serment : 4 tableaux (colonnes 1-2) et 12 rounds (colonnes 6-7, rangées 0 à 5) gardent leurs rangées.
 const MOBILE_PAGE_COLS = id => /^serment\d+$/.test(id) ? { 1: 0, 2: 1, 6: 3, 7: 4 } : null;
+// Places choisies à la main sur téléphone (clé ordinateur -> clé mobile), avant le placement automatique.
+const MOBILE_PLACES = {
+  // Profil Joueur : papier au milieu, arbres (bûche) à sa gauche, montre à sa droite, livre des serments au bord
+  main: { '2,1': '2,1', '2,4': '2,0', '2,5': '2,2', '2,6': '2,3' },
+};
 const mobileCache = new WeakMap();
 function mobileSlots(id, slots) {
   if (mobileCache.has(slots)) return mobileCache.get(slots);
@@ -1711,7 +1716,9 @@ function mobileSlots(id, slots) {
     return (a[0] === 'm') - (b[0] === 'm') || ra - rb || ca - cb;
   });
   for (const [key, slot] of entries.filter(([k]) => k[0] === 'm')) out[key.slice(1)] = slot;   // cases déjà mobiles
-  for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm')) {
+  const fixed = MOBILE_PLACES[id] || {};
+  for (const [key, slot] of entries) if (fixed[key]) out[fixed[key]] = slot;
+  for (const [key, slot] of entries.filter(([k]) => k[0] !== 'm' && !fixed[k])) {
     const [r, c] = key.split(',').map(Number);
     if (special && special[c] != null) place(r, special[c], slot);
     else if (r === 5) place(8, MOBILE_NAV_COLS[c], slot);
