@@ -2233,8 +2233,8 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
   if (desc && slot.narrow) { short = wrapText(desc, (right - ix - 6) * k); if (short.length > 2) short = [short[0], fitText(short.slice(1).join(' '), (right - ix - 6) * k)]; }
   const dh = open ? open.h : (slot.progress ? 17 : 13) + (short.length - 1) * 9 / k;   // plus haute avec la fine barre sous le texte
   if (desc || open) {   // commence sous l'item, comme dans le jeu
-    fr(ix, y + 14, right - ix, dh, '#000000');
-    fr(ix + 1, y + 15, right - ix - 2, dh - 2, '#212121');
+    fr(ix - 1, y + 14, right - ix + 1, dh, '#000000');   // aligné sur le bord gauche de la case de l'item
+    fr(ix, y + 15, right - ix - 1, dh - 2, '#212121');
     if (open) open.lines.forEach((l, i) => text(l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
     else short.forEach((l, i) => text(l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
   }
@@ -2274,15 +2274,15 @@ function drawCompactAdvancement(ctx, slot, ix, left, right, y, S, k, text, hover
   const w = right - left, color = (typeof slot.color === 'function' ? slot.color() : slot.color) || '#3D79A8';
   const open = slot.expanded && advDesc(slot, S);
   if (open) {   // description dépliée : sous la barre de progression
-    fr(ix, y + 20, right - ix, open.h - 4, '#000000');
-    fr(ix + 1, y + 20, right - ix - 2, open.h - 5, '#212121');
+    fr(ix - 1, y + 20, right - ix + 1, open.h - 4, '#000000');
+    fr(ix, y + 20, right - ix - 1, open.h - 5, '#212121');
     open.lines.forEach((l, i) => text(l, ix + 2, y + 23 + i * 9 / k, '#55FF55'));
   }
   // barre de progression (verte, comme le chargement du monde) avec son contour noir
-  const pct = slot.progress ? Math.max(0, Math.min(100, slot.progress())) : 0, bw = right - ix - 2;
-  fr(ix, y + 17, right - ix, 4, '#000000');
-  fr(ix + 1, y + 17, bw, 3, '#3C3C3C');
-  if (pct > 0) fr(ix + 1, y + 17, Math.max(1, Math.round(bw * pct / 100)), 3, '#00FF00');
+  const bx = ix - 1, pct = slot.progress ? Math.max(0, Math.min(100, slot.progress())) : 0, bw = right - bx - 2;   // bx : bord de la case
+  fr(bx, y + 17, right - bx, 4, '#000000');
+  fr(bx + 1, y + 17, bw, 3, '#3C3C3C');
+  if (pct > 0) fr(bx + 1, y + 17, Math.max(1, Math.round(bw * pct / 100)), 3, '#00FF00');
   // barre de titre : même hauteur que la case de l'item
   fr(left, y - 1, w, 18, shade(color, 0.25));
   fr(left + 1, y, w - 2, 16, color);
