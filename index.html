@@ -574,9 +574,25 @@ function editTodoText(todo, onSave) {
 // Ajouter : titre (panneau) -> description (livre) -> action ajoutée.
 function addTodo() {
   editTodoText(null, (titre, description) => {
-    todos.push({ titre, description, date: formatDate(new Date()) });
+    const todo = { titre, description, date: formatDate(new Date()) };
+    todos.push(todo);
     saveTodos();
     refreshTodo();
+    askNewTodoPriority(todo);
+  });
+}
+// Après la création d'une action : sa priorité, 3 boutons sur toute la largeur (du plus au moins prioritaire),
+// puis « Sans priorité » (ou Échap).
+function askNewTodoPriority(todo) {
+  const set = p => { if (p) todo.priorite = p; saveTodos(); refreshTodo(); };
+  openConfirm({
+    question: 'Priorité de l\'action',
+    detail: [todo.titre],
+    editLabel: PRIORITES.haute.label, onEdit: () => set('haute'),
+    priorityLabel: PRIORITES.moyenne.label, onPriority: () => set('moyenne'),
+    deleteLabel: PRIORITES.basse.label, onDelete: () => set('basse'),
+    noLabel: '§7Sans priorité', onNo: () => set(null), onCancel: () => set(null),
+    choicesFirst: true,
   });
 }
 // Oui = terminée (passe dans « Actions terminées ») ; Non = en cours ; Supprimer = retirée.
@@ -3097,8 +3113,8 @@ function renderConfirm() {
     + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
   const bw0 = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2));
   // libellés trop larges pour deux boutons côte à côte (téléphone) : Non puis Oui, l'un sous l'autre
-  const stacked = Math.max(textWidth(font, dialog.cfg.noLabel || 'Non'), textWidth(font, dialog.cfg.yesLabel || 'Oui')) > bw0 - 6;
-  let y = Math.max(4, Math.floor((H - total - (stacked ? 24 : 0)) / 2));
+  const stacked = !dialog.cfg.choicesFirst && Math.max(textWidth(font, dialog.cfg.noLabel || 'Non'), textWidth(font, dialog.cfg.yesLabel || 'Oui')) > bw0 - 6;
+  let y = Math.max(4, Math.floor((H - total - (stacked ? 24 : 0) - (dialog.cfg.choicesFirst ? 6 : 0)) / 2));
   for (const q of question) { centered(q, y, '#FFFFFF'); y += 10; }
   y += 6;
   for (const line of lines) { centered(line, y, '#AAAAAA'); y += 10; }
@@ -3118,6 +3134,20 @@ function renderConfirm() {
     y += 2 * (size + gap);
   }
   let bw = bw0, by = y + 14, no, yes;
+  if (dialog.cfg.choicesFirst) {   // les choix d'abord (pleine largeur), puis un seul bouton « Non » en bas
+    const full = Math.min(Math.floor((W - 20) / 2), Math.max(bw, 90));
+    const x0 = Math.floor(W / 2) - full - 4, wFull = 2 * full + 8;
+    const rows = [dialog.cfg.onEdit && 'edit', dialog.cfg.onPriority && 'prio', dialog.cfg.onDelete && 'del'].filter(Boolean);
+    const r = {};
+    rows.forEach((k, i) => { r[k] = [x0, by + i * 24, wFull, 20]; });
+    no = [x0, by + rows.length * 24 + 6, wFull, 20];
+    if (r.edit) drawButton(ctx, ...r.edit.slice(0, 3), dialog.cfg.editLabel, dialog.hover === 'edit', S);
+    if (r.prio) drawButton(ctx, ...r.prio.slice(0, 3), dialog.cfg.priorityLabel, dialog.hover === 'prio', S);
+    if (r.del) drawButton(ctx, ...r.del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
+    drawButton(ctx, ...no.slice(0, 3), dialog.cfg.noLabel || 'Non', dialog.hover === 'no', S);
+    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches };
+    return;
+  }
   if (stacked) {
     bw = Math.min(Math.floor((W - 20) / 2), Math.max(bw, 90));
     no = [Math.floor(W / 2) - bw - 4, by, 2 * bw + 8, 20];
@@ -3158,7 +3188,7 @@ function closeConfirm() {
 dialogCanvas.addEventListener('mousemove', ev => {
   const { S, no, yes, edit, prio, del, swatches } = dialog.layout;
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
-  const hover = sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
+  const hover = sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
     : prio && inRect(ev, prio, S) ? 'prio' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
@@ -3171,7 +3201,7 @@ dialogCanvas.addEventListener('click', ev => {
   if (edit && inRect(ev, edit, S)) { playClick(); closeConfirm(); cfg.onEdit(); return; }
   if (prio && inRect(ev, prio, S)) { playClick(); closeConfirm(); cfg.onPriority(); return; }
   if (inRect(ev, no, S)) { playClick(); closeConfirm(); if (cfg.onNo) cfg.onNo(); }
-  else if (inRect(ev, yes, S)) { playClick(); closeConfirm(); cfg.onYes(); }
+  else if (yes && inRect(ev, yes, S)) { playClick(); closeConfirm(); cfg.onYes(); }
   else if (del && inRect(ev, del, S)) { playClick(); closeConfirm(); cfg.onDelete(); }
 });
 addEventListener('keydown', ev => {
