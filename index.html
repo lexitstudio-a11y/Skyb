@@ -3539,7 +3539,10 @@ async function drawTimeblockPhoto() {
     ctx.beginPath();
     ctx.rect((grid.x + 3) * S, (y1 + 2) * S, (grid.w - 6) * S, (h - 3) * S);
     ctx.clip();
-    const hours = `${fmtMin(b.debut)} - ${fmtMin(b.fin)}`, tx = grid.x + 8, maxW = grid.w - 18;
+    // bloc relié à un arbre : orbe d'expérience à droite (plus petite dans un bloc court), comme dans le Timeblock
+    const o = blockArbre(b) ? Math.max(3, Math.min(9, h - 4)) : 0;
+    const hours = `${fmtMin(b.debut)} - ${fmtMin(b.fin)}`, tx = grid.x + 8, maxW = grid.w - 18 - (o ? o + 3 : 0);
+    if (o) ctx.drawImage(T.orbe_xp, (grid.x + grid.w - 6 - o) * S, (h >= 26 ? y1 + 5 : y1 + 1 + Math.round((h - o) / 2)) * S, o * S, o * S);
     if (h >= 26) {
       drawText(ctx, font, fitText(b.titre, maxW), tx, y1 + 5, '#FFFFFF', S, true);
       drawText(ctx, font, hours, tx, y1 + 15, '#E8E8E8', S, true);
