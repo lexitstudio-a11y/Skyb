@@ -1424,11 +1424,11 @@ function buildArbrePages(a, n) {
     [`${xpRow},2`]: { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, ...originLines(a), progressLine(a, pct), '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
     ...navSlots('main'),
     '5,3': { item: 'arrow', tooltip: () => ['§aRetour', `§7Vers ${pageTitle(arbreBackPage(n))}`], action: () => { location.hash = arbreBackPage(n); } },
-    // Orbe d'expérience : Timeblock de l'agenda à faire, avec un bloc de l'arbre à placer dans la journée
+    // Orbe d'expérience : Timeblock à faire, avec un bloc de l'arbre à placer dans la journée
     '5,0': {
       image: 'orbe_xp',
-      tooltip: () => ['§aTimeblock ' + agendaToWrite(), "§7Planifie un moment pour cet arbre", "§7dans la journée à organiser.", '', '§eClique pour ouvrir !'],
-      action: () => openTimeblock(agendaToWrite(), null, { titre: a.titre, couleur: (n * 7) % TB_COLORS.length }),
+      tooltip: () => ['§aTimeblock ' + timeblockToWrite(), "§7Planifie un moment pour cet arbre", "§7dans la journée à organiser.", '', '§eClique pour ouvrir !'],
+      action: () => openTimeblock(timeblockToWrite(), null, { titre: a.titre, couleur: (n * 7) % TB_COLORS.length }),
     },
   };
   if (da === 'test')   // D.A test : bloc « succès » (titre, progression) et barre d'expérience en dessous, à la place des vitres
@@ -3251,6 +3251,8 @@ const tb = { date: null, onClose: null, layout: null, scroll: null, drag: null, 
 const TB_TRAY = 26, TB_TRAY_BLOCK = [20, 28];   // largeur de la colonne du bloc spécial, taille du bloc
 const fmtMin = m => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
 const tbBlocks = () => timeblocks[tb.date] || [];
+// Timeblock à faire : celui d'aujourd'hui tant qu'il est vide (même si l'agenda du jour est écrit), sinon celui de demain.
+const timeblockToWrite = () => { const today = formatDate(new Date()); return (timeblocks[today] || []).length ? tomorrow() : today; };
 // Chaque nouveau bloc prend une couleur de la palette au hasard (différente de celle du dernier bloc créé),
 // gardée ensuite même s'il est déplacé.
 function randomColor() {
