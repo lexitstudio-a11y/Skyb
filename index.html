@@ -1309,9 +1309,12 @@ const groupBack = groupe => groupe.replace(/-(action|identite)$/, '');
 const groupTitle = groupe => groupe.endsWith('-action') ? "Arbres d'Action" : "Arbres d'Identité";
 // La liste principale montre tous les arbres ; ceux d'un round sont aussi dans leur liste à part.
 function arbreLists() {
-  const lists = [{ trees: arbres, pageId: arbresPageId, title: PAGE_TITLES.arbres, back: 'main', add: true }];
+  // arbres épinglés en tête de liste, objectifs complétés (100 %) tout en bas ; sinon l'ordre de création
+  const rank = a => a.epingle ? 0 : arbreProgress(a) >= 100 ? 2 : 1;
+  const pinnedFirst = list => [...list].sort((x, y) => rank(x) - rank(y));
+  const lists = [{ trees: pinnedFirst(arbres), pageId: arbresPageId, title: PAGE_TITLES.arbres, back: 'main', add: true }];
   for (const groupe of new Set(arbres.map(a => a.groupe).filter(Boolean)))
-    lists.push({ trees: arbres.filter(a => a.groupe === groupe), pageId: k => groupPageId(groupe, k), title: groupTitle(groupe), back: groupBack(groupe) });
+    lists.push({ trees: pinnedFirst(arbres.filter(a => a.groupe === groupe)), pageId: k => groupPageId(groupe, k), title: groupTitle(groupe), back: groupBack(groupe) });
   return lists;
 }
 // Page de liste d'où l'on a ouvert chaque arbre (clé : n) : la flèche de retour et la suppression y ramènent.
@@ -1424,6 +1427,19 @@ function buildArbrePages(a, n) {
     [`${xpRow},2`]: { ...arbreIcon(a), count: 1, tooltip: () => [`§a${a.titre}`, ...originLines(a), progressLine(a, pct), '', `§7Niveau 1 : ${LEVEL_LABELS[levelState(a, 1)]}`] },
     ...navSlots('main'),
     '5,3': { item: 'arrow', tooltip: () => ['§aRetour', `§7Vers ${pageTitle(arbreBackPage(n))}`], action: () => { location.hash = arbreBackPage(n); } },
+    // Bloc d'améthyste : épingle l'arbre tout en haut de sa liste (nouveau clic : le désépingle)
+    '4,0': {
+      image: 'epingle',
+      tooltip: () => a.epingle
+        ? ['§dArbre épinglé', '§7Il apparaît tout en haut de la liste', '§7des arbres de progression.', '', '§eClique pour le désépingler !']
+        : ['§dÉpingler', '§7Place cet arbre tout en haut de la liste', '§7des arbres de progression.', '', '§eClique pour épingler !'],
+      action: () => {
+        a.epingle = !a.epingle || undefined;
+        saveArbres();
+        refreshArbres();
+        showToast({ title: a.epingle ? 'Arbre épinglé' : 'Arbre désépinglé', text: fitText(a.titre, 150) });
+      },
+    },
     // Orbe d'expérience : Timeblock à faire, avec un bloc de l'arbre à placer dans la journée
     '5,0': {
       image: 'orbe_xp',
@@ -1603,7 +1619,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'orbe_xp', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -1909,7 +1925,10 @@ const MOBILE_PLACES = {
   // Profil Joueur (comme la liste des arbres) : tête en haut à droite, puis une ligne sur deux :
   // livre (serments), bûche (arbres), papier (liste de choses à faire), montre (agenda), chacun avec son titre
   main: { '1,4': '0,4', '2,4': '2,0', '2,1': '4,0', '2,5': '6,0', '2,6': '8,0' },   // 4 lignes centrées (rangées 2 à 8)
+  arbre: { '4,0': '9,0' },   // page d'un arbre : bloc d'améthyste (épingler) juste au-dessus de l'orbe d'expérience
 };
+// Pages construites pour chaque arbre (arbre-1, arbre-2…) : mêmes places à la main pour toutes.
+const placesId = id => /^arbre-\d+$/.test(id) ? 'arbre' : id;
 // Téléphone : titre dans un bloc de couleur (façon Timeblock) sur les 3 cases de droite, à côté de l'item
 // placé en colonne 0 (clé ordinateur -> couleur, ou { color, gradient: [haut, bas], text }) ; même overlay
 // et même clic que l'item.
@@ -1956,6 +1975,7 @@ const deskCache = { minecraft: new WeakMap(), test: new WeakMap() };
 const DESK_PLACES = {
   // page d'une action : terminée / supprimer collés à gauche, les 3 priorités collées à droite
   action: { '4,1': '4,1', '4,6': '4,8', '4,7': '4,9', '4,8': '4,10' },
+  arbre: { '4,0': '5,0' },   // bloc d'améthyste (épingler) juste au-dessus de l'orbe d'expérience
 };
 function deskSlots(id, slots) {
   const cache = deskCache[da];
@@ -1965,7 +1985,7 @@ function deskSlots(id, slots) {
   const entries = Object.entries(slots).sort(([a], [b]) => !!places[b] - !!places[a]);   // places choisies d'abord
   for (const [key, slot] of entries) {
     if (key[0] === 'v') { out[key] = slot; continue; }
-    const place = places[key], narrow = place && place.narrow, to = place ? (narrow ? place.to : place) : (DESK_PLACES[id] && DESK_PLACES[id][key]) || deskKey(key);
+    const place = places[key], narrow = place && place.narrow, to = place ? (narrow ? place.to : place) : (DESK_PLACES[placesId(id)] && DESK_PLACES[placesId(id)][key]) || deskKey(key);
     if (!place && out[to]) continue;   // case déjà prise par un bloc de titre
     out[to] = slot;
     if (place && labels[key]) {   // D.A test : bloc de titre sur 3 cases, 2 colonnes à droite (étroit : 2 cases collées à l'item)
@@ -1996,7 +2016,7 @@ function mobileSlots(id, slots) {
   });
   for (const [key, slot] of entries.filter(([k]) => k[0] === 'm')) out[key.slice(1)] = slot;   // cases déjà mobiles
   for (const [key, slot] of entries.filter(([k]) => k[0] === 'v')) out[key] = slot;   // liste qui défile
-  const fixed = (da2 ? MOBILE_PLACES_DA2[id] : MOBILE_PLACES[id]) || {};
+  const fixed = (da2 ? MOBILE_PLACES_DA2[id] : MOBILE_PLACES[placesId(id)]) || {};
   for (const [key, slot] of entries) if (fixed[key]) out[fixed[key]] = slot;
   const hidden = (da2 && MOBILE_HIDE_DA2[id]) || [];
   for (const [key, style] of Object.entries((da2 ? MOBILE_LABELS_DA2[id] : MOBILE_LABELS[id]) || {})) {
