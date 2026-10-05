@@ -521,7 +521,7 @@ function todoCell(todo, n) {
         ? [`§cTerminée le ${todo.fini}`, `§8Supprimée le ${formatDate(addDays(todo.fini, TODO_KEEP_DAYS))}`, '', '§eClique pour supprimer !']
         : ['§eClique quand elle est terminée !']),
     ],
-    action: () => todo.fini ? askTodoDelete(todo) : askTodoDone(todo),
+    action: () => todo.fini ? askTodoDelete(todo) : openTodoPage(todo),
   };
 }
 // Priorité d'une action (todo.priorite) : très prioritaire en tête de liste, puis moyen, sans priorité, pas prioritaire.
@@ -600,40 +600,46 @@ function askTodoDelete(todo) {
     },
   });
 }
-function askTodoDone(todo) {
+// Page d'une action (au clic dans la liste) : l'action en haut, son titre à modifier dessous ;
+// en bas à gauche : terminée (bloc vert) / supprimer (bloc rouge) ; en bas à droite : la priorité,
+// pas prioritaire (vert), moyen (orange), très prioritaire (rouge) — la priorité choisie est mise en avant.
+function todoPage(todo) {
+  const back = () => { location.hash = 'todo'; };
   const update = change => { change(); saveTodos(); refreshTodo(); };
-  openConfirm({
-    question: "L'objectif est-il terminé ?",
-    detail: [todo.titre],
-    onYes: () => update(() => {
-      if (todo.fini) return;
-      const active = todos.filter(t => !t.fini);
-      todo.image = todoImage(active.indexOf(todo) + 1);   // garde l'image qu'elle avait
-      todo.fini = formatDate(new Date());
-      todoStats.finies++;
-      saveJSON(TODO_STATS_KEY, todoStats);
-      playSound(doneSound);
-    }),
-    onNo: () => update(() => { delete todo.fini; delete todo.image; }),
-    onEdit: () => editTodoText(todo, (titre, description) => update(() => Object.assign(todo, { titre, description }))),
-    priorityLabel: `Priorité : ${PRIORITES[todo.priorite] ? PRIORITES[todo.priorite].label : '§7aucune'}`,
-    onPriority: () => askTodoPriority(todo, update),
-    onDelete: () => update(() => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); }),
+  const n = () => todos.filter(t => !t.fini).indexOf(todo) + 1;
+  const prio = (key, image) => ({
+    image, look: () => ({ dim: !!todo.priorite && todo.priorite !== key }),
+    tooltip: () => ['§aPriorité', PRIORITES[key].label, ...(todo.priorite === key ? ['', '§7Priorité actuelle', '§eClique pour la retirer !'] : ['', '§eClique pour choisir !'])],
+    action: () => { update(() => { if (todo.priorite === key) delete todo.priorite; else todo.priorite = key; }); PAGES.action = todoPage(todo); renderGui(); },
   });
+  const slots = {
+    '1,4': { ...todoCell(todo, n()), action: null },
+    '2,4': { item: 'name_tag', tooltip: ['§aModifier', '§7Modifie le titre et la description', '§7de l\'action.', '', '§eClique pour modifier !'],
+      action: () => editTodoText(todo, (titre, description) => { update(() => Object.assign(todo, { titre, description })); PAGES.action = todoPage(todo); location.hash = 'action'; renderGui(); }) },
+    '4,0': { image: 'journee/verte', tooltip: ['§aL\'objectif est-il terminé ?', '§7Le passe dans les actions terminées.', '', '§eClique s\'il est terminé !'],
+      action: () => {
+        update(() => {
+          const active = todos.filter(t => !t.fini);
+          todo.image = todoImage(active.indexOf(todo) + 1);   // garde l'image qu'elle avait
+          todo.fini = formatDate(new Date());
+          todoStats.finies++;
+          saveJSON(TODO_STATS_KEY, todoStats);
+          playSound(doneSound);
+        });
+        back();
+      } },
+    '4,1': { image: 'journee/rouge', tooltip: ['§cSupprimer l\'objectif ?', '§7L\'action est retirée de la liste.', '', '§eClique pour supprimer !'],
+      action: () => { update(() => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); }); back(); } },
+    '4,6': prio('basse', 'journee/verte'),
+    '4,7': prio('moyenne', 'journee/jaune'),
+    '4,8': prio('haute', 'journee/rouge'),
+    ...navSlots('todo'),
+  };
+  return { title: fitText(todo.titre || 'Action', 160), slots };
 }
-// Choix de la priorité d'une action (3 niveaux) ; « Échap » garde la priorité actuelle.
-function askTodoPriority(todo, update) {
-  const set = p => update(() => { if (p) todo.priorite = p; else delete todo.priorite; });
-  // 3 niveaux sur toute la largeur, du plus au moins prioritaire ; en haut : Retour / Aucune
-  openConfirm({
-    question: 'Priorité de l\'action',
-    detail: [todo.titre],
-    noLabel: 'Retour', yesLabel: '§7Aucune',
-    onNo: () => {}, onYes: () => set(null),
-    editLabel: PRIORITES.haute.label, onEdit: () => set('haute'),
-    priorityLabel: PRIORITES.moyenne.label, onPriority: () => set('moyenne'),
-    deleteLabel: PRIORITES.basse.label, onDelete: () => set('basse'),
-  });
+function openTodoPage(todo) {
+  PAGES.action = todoPage(todo);
+  location.hash = 'action';
 }
 
 // --- Agenda de la journée ---
@@ -1876,6 +1882,7 @@ const MOBILE_NAV_COLS = [0, 0, 1, 1, 2, 3, 3, 4, 4];
 const MOBILE_PAGE_COLS = id => /^serment\d+$/.test(id) ? { 1: 0, 2: 1, 6: 3, 7: 4 } : null;
 // Places choisies à la main sur téléphone (clé ordinateur -> clé mobile), avant le placement automatique.
 const MOBILE_PLACES = {
+  action: { '1,4': '1,2', '2,4': '2,2', '4,0': '8,0', '4,1': '9,0', '4,6': '7,4', '4,7': '8,4', '4,8': '9,4' },
   // Profil Joueur (comme la liste des arbres) : tête en haut à droite, puis une ligne sur deux :
   // livre (serments), bûche (arbres), papier (liste de choses à faire), montre (agenda), chacun avec son titre
   main: { '1,4': '0,4', '2,4': '2,0', '2,1': '4,0', '2,5': '6,0', '2,6': '8,0' },   // 4 lignes centrées (rangées 2 à 8)
@@ -1922,6 +1929,11 @@ const PC_PLACES_DA2 = {
 const deskCol = c => c === 0 ? 0 : c === 8 ? DESK_COLS - 1 : c + 1;
 const deskKey = key => { const [r, c] = key.split(',').map(Number); return `${r === 5 ? DESK_ROWS - 1 : r},${deskCol(c)}`; };
 const deskCache = { minecraft: new WeakMap(), test: new WeakMap() };
+// Places choisies à la main sur ordinateur (clé 9 x 6 -> case du coffre 11 x 7), dans les deux D.A.
+const DESK_PLACES = {
+  // page d'une action : terminée / supprimer collés à gauche, les 3 priorités collées à droite
+  action: { '4,1': '4,1', '4,6': '4,8', '4,7': '4,9', '4,8': '4,10' },
+};
 function deskSlots(id, slots) {
   const cache = deskCache[da];
   if (cache.has(slots)) return cache.get(slots);
@@ -1930,7 +1942,7 @@ function deskSlots(id, slots) {
   const entries = Object.entries(slots).sort(([a], [b]) => !!places[b] - !!places[a]);   // places choisies d'abord
   for (const [key, slot] of entries) {
     if (key[0] === 'v') { out[key] = slot; continue; }
-    const place = places[key], narrow = place && place.narrow, to = place ? (narrow ? place.to : place) : deskKey(key);
+    const place = places[key], narrow = place && place.narrow, to = place ? (narrow ? place.to : place) : (DESK_PLACES[id] && DESK_PLACES[id][key]) || deskKey(key);
     if (!place && out[to]) continue;   // case déjà prise par un bloc de titre
     out[to] = slot;
     if (place && labels[key]) {   // D.A test : bloc de titre sur 3 cases, 2 colonnes à droite (étroit : 2 cases collées à l'item)
@@ -2231,7 +2243,7 @@ function drawCell(ctx, slots, key, x, y, S, pass = null, corner = null) {
     else if (look.head) drawCube(ctx, HEADS[look.head], px, py, S, 0.85 * ITEM_SCALE);
     else if (look.image) {
       // Image fournie telle quelle (rendu déjà en 3D) : réduite pour tenir dans la case, proportions gardées.
-      const img = T[look.image], size = 16 * S * ITEM_SCALE * 0.9;
+      const img = look.dim ? dimmed(T[look.image]) : T[look.image], size = 16 * S * ITEM_SCALE * 0.9;
       const k = size / Math.max(img.width, img.height), w = img.width * k, h = img.height * k;
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(img, px + (16 * S - w) / 2, py + (16 * S - h) / 2, w, h);
@@ -3074,16 +3086,21 @@ const dialogCanvas = document.getElementById('dialogCanvas');
 const dialog = { cfg: null, hover: null, layout: null };
 
 function renderConfirm() {
-  const S = signScale();
+  // téléphone : un cran plus petit, pour que la question et les boutons tiennent dans la largeur
+  const S = isMobileLayout() ? Math.max(2, signScale() - 1) : signScale();
   const { ctx, W, H } = prepareScreen(dialogCanvas, S);
   const centered = (text, y, color) => drawText(ctx, font, text, Math.floor(W / 2 - textWidth(font, text) / 2), y, color, S, true);
-  const lines = dialog.cfg.detail || [];
+  const fit = t => wrapText(t, W - 12);   // textes trop longs : sur plusieurs lignes, jamais coupés par l'écran
+  const question = fit(dialog.cfg.question), lines = (dialog.cfg.detail || []).flatMap(l => l ? fit(l) : ['']);
   // Hauteur totale (question, détails, nuancier, boutons) pour centrer le tout verticalement
-  const total = 16 + lines.length * 10 + (dialog.cfg.colors ? 36 : 0) + 14 + 20
+  const total = 6 + question.length * 10 + lines.length * 10 + (dialog.cfg.colors ? 36 : 0) + 14 + 20
     + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
-  let y = Math.max(4, Math.floor((H - total) / 2));
-  centered(dialog.cfg.question, y, '#FFFFFF');
-  y += 16;
+  const bw0 = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2));
+  // libellés trop larges pour deux boutons côte à côte (téléphone) : Non puis Oui, l'un sous l'autre
+  const stacked = Math.max(textWidth(font, dialog.cfg.noLabel || 'Non'), textWidth(font, dialog.cfg.yesLabel || 'Oui')) > bw0 - 6;
+  let y = Math.max(4, Math.floor((H - total - (stacked ? 24 : 0)) / 2));
+  for (const q of question) { centered(q, y, '#FFFFFF'); y += 10; }
+  y += 6;
   for (const line of lines) { centered(line, y, '#AAAAAA'); y += 10; }
   // Nuancier (cfg.colors = { list, current(), onPick(i) }) : 2 rangées de cases de couleur, la choisie encadrée de blanc.
   let swatches = null;
@@ -3100,8 +3117,16 @@ function renderConfirm() {
     });
     y += 2 * (size + gap);
   }
-  const bw = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2)), by = y + 14;
-  const no = [Math.floor(W / 2) - bw - 4, by, bw, 20], yes = [Math.floor(W / 2) + 4, by, bw, 20];
+  let bw = bw0, by = y + 14, no, yes;
+  if (stacked) {
+    bw = Math.min(Math.floor((W - 20) / 2), Math.max(bw, 90));
+    no = [Math.floor(W / 2) - bw - 4, by, 2 * bw + 8, 20];
+    yes = [no[0], by + 24, 2 * bw + 8, 20];
+    by += 24;
+  } else {
+    no = [Math.floor(W / 2) - bw - 4, by, bw, 20];
+    yes = [Math.floor(W / 2) + 4, by, bw, 20];
+  }
   // Sous Non / Oui, sur toute leur largeur : « Modifier » (si prévu) puis « Supprimer ».
   let rowY = by + 24;
   const edit = dialog.cfg.onEdit ? [no[0], rowY, 2 * bw + 8, 20] : null;
