@@ -510,11 +510,13 @@ function todoCell(todo, n) {
   return {
     image: n ? todoImage(n) : (todo.image || todoImage(1)),
     count: n,
+    mark: !todo.fini && PRIORITES[todo.priorite] ? PRIORITES[todo.priorite].color : null,   // repère de priorité
     // Fonction : la description est découpée à l'affichage (la police n'est pas encore chargée au démarrage).
     tooltip: () => [
       '§a' + (todo.titre || 'Action'),
       ...(todo.description ? wrapText(todo.description, 180).map(l => '§7' + l) : []), '',
       `§8Ajoutée le ${todo.date}`,
+      ...(!todo.fini && PRIORITES[todo.priorite] ? [`§7Priorité : ${PRIORITES[todo.priorite].label}`] : []),
       ...(todo.fini
         ? [`§cTerminée le ${todo.fini}`, `§8Supprimée le ${formatDate(addDays(todo.fini, TODO_KEEP_DAYS))}`, '', '§eClique pour supprimer !']
         : ['§eClique quand elle est terminée !']),
@@ -522,14 +524,22 @@ function todoCell(todo, n) {
     action: () => todo.fini ? askTodoDelete(todo) : askTodoDone(todo),
   };
 }
+// Priorité d'une action (todo.priorite) : très prioritaire en tête de liste, puis moyen, sans priorité, pas prioritaire.
+const PRIORITES = {
+  haute: { label: '§cTrès prioritaire', color: '#FF5555', rang: 0 },
+  moyenne: { label: '§6Moyen', color: '#FFAA00', rang: 1 },
+  basse: { label: '§aPas prioritaire', color: '#55FF55', rang: 3 },
+};
+const prioRang = t => PRIORITES[t.priorite] ? PRIORITES[t.priorite].rang : 2;
 function todoSlots() {
   const active = todos.filter(t => !t.fini);   // de la plus ancienne à la plus récente
-  const newestFirst = [...active].reverse();
+  // par priorité, puis la plus récente d'abord (le numéro reste celui de l'ordre d'ajout)
+  const newestFirst = [...active].reverse().sort((a, b) => prioRang(a) - prioRang(b));
   return todoGrid(newestFirst, {
     '5,0': { image: 'bouton_bois', tooltip: ['§aActions terminées', `§7Les actions terminées depuis moins`, `§7de ${TODO_KEEP_DAYS} jours.`, '', '§eClique pour voir !'], open: 'todo-finies' },
     '5,8': { image: 'tete_plus', tooltip: ['§aAjouter', '§7Ajoute une action à faire.', '', '§eClique pour ajouter !'], action: addTodo },
     ...navSlots('main'),
-  }, newestFirst.map((_, i) => active.length - i));
+  }, newestFirst.map(t => active.indexOf(t) + 1));
 }
 function doneTodoSlots() {
   const done = todos.filter(t => t.fini).sort((a, b) => toDate(b.fini) - toDate(a.fini));   // la plus récemment terminée d'abord
@@ -606,7 +616,23 @@ function askTodoDone(todo) {
     }),
     onNo: () => update(() => { delete todo.fini; delete todo.image; }),
     onEdit: () => editTodoText(todo, (titre, description) => update(() => Object.assign(todo, { titre, description }))),
+    priorityLabel: `Priorité : ${PRIORITES[todo.priorite] ? PRIORITES[todo.priorite].label : '§7aucune'}`,
+    onPriority: () => askTodoPriority(todo, update),
     onDelete: () => update(() => { const i = todos.indexOf(todo); if (i >= 0) todos.splice(i, 1); }),
+  });
+}
+// Choix de la priorité d'une action (3 niveaux) ; « Échap » garde la priorité actuelle.
+function askTodoPriority(todo, update) {
+  const set = p => update(() => { if (p) todo.priorite = p; else delete todo.priorite; });
+  // 3 niveaux sur toute la largeur, du plus au moins prioritaire ; en haut : Retour / Aucune
+  openConfirm({
+    question: 'Priorité de l\'action',
+    detail: [todo.titre],
+    noLabel: 'Retour', yesLabel: '§7Aucune',
+    onNo: () => {}, onYes: () => set(null),
+    editLabel: PRIORITES.haute.label, onEdit: () => set('haute'),
+    priorityLabel: PRIORITES.moyenne.label, onPriority: () => set('moyenne'),
+    deleteLabel: PRIORITES.basse.label, onDelete: () => set('basse'),
   });
 }
 
@@ -2215,6 +2241,12 @@ function drawCell(ctx, slots, key, x, y, S, pass = null, corner = null) {
 
   // Nombre en bas à droite de la case (comme la taille d'une pile en jeu), en blanc avec ombre.
   const count = look && (typeof look.count === 'function' ? look.count() : look.count);
+  if (look && look.mark) {   // repère de priorité : petit carré de couleur en haut à gauche de la case
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(px, py, 5 * S, 5 * S);
+    ctx.fillStyle = look.mark;
+    ctx.fillRect(px + S, py + S, 3 * S, 3 * S);
+  }
   if (count != null) {
     const txt = String(count);
     drawText(ctx, font, txt, x + 17 - textWidth(font, txt), y + 9, look.countColor || '#FFFFFF', S, true);
@@ -3048,7 +3080,7 @@ function renderConfirm() {
   const lines = dialog.cfg.detail || [];
   // Hauteur totale (question, détails, nuancier, boutons) pour centrer le tout verticalement
   const total = 16 + lines.length * 10 + (dialog.cfg.colors ? 36 : 0) + 14 + 20
-    + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
+    + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
   let y = Math.max(4, Math.floor((H - total) / 2));
   centered(dialog.cfg.question, y, '#FFFFFF');
   y += 16;
@@ -3074,12 +3106,15 @@ function renderConfirm() {
   let rowY = by + 24;
   const edit = dialog.cfg.onEdit ? [no[0], rowY, 2 * bw + 8, 20] : null;
   if (edit) rowY += 24;
+  const prio = dialog.cfg.onPriority ? [no[0], rowY, 2 * bw + 8, 20] : null;   // ex. priorité d'une action
+  if (prio) rowY += 24;
   const del = [no[0], rowY, 2 * bw + 8, 20];
   drawButton(ctx, ...no.slice(0, 3), dialog.cfg.noLabel || 'Non', dialog.hover === 'no', S);
   drawButton(ctx, ...yes.slice(0, 3), dialog.cfg.yesLabel || 'Oui', dialog.hover === 'yes', S);
   if (edit) drawButton(ctx, ...edit.slice(0, 3), dialog.cfg.editLabel || 'Modifier le titre', dialog.hover === 'edit', S);
-  if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), '§cSupprimer', dialog.hover === 'del', S);
-  dialog.layout = { S, no, yes, edit, del: dialog.cfg.onDelete ? del : null, swatches };
+  if (prio) drawButton(ctx, ...prio.slice(0, 3), dialog.cfg.priorityLabel || 'Priorité', dialog.hover === 'prio', S);
+  if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
+  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches };
 }
 function openConfirm(cfg) {
   dialog.cfg = cfg;
@@ -3096,18 +3131,20 @@ function closeConfirm() {
   renderGui();
 }
 dialogCanvas.addEventListener('mousemove', ev => {
-  const { S, no, yes, edit, del, swatches } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches } = dialog.layout;
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
-  const hover = sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit' : del && inRect(ev, del, S) ? 'del' : null;
+  const hover = sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
+    : prio && inRect(ev, prio, S) ? 'prio' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
 });
 dialogCanvas.addEventListener('click', ev => {
-  const { S, no, yes, edit, del, swatches } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches } = dialog.layout;
   const cfg = dialog.cfg;
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
   if (sw >= 0) { playClick(); cfg.colors.onPick(sw); renderConfirm(); return; }   // la fenêtre reste ouverte
   if (edit && inRect(ev, edit, S)) { playClick(); closeConfirm(); cfg.onEdit(); return; }
+  if (prio && inRect(ev, prio, S)) { playClick(); closeConfirm(); cfg.onPriority(); return; }
   if (inRect(ev, no, S)) { playClick(); closeConfirm(); if (cfg.onNo) cfg.onNo(); }
   else if (inRect(ev, yes, S)) { playClick(); closeConfirm(); cfg.onYes(); }
   else if (del && inRect(ev, del, S)) { playClick(); closeConfirm(); cfg.onDelete(); }
