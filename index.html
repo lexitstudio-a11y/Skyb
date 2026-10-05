@@ -2716,7 +2716,7 @@ function playSound(sound) {
   s.volume = sound.volume;
   s.play().catch(() => {});
 }
-const playClick = () => playSound(clickSound);
+const playClick = () => {};   // plus de son au clic sur les boutons (clickSound gardé si on veut le remettre)
 
 function onClick(ev) {
   if (press.long || Date.now() < press.blockUntil) return;   // téléphone : lâcher d'un appui long
@@ -3771,7 +3771,7 @@ function drawTimer() {
 
 // --- Notifications (style « succès » Minecraft) : icône, titre en couleur, description en blanc ---
 // Elles descendent depuis le haut (en haut à droite), restent quelques secondes puis remontent ; un son au hasard parmi 4 (volume réduit).
-const NOTIF_SOUNDS = [1, 2, 3, 4].map(i => { const a = new Audio(`assets/sounds/notif${i}.mp3`); a.preload = 'auto'; a.volume = 0.1; return a; });
+const NOTIF_SOUNDS = [1, 2, 3, 4].map(i => { const a = new Audio(`assets/sounds/notif${i}.mp3`); a.preload = 'auto'; a.volume = 0.02; return a; });   // son des notifications : très bas
 const toastBox = document.getElementById('toasts');
 function showToast({ icon = 'clock_00', title, text, color = '#FFFF55', duration = 6000 }) {
   if (!font) return;
