@@ -1156,6 +1156,14 @@ const arbres = (() => { try { return JSON.parse(localStorage.getItem(ARBRES_KEY)
 const ARBRE_CELLS = ['1,2', '1,4', '1,6', '3,2', '3,4', '3,6'];
 const arbresPerPage = () => isMobileLayout() || da === 'test' ? Infinity : ARBRE_CELLS.length;
 const arbresPageId = k => k === 1 ? 'arbres' : `arbres-${k}`;   // k : numéro de page (à partir de 1)
+// Identifiant stable d'un arbre (donné à la première demande) : un bloc du Timeblock relié à l'arbre le garde,
+// même si l'arbre est renommé ou change de place dans la liste.
+function arbreId(a) {
+  if (!a.id) { a.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6); saveArbres(); }
+  return a.id;
+}
+// Arbre relié à un bloc du Timeblock (anciens blocs : arbre = true, retrouvé par son titre).
+const blockArbre = b => b.arbre === true ? arbres.find(a => a.titre === b.titre) : b.arbre ? arbres.find(a => a.id === b.arbre) : null;
 function saveArbres() {
   try { localStorage.setItem(ARBRES_KEY, JSON.stringify(arbres)); } catch {}
   cloudChanged();
@@ -1444,7 +1452,7 @@ function buildArbrePages(a, n) {
     '5,0': {
       image: 'orbe_xp',
       tooltip: () => ['§aTimeblock ' + timeblockToWrite(), "§7Planifie un moment pour cet arbre", "§7dans la journée à organiser.", '', '§eClique pour ouvrir !'],
-      action: () => openTimeblock(timeblockToWrite(), null, { titre: a.titre, couleur: (n * 7) % TB_COLORS.length }),
+      action: () => openTimeblock(timeblockToWrite(), null, { id: arbreId(a), titre: a.titre, couleur: (n * 7) % TB_COLORS.length }),
     },
   };
   if (da === 'test')   // D.A test : bloc « succès » (titre, progression) et barre d'expérience en dessous, à la place des vitres
@@ -3381,6 +3389,7 @@ function renderTimeblock() {
   ctx.rect(grid.x * S, grid.y * S, grid.w * S, grid.h * S);
   ctx.clip();
   for (let m = TB_START; m <= TB_END; m += 30) fr(grid.x, yOf(m), grid.w, 1, m % 60 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.3)');
+  const orbs = [];   // orbes visibles (blocs reliés à un arbre)
   const drawBlock = (debut, fin, title, color, orb) => {
     const y1 = yOf(debut), h = yOf(fin) - y1;
     drawColorBlock(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, color, S);
@@ -3391,7 +3400,12 @@ function renderTimeblock() {
     // Horaires toujours affichés : sous le titre si le bloc est assez haut, sinon à sa droite.
     const hours = `${fmtMin(debut)} - ${fmtMin(fin)}`, tx = grid.x + 10, maxW = grid.w - 22 - (orb ? 12 : 0);
     // bloc venu d'un arbre : petite orbe d'expérience à droite
-    if (orb) ctx.drawImage(T.orbe_xp, (grid.x + grid.w - 15) * S, (h >= 28 ? y1 + 6 : y1 + Math.floor((h - 9) / 2) + 1) * S, 9 * S, 9 * S);
+    // (survol : nom et progression de l'arbre ; clic : page de l'arbre)
+    if (orb) {
+      const r = [grid.x + grid.w - 15, h >= 28 ? y1 + 6 : y1 + Math.floor((h - 9) / 2) + 1, 9, 9];
+      ctx.drawImage(T.orbe_xp, r[0] * S, r[1] * S, 9 * S, 9 * S);
+      if (orb !== true && r[1] + 9 > grid.y && r[1] < grid.y + grid.h) orbs.push({ r, block: orb });
+    }
     if (h >= 28) {
       drawText(ctx, font, fitText(title, maxW), tx, y1 + 7, '#FFFFFF', S, true);
       drawText(ctx, font, hours, tx, y1 + 17, '#E8E8E8', S, true);
@@ -3404,14 +3418,14 @@ function renderTimeblock() {
     ctx.restore();
   };
   const colorOf = (b, i) => TB_COLORS[(b.couleur ?? i) % TB_COLORS.length];
-  tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, colorOf(b, i), b.arbre); });
+  tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, colorOf(b, i), blockArbre(b) && b); });
   const d = tb.drag;
   if (d && d.mode === 'place' && d.inGrid) drawBlock(d.debut, d.fin, tb.arbre.titre, TB_COLORS[tb.arbre.couleur], true);
   if (d && d.mode === 'create' && d.color == null) d.color = randomColor();
   if (d && d.moved && d.mode !== 'place') {   // bloc en cours de création / déplacement : on affiche ses horaires
     const [a, z] = d.mode === 'create' ? [Math.min(d.start, d.end), Math.max(d.start, d.end)] : [d.debut, d.fin];
     const color = d.mode === 'create' ? TB_COLORS[d.color] : colorOf(d.block, tbBlocks().indexOf(d.block));
-    drawBlock(a, z, d.mode === 'create' ? 'Nouveau bloc' : d.block.titre, color, d.mode !== 'create' && d.block.arbre);
+    drawBlock(a, z, d.mode === 'create' ? 'Nouveau bloc' : d.block.titre, color, d.mode !== 'create' && !!blockArbre(d.block));
   }
   if (tb.date === formatDate(new Date())) {   // heure actuelle
     const now = new Date(), m = now.getHours() * 60 + now.getMinutes();
@@ -3442,7 +3456,7 @@ function renderTimeblock() {
       ctx.drawImage(T.orbe_xp, (bx + 3) * S, (by + 7) * S, 14 * S, 14 * S);
     }
   }
-  tb.layout = { S, grid, btn, photo, cal, yOf, tray: trayRect };
+  tb.layout = { S, grid, btn, photo, cal, yOf, tray: trayRect, orbs };
 }
 
 // --- « Photo » : image 1179 x 2556 (format d'écran d'iPhone) des blocs de la journée, pour un fond d'écran ---
@@ -3670,6 +3684,7 @@ function showTimeblock() {
 }
 function hideTimeblock() {
   timeblockScreen.hidden = true;
+  if (tb.tipFor) { tb.tipFor = null; tip.hidden = true; }
 }
 function closeTimeblock(callBack = true) {
   const done = tb.onClose;
@@ -3695,6 +3710,22 @@ function tbInGrid(p) {
   const { grid } = tb.layout;
   return p.x >= grid.x && p.x < grid.x + grid.w && p.y >= grid.y && p.y < grid.y + grid.h;
 }
+const tbOrbAt = ev => tb.layout.orbs.find(o => inRect(ev, o.r, tb.layout.S));
+// Survol d'une orbe : overlay avec le nom de l'arbre relié et sa progression.
+function tbOrbTip(orb, ev) {
+  const a = orb && blockArbre(orb.block);
+  if (!a) { if (tb.tipFor) { tb.tipFor = null; tip.hidden = true; } return; }
+  if (tb.tipFor !== a) {
+    tb.tipFor = a;
+    const R = guiRatio(), lines = [`§a${a.titre}`, progressLine(a, arbreProgress(a)), '', "§eClique pour voir l'arbre !"];
+    renderTooltip(tip, font, lines, tooltipScale(tb.layout.S));
+    tip.style.width = tip.width / R + 'px';
+    tip.style.height = tip.height / R + 'px';
+    tip.hidden = false;
+  }
+  placeTooltip(ev);
+}
+timeblockCanvas.addEventListener('pointerleave', () => tbOrbTip(null));
 // Bloc d'une heure centré sur la hauteur y (arrondi au quart d'heure, dans la journée).
 function tbPlaceHour(y) {
   const debut = Math.max(TB_START, Math.min(TB_END - 60, tbTimeAt(y - TB_HOUR / 2)));
@@ -3761,7 +3792,7 @@ function pickArbreForBlock(block) {
   const trees = arbreLists()[0].trees, title = 'Arbre de progression';
   const nav = { '5,4': { item: 'barrier', tooltip: ['§cAnnuler', '', '§eClique pour revenir au Timeblock !'], action: done } };
   const pick = (a, n) => {
-    Object.assign(block, { titre: a.titre, couleur: (n * 7) % TB_COLORS.length, arbre: true });
+    block.arbre = arbreId(a);   // le bloc garde son nom et sa couleur ; l'orbe mène à l'arbre
     saveTimeblocks();
     done();
   };
@@ -3942,6 +3973,13 @@ timeblockCanvas.addEventListener('pointerdown', ev => {
   if (inRect(ev, tb.layout.btn, tb.layout.S)) { playClick(); closeTimeblock(); return; }
   if (inRect(ev, tb.layout.photo, tb.layout.S)) { playClick(); timeblockPhoto(); return; }
   if (inRect(ev, tb.layout.cal, tb.layout.S)) { playClick(); exportTimeblockIcs(); return; }
+  const orb = tbOrbAt(ev);
+  if (orb) {   // orbe d'un bloc relié à un arbre : page de l'arbre (le Timeblock se ferme)
+    const a = blockArbre(orb.block);
+    tip.hidden = true;
+    if (a) { playClick(); location.hash = `arbre-${arbres.indexOf(a) + 1}`; }
+    return;
+  }
   if (tb.layout.tray && inRect(ev, tb.layout.tray, tb.layout.S)) {   // bloc spécial de l'arbre : on le prend
     timeblockCanvas.setPointerCapture(ev.pointerId);
     tb.drag = { mode: 'place', x: p.x, y: p.y, x0: p.x, y0: p.y, moved: false, inGrid: false };
@@ -3966,8 +4004,9 @@ timeblockCanvas.addEventListener('pointermove', ev => {
     const onBtn = inRect(ev, tb.layout.btn, tb.layout.S), onPhoto = inRect(ev, tb.layout.photo, tb.layout.S), onCal = inRect(ev, tb.layout.cal, tb.layout.S);
     if (onPhoto !== !!tb.hoverPhoto) { tb.hoverPhoto = onPhoto; renderTimeblock(); }
     if (onCal !== !!tb.hoverCal) { tb.hoverCal = onCal; renderTimeblock(); }
-    const onTray = tb.layout.tray && inRect(ev, tb.layout.tray, tb.layout.S);
-    timeblockCanvas.style.cursor = onTray ? 'grab' : onBtn || onPhoto || onCal ? 'pointer' : block ? (p.y > tb.layout.yOf(block.fin) - 4 ? 'ns-resize' : 'move') : tbInGrid(p) ? 'crosshair' : '';
+    const onTray = tb.layout.tray && inRect(ev, tb.layout.tray, tb.layout.S), orb = tbOrbAt(ev);
+    tbOrbTip(orb, ev);
+    timeblockCanvas.style.cursor = orb ? 'pointer' : onTray ? 'grab' : onBtn || onPhoto || onCal ? 'pointer' : block ? (p.y > tb.layout.yOf(block.fin) - 4 ? 'ns-resize' : 'move') : tbInGrid(p) ? 'crosshair' : '';
     if (onBtn !== tb.hoverDone) { tb.hoverDone = onBtn; renderTimeblock(); }
     return;
   }
@@ -3999,7 +4038,7 @@ timeblockCanvas.addEventListener('pointerup', () => {
     if (!d.moved) [d.debut, d.fin] = tbPlaceHour(tb.layout.grid.y + tb.layout.grid.h / 2);
     else if (!d.inGrid) { renderTimeblock(); return; }
     playClick();
-    (timeblocks[tb.date] ||= []).push({ debut: d.debut, fin: d.fin, titre: tb.arbre.titre, couleur: tb.arbre.couleur, arbre: true });
+    (timeblocks[tb.date] ||= []).push({ debut: d.debut, fin: d.fin, titre: tb.arbre.titre, couleur: tb.arbre.couleur, arbre: tb.arbre.id });
     tb.arbre = null;
     saveTimeblocks();
     renderTimeblock();
