@@ -838,7 +838,8 @@ function renameSlot(n) {
 // Direction artistique (D.A) : « minecraft » (version actuelle) ou « test » (nouvelle D.A en essai).
 // Choix gardé sur l'appareil ; <html data-da="…"> permet au style et au dessin de suivre la D.A choisie.
 const DA_KEY = 'da';
-const openedDesc = new WeakSet();   // D.A test : blocs « succès » dont la description est dépliée (voir placeAdvancement)
+// D.A test : le bloc « succès » dont la description est dépliée (un seul à la fois, voir placeAdvancement)
+const openedDesc = { item: null, has(d) { return this.item === d; } };
 const DA_LABELS = { minecraft: 'Minecraft', test: 'Test' };
 let da = (() => { try { return DA_LABELS[localStorage.getItem(DA_KEY)] ? localStorage.getItem(DA_KEY) : 'minecraft'; } catch { return 'minecraft'; } })();
 document.documentElement.dataset.da = da;
@@ -2392,8 +2393,9 @@ function placeAdvancement(slots, r, span, data, refresh) {
   }
   if (span.descFull) {
     const toggle = () => {
-      const opening = !openedDesc.has(data);
-      opening ? openedDesc.add(data) : openedDesc.delete(data);
+      const opening = !openedDesc.has(data), previous = openedDesc.item;
+      openedDesc.item = opening ? data : null;   // en ouvrir une referme les autres
+      if (opening && previous) descAnim.set(previous, { t0: performance.now(), to: false });
       descAnim.set(data, { t0: performance.now(), to: opening });
       refresh();
       animateDesc();
