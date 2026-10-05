@@ -2063,15 +2063,17 @@ function renderGui() {
     ctx.beginPath();
     ctx.rect(7 * S, (TOP - 1) * S, inner * S, L.view * 18 * S);
     ctx.clip();
-    const first = Math.floor(off / 18), last = Math.min(scroll.rows - 1, Math.floor((off + L.view * 18) / 18));
+    const visible = [];   // rangées (même partiellement) dans la zone visible
+    for (let r = 0; r < scroll.rows; r++) { const t = scroll.top(r); if (t + 18 > off && t < off + L.view * 18) visible.push(r); }
+    const first = visible.length ? visible[0] : 0, last = visible.length ? visible[visible.length - 1] : -1;
     for (let r = first; r <= last; r++) {
-      const y = TOP + r * 18 - off;
+      const y = TOP + scroll.top(r) - off;
       if (da === 'test') { ctx.fillStyle = CHEST_BG; ctx.fillRect(7 * S, (y - 1) * S, inner * S, 18 * S); }
       else ctx.drawImage(T.generic_54, 7, 17, inner, 18, 7 * S, (y - 1) * S, inner * S, 18 * S);
     }
     for (const pass of passes)
       for (let r = Math.max(0, first - 1); r <= last; r++)   // rangée au-dessus : sa description peut dépasser
-        for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `v${r},${c}`, 8 + c * 18, TOP + r * 18 - off, S, pass, cornerOf(r, c, Infinity, COLS));
+        for (let c = 0; c < COLS; c++) drawCell(ctx, slots, `v${r},${c}`, 8 + c * 18, TOP + scroll.top(r) - off, S, pass, cornerOf(r, c, Infinity, COLS));
     ctx.restore();
     if (L.bar) drawScrollbar(ctx, S, L, scroll);
   }
@@ -2382,7 +2384,12 @@ function placeAdvancement(slots, r, span, data, refresh) {
   span.data = data;
   slots[`v${r},2`] = span;
   const open = span.expanded && advDesc(span);
-  const rows = open ? Math.max(2, Math.ceil((14 + open.h + 5) / 18)) : 2;
+  const rows = 2;
+  if (open) {   // les blocs suivants descendent exactement de la hauteur ajoutée par la description dépliée
+    const more = Math.max(0, Math.ceil(span.compact ? open.h - 4 : open.h - 13));
+    if (!slots.extra) Object.defineProperty(slots, 'extra', { value: {}, enumerable: false });
+    slots.extra[r + 2] = (slots.extra[r + 2] || 0) + more;
+  }
   if (span.descFull) {
     const toggle = () => {
       const opening = !openedDesc.has(data);
@@ -2470,9 +2477,14 @@ const scrolls = {};
 function scrollInfo(L = guiLayout()) {
   const page = PAGES[state.page];
   if (!page || !pageRows(page)) return null;
-  const rows = Math.max(L.view, pageRows(page)), max = (rows - L.view) * 18;
+  const extra = (page.slots && page.slots.extra) || {};
+  const rows = Math.max(L.view, pageRows(page)), more = Object.values(extra).reduce((a, b) => a + b, 0);
+  const max = Math.max(0, (rows - L.view) * 18 + more);
   scrolls[state.page] = Math.max(0, Math.min(max, scrolls[state.page] || 0));
-  return { rows, max, offset: scrolls[state.page] };
+  // top(r) : haut de la rangée r de la liste (pixels du GUI) ; les rangées après une description dépliée
+  // sont décalées de sa hauteur en plus, au pixel près (pas de trou d'une rangée entière)
+  const top = r => { let y = r * 18; for (const k in extra) if (+k <= r) y += extra[k]; return y; };
+  return { rows, max, offset: scrolls[state.page], top };
 }
 
 // Coffre de 5 x 11 assemblé à partir des morceaux de generic_54 : coins et bords, bande du titre (plus haute
@@ -2523,7 +2535,10 @@ function slotAt(ev) {
   if (c < 0 || c >= L.cols || row < 0 || row >= L.rows) return null;
   const scroll = scrollInfo(L);
   if (scroll && row < L.view) {   // liste qui défile : rangée de la liste sous le doigt
-    const key = `v${Math.floor((gy - L.top + 1 + scroll.offset) / 18)},${c}`;
+    const yy = gy - L.top + 1 + scroll.offset;
+    let vr = 0;   // dernière rangée qui commence au-dessus du doigt (les espaces d'une description dépliée comptent pour elle)
+    while (vr + 1 < scroll.rows && scroll.top(vr + 1) <= yy) vr++;
+    const key = `v${vr},${c}`;
     return coveredBy(currentSlots(), key) || key;
   }
   return coveredBy(currentSlots(), `${row},${c}`) || `${row},${c}`;
