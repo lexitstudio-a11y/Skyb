@@ -256,11 +256,11 @@ function sermentSlots(n) {
   return slots;
 }
 // Une colonne de la page « Les Pilliers Temporels » : le livre du serment en haut, puis 3 vitres colorées en dessous,
-// selon les serments créés (nommés) : serment pas encore créé = tout rouge ; dernier serment créé = vert / orange /
-// jaune ; serments créés avant lui = tout vert.
+// selon les serments créés (nommés) : serment pas encore créé = tout rouge ; dernier serment créé = vert / jaune /
+// rouge ; serments créés avant lui = tout vert.
 const SERMENT_PANES = {
   done: ['lime_stained_glass', 'lime_stained_glass', 'lime_stained_glass'],
-  last: ['lime_stained_glass', 'orange_stained_glass', 'yellow_stained_glass'],
+  last: ['lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass'],
   empty: ['red_stained_glass', 'red_stained_glass', 'red_stained_glass'],
 };
 function sermentPanes(n) {
