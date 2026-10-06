@@ -255,20 +255,26 @@ function sermentSlots(n) {
   }
   return slots;
 }
-// Une colonne de la page « Les Pilliers Temporels » : le livre du serment en haut, puis 3 vitres colorées en dessous
-// (serment 1 : tout vert, serment 2 : vert / jaune / rouge, serment 3 : tout rouge).
+// Une colonne de la page « Les Pilliers Temporels » : le livre du serment en haut, puis 3 vitres colorées en dessous,
+// selon les serments créés (nommés) : serment pas encore créé = tout rouge ; dernier serment créé = vert / orange /
+// jaune ; serments créés avant lui = tout vert.
 const SERMENT_PANES = {
-  1: ['lime_stained_glass', 'lime_stained_glass', 'lime_stained_glass'],
-  2: ['lime_stained_glass', 'yellow_stained_glass', 'red_stained_glass'],
-  3: ['red_stained_glass', 'red_stained_glass', 'red_stained_glass'],
+  done: ['lime_stained_glass', 'lime_stained_glass', 'lime_stained_glass'],
+  last: ['lime_stained_glass', 'orange_stained_glass', 'yellow_stained_glass'],
+  empty: ['red_stained_glass', 'red_stained_glass', 'red_stained_glass'],
 };
+function sermentPanes(n) {
+  if (!sermentSuffix(n)) return SERMENT_PANES.empty;
+  const last = Math.max(...[1, 2, 3].filter(k => sermentSuffix(k)));
+  return n === last ? SERMENT_PANES.last : SERMENT_PANES.done;
+}
 function sermentColumn(col, n) {
-  const panes = SERMENT_PANES[n];
   // serment vide (sans titre) : livre assombri
   // serment vide : le clic ouvre le panneau pour lui donner un nom (puis sa description) ; sinon sa page
   const slots = { [`0,${col}`]: { item: 'book', tooltip: sermentBookTooltip(n), look: () => ({ dim: !sermentSuffix(n) }),
     action: () => sermentSuffix(n) ? (location.hash = `serment${n}`) : editSerment(n, renderGui) } };
-  panes.forEach((pane, i) => { slots[`${i + 1},${col}`] = { pane, when: () => da !== 'test' }; });   // D.A test : pas de vitres
+  for (let i = 0; i < 3; i++)   // couleur relue à chaque affichage (elle change quand on nomme un serment) ; D.A test : pas de vitres
+    slots[`${i + 1},${col}`] = { get pane() { return sermentPanes(n)[i]; }, when: () => da !== 'test' };
   return slots;
 }
 
