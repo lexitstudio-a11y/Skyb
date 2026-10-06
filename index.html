@@ -1632,7 +1632,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'fil', 'birch_log', 'birch_log_top', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -4317,7 +4317,7 @@ function buildEtapePages() {
         tooltip: () => ['§aDescription', ...(e.description ? descLines(e.description) : ['§7Aucune description.']), '', '§eClique pour modifier !'],
       },
       '5,8': {
-        block: 'birch_log', tooltip: ['§aCréer un arbre de progression', "§7Crée un arbre lié à cette étape.", '', '§eClique pour créer !'],
+        image: 'bouleau', tooltip: ['§aCréer un arbre de progression', "§7Crée un arbre lié à cette étape.", '', '§eClique pour créer !'],
         action: () => addArbre(a => { e.arbre = arbreId(a); saveProg(); }),
       },
       '4,8': {
@@ -4938,7 +4938,6 @@ async function main() {
     black_terracotta: { top: T.black_terracotta, front: T.black_terracotta, side: T.black_terracotta },
     cyan_terracotta: { top: T.cyan_terracotta, front: T.cyan_terracotta, side: T.cyan_terracotta },
     tnt: { top: T.tnt_top, front: T.tnt_side, side: T.tnt_side },
-    birch_log: { top: T.birch_log_top, front: T.birch_log, side: T.birch_log },   // bûche blanche (créer un arbre)
   };
   refreshArbres();
   buildEtapePages();   // une page par étape de l'Arbre de progression
