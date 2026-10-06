@@ -1538,7 +1538,7 @@ function arbresScrollPage(list) {
     // list.pick : page de choix (ex. depuis un bloc du Timeblock) ; sinon ouvre la page de l'arbre
     const open = list.pick ? () => list.pick(a, n) : () => { arbreFrom[n] = list.pageId(1); location.hash = `arbre-${n}`; };
     const tooltip = () => [`§a${a.titre}`, ...originLines(a), ...(a.description ? [...wrapText(a.description, 180).map(l => '§7' + l), ''] : []), progressLine(a, pct), '', list.pick ? '§eClique pour choisir !' : '§eClique pour voir !'];
-    const icon = { ...arbreIcon(a), count: Math.floor(pct / 10) || null, tooltip, action: open };
+    const icon = { ...arbreIcon(a), count: Math.floor(pct / 10) || null, tooltip, action: open, badge: a.epingle ? 'epingle' : null };   // épinglé : petit bloc en haut à gauche
     const span = {
       span: 3, label: a.titre, color: arbreColor(n), desc: () => progressLine(a, pct).replace(/^§7Progression : /, '§a'), progress: () => pct, tooltip, action: open,
       compact: da === 'test',   // D.A test : titre + barre de progression seulement (le détail reste dans l'overlay)
@@ -2318,6 +2318,11 @@ function drawCell(ctx, slots, key, x, y, S, pass = null, corner = null) {
     ctx.fillRect(px, py, 5 * S, 5 * S);
     ctx.fillStyle = look.mark;
     ctx.fillRect(px + S, py + S, 3 * S, 3 * S);
+  }
+  if (look && look.badge && T[look.badge]) {   // petite image en haut à gauche, à cheval sur le bord (ex. arbre épinglé)
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(T[look.badge], px - 2 * S, py - 2 * S, 8 * S, 8 * S);
+    ctx.imageSmoothingEnabled = false;
   }
   if (count != null) {
     const txt = String(count);
@@ -4094,7 +4099,7 @@ const PROG_ITEMS = [
   'green_dye', 'lime_dye', 'beacon', 'tournesol', 'pousse', 'panneau', 'jukebox', 'orbe_xp', 'epingle', 'arbre_logo',
   ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande'].map(n => `arbres/${n}`),
 ];
-const PROG_NODE = 26, PROG_PLUS = 18, PROG_PITCH = 36;   // taille d'une étape, d'un « + », écart entre deux étapes
+const PROG_NODE = 26, PROG_PLUS = 18, PROG_PITCH = 48;   // taille d'une étape, d'un « + », écart entre deux étapes
 const progScreen = document.getElementById('progScreen');
 const progCanvas = document.getElementById('progCanvas');
 const pg = { open: false, layout: null, pan: { x: 0, y: 0 }, selected: null, hover: null, drag: null, tipKey: null };
@@ -4141,11 +4146,29 @@ function renderProg() {
 
   const cx = area.x + Math.floor(area.w / 2) + pg.pan.x, cy = area.y + 26 + pg.pan.y;   // centre de la racine
   const center = e => [cx + e.x * PROG_PITCH, cy + e.y * PROG_PITCH];
-  // Liens : trait blanc bordé de noir, d'un centre à l'autre (les étapes se dessinent par-dessus)
+  // Liens : trait blanc bordé de noir, d'un centre à l'autre (les étapes se dessinent par-dessus) ; étape liée à un
+  // arbre de progression : petite barre d'expérience entre les deux étapes, remplie selon la progression de l'arbre
+  // (depuis l'étape précédente)
   for (const e of prog.etapes) {
     const p = prog.etapes.find(q => q.id === e.parent);
     if (!p) continue;
-    const [x1, y1] = center(p), [x2, y2] = center(e);
+    const [x1, y1] = center(p), [x2, y2] = center(e), a = blockArbre(e);
+    if (a) {
+      const h = x1 !== x2, dir = h ? Math.sign(x2 - x1) : 1, len = PROG_PITCH - PROG_NODE + 2, half = PROG_NODE / 2 - 1;
+      const pct = arbreProgress(a), fill = Math.round((len - 2) * pct / 100);
+      // barre de len pixels, du bord de l'étape précédente vers celui de l'étape (horizontale ou verticale)
+      const bar = (o, l, w, c) => {   // o : décalage depuis le début, l : longueur, w : épaisseur (centrée), c : couleur
+        if (l <= 0) return;
+        const start = dir > 0 ? (h ? x1 : y1) + half + o : (h ? x1 : y1) - half - o - l;
+        if (h) fr(start, y1 - Math.floor(w / 2), l, w, c);
+        else fr(x1 - Math.floor(w / 2), start, w, l, c);
+      };
+      bar(0, len, 5, '#000000');
+      bar(1, len - 2, 3, '#2E2E2E');
+      bar(1, fill, 3, '#80FF20');
+      for (let i = 1; i < 4; i++) bar(1 + Math.round((len - 2) * i / 4), 1, 3, 'rgba(0, 0, 0, 0.55)');   // graduations
+      continue;
+    }
     const [ax, bx, ay, by] = [Math.min(x1, x2), Math.max(x1, x2), Math.min(y1, y2), Math.max(y1, y2)];
     fr(ax - 2, ay - 2, bx - ax + 5, by - ay + 5, '#000000');
     fr(ax - 1, ay - 1, bx - ax + 3, by - ay + 3, '#FFFFFF');
