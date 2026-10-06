@@ -265,7 +265,9 @@ const SERMENT_PANES = {
 function sermentColumn(col, n) {
   const panes = SERMENT_PANES[n];
   // serment vide (sans titre) : livre assombri
-  const slots = { [`0,${col}`]: { item: 'book', tooltip: sermentBookTooltip(n), open: `serment${n}`, look: () => ({ dim: !sermentSuffix(n) }) } };
+  // serment vide : le clic ouvre le panneau pour lui donner un nom (puis sa description) ; sinon sa page
+  const slots = { [`0,${col}`]: { item: 'book', tooltip: sermentBookTooltip(n), look: () => ({ dim: !sermentSuffix(n) }),
+    action: () => sermentSuffix(n) ? (location.hash = `serment${n}`) : editSerment(n, renderGui) } };
   panes.forEach((pane, i) => { slots[`${i + 1},${col}`] = { pane, when: () => da !== 'test' }; });   // D.A test : pas de vitres
   return slots;
 }
@@ -398,8 +400,16 @@ function editProfile() {
 // Serments : nom et description modifiables (page « Renommer les Serments »).
 // Le début « Serment S n - » est fixe : seule la suite du nom (suffix) se modifie.
 const SERMENTS_KEY = 'serments-noms';
-const SERMENT_DEFAULTS = { 1: '12K/Mois', 2: '75Kg Sec', 3: '' };
+// Nouveau compte : les 3 serments sont vides (un clic sur le livre ouvre le panneau pour lui donner un nom).
 const sermentInfo = loadJSON(SERMENTS_KEY);
+// Anciennes versions : les serments 1 et 2 avaient un nom par défaut, jamais enregistré. Sur un appareil qui a déjà
+// des données, on enregistre ces noms pour qu'ils ne disparaissent pas.
+if (['serments-dates', 'agendas', 'arbres', 'todo-actions', 'timeblocks', 'objectifs-resultat'].some(k => localStorage.getItem(k) != null)) {
+  let changed = false;
+  for (const [n, suffix] of [[1, '12K/Mois'], [2, '75Kg Sec']])
+    if (!sermentInfo[n]) { sermentInfo[n] = { suffix, description: '' }; changed = true; }
+  if (changed) try { localStorage.setItem(SERMENTS_KEY, JSON.stringify(sermentInfo)); } catch {}
+}
 const sermentPrefix = n => `Serment S ${n}`;
 // Anciennes données (titre complet) : on ne garde que ce qui suit « Serment S n - ».
 for (const [n, info] of Object.entries(sermentInfo))
@@ -407,11 +417,12 @@ for (const [n, info] of Object.entries(sermentInfo))
     info.suffix = info.title.replace(new RegExp(`^${sermentPrefix(n)}\\s*-?\\s*`), '');
 function sermentSuffix(n) {
   const info = sermentInfo[n];
-  return info && info.suffix != null ? info.suffix : SERMENT_DEFAULTS[n];
+  return info && info.suffix != null ? info.suffix : '';
 }
 const sermentTitle = n => sermentSuffix(n) ? `${sermentPrefix(n)} - ${sermentSuffix(n)}` : sermentPrefix(n);
-function editSerment(n) {
+function editSerment(n, after) {
   editTitleAndDescription({
+    after,
     label: 'du serment', titleHint: `${sermentPrefix(n)} - ...`,
     get: () => ({ title: sermentSuffix(n), description: (sermentInfo[n] && sermentInfo[n].description) || '' }),
     save: (suffix, description) => { sermentInfo[n] = { suffix, description }; saveJSON(SERMENTS_KEY, sermentInfo); },
@@ -420,6 +431,7 @@ function editSerment(n) {
 function sermentBookTooltip(n) {
   return () => {
     const desc = descLines(sermentInfo[n] && sermentInfo[n].description);
+    if (!sermentSuffix(n)) return ['§a' + sermentTitle(n), '§7Serment vide.', '', '§eClique pour lui donner un nom !'];
     return ['§a' + sermentTitle(n), ...(desc.length ? desc : ['§7Description à venir.']), '', '§eClique pour voir !'];
   };
 }
