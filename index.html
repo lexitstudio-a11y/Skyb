@@ -858,37 +858,16 @@ function renameSlot(n) {
 const DA_KEY = 'da';
 // D.A test : le bloc « succès » dont la description est dépliée (un seul à la fois, voir placeAdvancement)
 const openedDesc = { item: null, has(d) { return this.item === d; } };
-const DA_LABELS = { minecraft: 'Minecraft', test: 'Test' };
-let da = (() => { try { return DA_LABELS[localStorage.getItem(DA_KEY)] ? localStorage.getItem(DA_KEY) : 'minecraft'; } catch { return 'minecraft'; } })();
+// La D.A Minecraft (avec les vitres) n'est plus proposée : tout le monde est sur la D.A test.
+let da = 'test';
+try { localStorage.setItem(DA_KEY, da); } catch {}
 document.documentElement.dataset.da = da;
-function toggleDA() {
-  da = da === 'minecraft' ? 'test' : 'minecraft';
-  try { localStorage.setItem(DA_KEY, da); } catch {}
-  document.documentElement.dataset.da = da;
-  hideTooltip();
-  refreshArbres();
-  refreshTodo();
-  refreshAgenda();
-  // changer de D.A ramène toujours aux Arbres de Progression (sans passer par un événement de navigation)
-  const target = 'arbres';
-  if (target !== state.page) {
-    if (location.hash.slice(1) !== target) history.replaceState(null, '', target === 'main' ? location.pathname + location.search : '#' + target);
-    state.page = target;
-    headMenu.open = false;
-  }
-  sizeGui();
-  renderGui();
-}
 const playJukebox = () => window.open('https://www.youtube.com/watch?v=x3bBQasjbfs', '_blank', 'noopener');
 const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Racines', progression: 'Arbre de progression' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
     slots: {
-      '0,0': {
-        image: 'cadre_da', action: toggleDA,
-        tooltip: () => ['§aAlterner D.A', `§7D.A actuelle : §e${DA_LABELS[da]}`, "§7Passe d'une direction artistique", "§7à l'autre (l'ancienne est gardée).", '', '§eClique pour changer !'],
-      },
       '1,4': { head: 'profile', tooltip: profileTooltip, action: editProfile },
       '2,1': { image: 'arbre_logo', tooltip: ['§aArbre de progression', ...LORE], open: 'progression' },
       '3,1': { image: 'arbres_progression', tooltip: ['§aRacines', ...LORE], open: 'arbres' },   // sous Arbre de progression
@@ -2184,7 +2163,6 @@ const HEAD_BTN = { x: 6, y: 3, w: 13 };
 const headMenu = { open: false, hover: -1 };
 const headMenuItems = () => [
   { head: 'steve', label: 'Modifier le profil', action: editProfile },
-  { image: 'cadre_da', label: 'Changer de D.A', action: toggleDA },
   { image: 'jukebox', label: 'Jukebox', action: playJukebox },
   { item: 'ender_pearl', label: session ? 'Compte' : 'Connexion', action: openAccount },
 ];
