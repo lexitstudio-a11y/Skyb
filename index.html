@@ -134,6 +134,9 @@
 <div id="timeblockScreen" class="screen" hidden>
   <canvas id="timeblockCanvas"></canvas>
 </div>
+<div id="progScreen" class="screen" hidden>
+  <canvas id="progCanvas"></canvas>
+</div>
 <div id="photoScreen" class="screen" hidden>
   <canvas id="photoCanvas"></canvas>
 </div>
@@ -914,7 +917,7 @@ const PAGES = {
     slots: doneTodoSlots(),
   },
   arbres: { title: PAGE_TITLES.arbres, slots: {} },   // rempli par refreshArbres
-  progression: { title: PAGE_TITLES.progression, slots: { ...navSlots('main') } },   // nouvelle page (contenu à venir)
+  progression: { title: PAGE_TITLES.progression, slots: {} },   // écran à part : voir « Arbre de progression » plus bas
   duree: {
     title: PAGE_TITLES.duree,
     slots: {
@@ -1627,7 +1630,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -2747,6 +2750,8 @@ function showPageFromHash() {
   if (tb.date) closeTimeblock(false);
   const page = location.hash.slice(1);
   state.page = defaultPage(PAGES[page] ? page : 'main');
+  if (state.page === 'progression') { openProg(); return; }   // écran à part (fond de pierre, étapes)
+  if (pg.open) closeProg();
   headMenu.open = false;
   hideTooltip();
   if (state.page.startsWith('todo')) refreshTodo();   // retire les actions terminées depuis 30 jours
@@ -4070,6 +4075,265 @@ addEventListener('keydown', ev => {
   if (ev.key === 'Escape' && !ev.defaultPrevented && tbOpen()) closeTimeblock();
 });
 
+// --- Arbre de progression : un plan en plusieurs étapes, dessiné comme l'écran des progrès de Minecraft ---
+// Chaque étape : { id, x, y (case de la grille), niveau, item, titre, description, parent }. La 1re étape (la racine)
+// a le niveau 1 ; une étape posée en dessous d'une autre prend le niveau suivant, à sa gauche ou à sa droite le même.
+// Un clic sur une étape la sélectionne et fait apparaître des « + » en dessous, à gauche et à droite (places libres) ;
+// un « + » crée une étape (panneau pour le nom, puis livre pour la description) avec un item tiré au hasard.
+// Glisser (ou la molette) déplace la vue sur le fond de pierre.
+const PROG_KEY = 'arbre-progression';
+const prog = (() => { try { return JSON.parse(localStorage.getItem(PROG_KEY)) || { etapes: [] }; } catch { return { etapes: [] }; } })();
+// Items tirés au hasard pour une nouvelle étape (images de la base, sans les vitres)
+const PROG_ITEMS = [
+  'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone', 'name_tag', 'redstone_torch', 'cookie', 'paper',
+  'arrow', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'gold_ingot',
+  'green_dye', 'lime_dye', 'beacon', 'tournesol', 'pousse', 'panneau', 'jukebox', 'orbe_xp', 'epingle', 'arbre_logo',
+  ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande'].map(n => `arbres/${n}`),
+];
+const PROG_NODE = 26, PROG_PLUS = 18, PROG_PITCH = 36;   // taille d'une étape, d'un « + », écart entre deux étapes
+const progScreen = document.getElementById('progScreen');
+const progCanvas = document.getElementById('progCanvas');
+const pg = { open: false, layout: null, pan: { x: 0, y: 0 }, selected: null, hover: null, drag: null, tipKey: null };
+function saveProg() {
+  try { localStorage.setItem(PROG_KEY, JSON.stringify(prog)); } catch {}
+  cloudChanged();
+}
+const progAt = (x, y) => prog.etapes.find(e => e.x === x && e.y === y);
+// Places des « + » : la racine tant que l'arbre est vide, sinon autour de l'étape sélectionnée (dessous, gauche, droite)
+function progSpots() {
+  if (!prog.etapes.length) return [{ x: 0, y: 0, niveau: 1, parent: null }];
+  const s = prog.etapes.find(e => e.id === pg.selected);
+  if (!s) return [];
+  return [[0, 1, 1], [-1, 0, 0], [1, 0, 0]]
+    .map(([dx, dy, dn]) => ({ x: s.x + dx, y: s.y + dy, niveau: s.niveau + dn, parent: s.id }))
+    .filter(p => !progAt(p.x, p.y));
+}
+
+function renderProg() {
+  const S = tbScale();
+  const { ctx, W, H } = prepareScreen(progCanvas, S);
+  // téléphone : toute la hauteur de l'écran (le bouton Retour en dessous)
+  const pw = Math.min(W - 6, 320), ph = isMobileLayout() ? H - 36 : Math.min(H - 34, 260);
+  const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph - 26) / 2));
+  const fr = (x, y, w, h, c) => { if (w > 0 && h > 0) { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); } };
+  drawPanel(ctx, px, py, pw, ph, S);
+  drawText(ctx, font, PAGE_TITLES.progression, px + 8, py + 6, '#404040', S);
+  const area = { x: px + 9, y: py + 18, w: pw - 18, h: ph - 18 - 21 };
+  // Cadre creusé, puis le fond de pierre (il suit la vue quand on la déplace)
+  fr(area.x - 1, area.y - 1, area.w + 2, area.h + 2, '#FFFFFF');
+  fr(area.x - 1, area.y - 1, area.w + 1, area.h + 1, '#373737');
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(area.x * S, area.y * S, area.w * S, area.h * S);
+  ctx.clip();
+  const mod = (a, n) => ((a % n) + n) % n;
+  for (let y = area.y - 16 + mod(pg.pan.y, 16); y < area.y + area.h; y += 16)
+    for (let x = area.x - 16 + mod(pg.pan.x, 16); x < area.x + area.w; x += 16)
+      ctx.drawImage(T.pierre_fond, x * S, y * S, 16 * S, 16 * S);
+  // ombre intérieure en haut et à gauche (comme le fond creusé de l'écran des progrès)
+  fr(area.x, area.y, area.w, 2, 'rgba(0,0,0,0.35)');
+  fr(area.x, area.y + 2, 2, area.h - 2, 'rgba(0,0,0,0.35)');
+
+  const cx = area.x + Math.floor(area.w / 2) + pg.pan.x, cy = area.y + 26 + pg.pan.y;   // centre de la racine
+  const center = e => [cx + e.x * PROG_PITCH, cy + e.y * PROG_PITCH];
+  // Liens : trait blanc bordé de noir, d'un centre à l'autre (les étapes se dessinent par-dessus)
+  for (const e of prog.etapes) {
+    const p = prog.etapes.find(q => q.id === e.parent);
+    if (!p) continue;
+    const [x1, y1] = center(p), [x2, y2] = center(e);
+    const [ax, bx, ay, by] = [Math.min(x1, x2), Math.max(x1, x2), Math.min(y1, y2), Math.max(y1, y2)];
+    fr(ax - 2, ay - 2, bx - ax + 5, by - ay + 5, '#000000');
+    fr(ax - 1, ay - 1, bx - ax + 3, by - ay + 3, '#FFFFFF');
+  }
+  const hits = [];
+  // Cadre d'une étape (bords noirs aux coins coupés, relief clair en haut à gauche) ; doré si sélectionnée
+  const frame = (x, y, s, fill, hover) => {
+    fr(x + 1, y, s - 2, s, '#000000');
+    fr(x, y + 1, s, s - 2, '#000000');
+    fr(x + 1, y + 1, s - 2, s - 2, '#FFFFFF');
+    fr(x + 2, y + 2, s - 3, s - 3, '#555555');
+    fr(x + 2, y + 2, s - 4, s - 4, hover ? shade(fill, 1.25) : fill);
+  };
+  for (const e of prog.etapes) {
+    const [x, y] = center(e), nx = x - PROG_NODE / 2, ny = y - PROG_NODE / 2;
+    const sel = e.id === pg.selected;
+    frame(nx, ny, PROG_NODE, sel ? '#B8862E' : '#C6C6C6', pg.hover === e.id);
+    if (T[e.item]) ctx.drawImage(T[e.item], (nx + 5) * S, (ny + 5) * S, 16 * S, 16 * S);
+    const num = String(e.niveau);
+    drawText(ctx, font, num, nx + PROG_NODE - 3 - textWidth(font, num), ny + PROG_NODE - 10, '#FFFFFF', S, true);
+    hits.push({ r: [nx, ny, PROG_NODE, PROG_NODE], etape: e });
+  }
+  progSpots().forEach((p, i) => {
+    const [x, y] = center(p), nx = x - PROG_PLUS / 2, ny = y - PROG_PLUS / 2;
+    const key = 'plus' + i;
+    frame(nx, ny, PROG_PLUS, '#C6C6C6', pg.hover === key);
+    drawText(ctx, font, '+', nx + Math.floor((PROG_PLUS - textWidth(font, '+')) / 2) + 1, ny + 5, '#404040', S);
+    hits.push({ r: [nx, ny, PROG_PLUS, PROG_PLUS], spot: p, key });
+  });
+  ctx.restore();
+
+  // Sous le fond : l'étape sélectionnée (utile sur téléphone, sans survol)
+  const s = prog.etapes.find(e => e.id === pg.selected);
+  const info = s ? `Étape ${s.niveau} : ${s.titre}` : prog.etapes.length ? 'Touche une étape pour la sélectionner' : 'Touche le + pour commencer';
+  drawText(ctx, font, fitText(info, area.w), area.x, area.y + area.h + 7, '#404040', S);
+  const back = [Math.floor(W / 2) - 40, py + ph + 4, 80, 20];
+  drawButton(ctx, back[0], back[1], back[2], 'Retour', pg.hover === 'back', S);
+  pg.layout = { S, area, hits: hits.filter(h => h.r[0] + h.r[2] > area.x && h.r[0] < area.x + area.w && h.r[1] + h.r[3] > area.y && h.r[1] < area.y + area.h), back };
+}
+
+function openProg() {
+  pg.open = true;
+  hideTooltip();
+  canvas.hidden = true;
+  progScreen.hidden = false;
+  if (!pg.selected && prog.etapes.length) pg.selected = prog.etapes[prog.etapes.length - 1].id;
+  renderProg();
+}
+function hideProg() {
+  progScreen.hidden = true;
+  if (pg.tipKey) { pg.tipKey = null; tip.hidden = true; }
+}
+function showProg() {   // retour après un panneau / une fenêtre
+  if (!pg.open) return;
+  canvas.hidden = true;
+  progScreen.hidden = false;
+  renderProg();
+}
+function closeProg() {
+  pg.open = false;
+  hideProg();
+  canvas.hidden = false;
+}
+const progHit = ev => {
+  const { S, hits } = pg.layout;
+  if (!inRect(ev, [pg.layout.area.x, pg.layout.area.y, pg.layout.area.w, pg.layout.area.h], S)) return null;
+  return [...hits].reverse().find(h => inRect(ev, h.r, S)) || null;
+};
+// Nouvelle étape : panneau pour le nom, puis livre pour la description
+function createStep(spot) {
+  hideProg();
+  openSign({
+    title: spot.parent ? "Nom de l'étape" : 'Nom de la racine',
+    lines: 2, fixed: ['', '', '^^^^^^^^^^^^', `Étape ${spot.niveau}`],
+    initial: '',
+    onCancel: showProg,
+    onDone: text => {
+      const titre = text.split('\n').map(l => l.trim()).filter(Boolean).join(' ');
+      if (!titre) { showProg(); return; }
+      const add = description => {
+        const parent = prog.etapes.find(e => e.id === spot.parent);
+        const items = PROG_ITEMS.filter(i => T[i] && (!parent || i !== parent.item));
+        const etape = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), x: spot.x, y: spot.y, niveau: spot.niveau,
+          item: items[Math.floor(Math.random() * items.length)], titre, description, parent: spot.parent };
+        prog.etapes.push(etape);
+        pg.selected = etape.id;
+        saveProg();
+        showProg();
+      };
+      openSign({
+        book: true, title: "Description de l'étape",
+        lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: '',
+        onDone: desc => add(desc.split('\n').filter(l => l.trim()).join('\n')),
+        onCancel: () => add(''),
+      });
+    },
+  });
+}
+// Clic sur l'étape déjà sélectionnée : renommer, modifier la description, supprimer (si rien n'en part)
+function stepMenu(e) {
+  hideProg();
+  const leaf = !prog.etapes.some(q => q.parent === e.id);
+  openConfirm({
+    question: e.titre,
+    detail: [`Étape ${e.niveau}`, ...(e.description ? e.description.split('\n') : [])],
+    noLabel: 'Renommer', yesLabel: 'Retour',
+    editLabel: 'Modifier la description',
+    onNo: () => openSign({
+      title: "Renommer l'étape", lines: 2, fixed: ['', '', '^^^^^^^^^^^^', `Étape ${e.niveau}`], initial: wrapForSign(e.titre, 2),
+      onCancel: showProg,
+      onDone: text => { e.titre = text.split('\n').map(l => l.trim()).filter(Boolean).join(' ') || e.titre; saveProg(); showProg(); },
+    }),
+    onEdit: () => openSign({
+      book: true, title: "Description de l'étape", lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: e.description || '',
+      onCancel: showProg,
+      onDone: desc => { e.description = desc.split('\n').filter(l => l.trim()).join('\n'); saveProg(); showProg(); },
+    }),
+    onYes: showProg,
+    onCancel: showProg,
+    ...(leaf ? { onDelete: () => {
+      prog.etapes.splice(prog.etapes.indexOf(e), 1);
+      pg.selected = e.parent;
+      saveProg();
+      showProg();
+    } } : {}),
+  });
+}
+function progTip(hit, ev) {
+  if (!hit || ev.pointerType === 'touch') { if (pg.tipKey) { pg.tipKey = null; tip.hidden = true; } return; }
+  const key = hit.etape ? hit.etape.id : hit.key;
+  if (pg.tipKey !== key) {
+    pg.tipKey = key;
+    const lines = hit.etape
+      ? [`§a${hit.etape.titre}`, `§8Étape ${hit.etape.niveau}`, ...descLines(hit.etape.description), '', hit.etape.id === pg.selected ? '§eClique pour modifier !' : '§eClique pour sélectionner !']
+      : hit.spot.parent ? ['§aNouvelle étape', `§7Étape ${hit.spot.niveau}`, '', '§eClique pour la créer !']
+      : ['§aCréer son arbre de progression', '§7Créer votre plan en plusieurs étapes', '', '§eClique pour commencer !'];
+    const R = guiRatio();
+    renderTooltip(tip, font, lines, tooltipScale(pg.layout.S));
+    tip.style.width = tip.width / R + 'px';
+    tip.style.height = tip.height / R + 'px';
+    tip.hidden = false;
+  }
+  placeTooltip(ev);
+}
+progCanvas.addEventListener('pointerdown', ev => {
+  if (!pg.layout) return;
+  const { S, area } = pg.layout;
+  if (inRect(ev, pg.layout.back, S)) { playClick(); location.hash = 'main'; return; }
+  if (!inRect(ev, [area.x, area.y, area.w, area.h], S)) return;
+  progCanvas.setPointerCapture(ev.pointerId);
+  pg.drag = { x0: evX(ev), y0: evY(ev), pan0: { ...pg.pan }, moved: false };
+});
+progCanvas.addEventListener('pointermove', ev => {
+  if (!pg.layout) return;
+  const d = pg.drag, S = pg.layout.S;
+  if (d) {
+    const dx = evX(ev) - d.x0, dy = evY(ev) - d.y0;
+    if (Math.hypot(dx, dy) > 4) d.moved = true;
+    if (d.moved) {
+      pg.pan = { x: d.pan0.x + Math.round(dx / S), y: d.pan0.y + Math.round(dy / S) };
+      progTip(null, ev);
+      renderProg();
+    }
+    return;
+  }
+  const hit = progHit(ev), onBack = inRect(ev, pg.layout.back, S);
+  const hover = onBack ? 'back' : hit ? (hit.etape ? hit.etape.id : hit.key) : null;
+  progCanvas.style.cursor = hover ? 'pointer' : inRect(ev, [pg.layout.area.x, pg.layout.area.y, pg.layout.area.w, pg.layout.area.h], S) ? 'grab' : '';
+  if (hover !== pg.hover) { pg.hover = hover; renderProg(); }
+  progTip(hit, ev);
+});
+progCanvas.addEventListener('pointerup', ev => {
+  const d = pg.drag;
+  pg.drag = null;
+  if (!d || d.moved) return;
+  const hit = progHit(ev);
+  if (!hit) return;
+  playClick();
+  progTip(null, ev);
+  if (hit.spot) createStep(hit.spot);
+  else if (hit.etape.id === pg.selected) stepMenu(hit.etape);
+  else { pg.selected = hit.etape.id; renderProg(); }
+});
+progCanvas.addEventListener('pointerleave', ev => { progTip(null, ev); if (pg.hover) { pg.hover = null; renderProg(); } });
+progCanvas.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  pg.pan = { x: pg.pan.x - Math.round(ev.deltaX / pg.layout.S / 2), y: pg.pan.y - Math.round(ev.deltaY / pg.layout.S / 2) };
+  renderProg();
+}, { passive: false });
+addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && !ev.defaultPrevented && pg.open && !progScreen.hidden) location.hash = 'main';
+});
+
 // --- Compte et sauvegarde en ligne (Supabase) ---
 // Les données restent dans le navigateur (l'app marche hors connexion) ; une fois connecté, elles sont aussi
 // envoyées dans la table « user_data » (une ligne par compte, tout dans un JSON) peu après chaque modification.
@@ -4077,7 +4341,7 @@ addEventListener('keydown', ev => {
 // sa version et on recharge la page. Seule la clé publiable est ici : chaque compte ne voit que sa ligne (RLS).
 const SUPABASE_URL = 'https://hzgtnstmmbmmubvzxhas.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_HhqBiNcmR0j0doZ_esJrbA_znOLL7Nw';
-const SYNC_KEYS = [DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
+const SYNC_KEYS = [PROG_KEY, DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
 let markAppReady;
 const appReady = new Promise(res => { markAppReady = res; });   // textures et police chargées
 
@@ -4582,6 +4846,7 @@ function resize() {
   if (sign.cfg) renderSign();
   if (dialog.cfg) renderConfirm();
   if (tbOpen()) renderTimeblock();
+  if (pg.open && !progScreen.hidden) renderProg();
   if (pvOpen()) renderPhotoPreview();
   if (loginOpen()) renderLogin();
   if (headOpen()) renderHeadImport();
@@ -4614,6 +4879,7 @@ async function main() {
   resize();
   addEventListener('resize', resize);
   addEventListener('popstate', showPageFromHash);
+  if (state.page === 'progression') openProg();
   canvas.addEventListener('click', onClick);
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseleave', onLeave);
