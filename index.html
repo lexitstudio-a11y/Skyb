@@ -4339,8 +4339,9 @@ function buildEtapePages() {
   }
   if (state.page.startsWith('etape-') && PAGES[state.page]) renderGui();
 }
-function progTip(hit, ev) {
-  if (!hit || ev.pointerType === 'touch') { if (pg.tipKey) { pg.tipKey = null; tip.hidden = true; } return; }
+// force : appui long sur téléphone (sinon pas d'overlay au toucher)
+function progTip(hit, ev, force) {
+  if (!hit || (ev.pointerType === 'touch' && !force)) { if (pg.tipKey) { pg.tipKey = null; tip.hidden = true; } return; }
   const key = hit.etape ? hit.etape.id : hit.key;
   if (pg.tipKey !== key) {
     pg.tipKey = key;
@@ -4349,7 +4350,10 @@ function progTip(hit, ev) {
       : hit.spot.parent ? ['§aNouvelle étape', `§7Étape ${hit.spot.niveau}`, '', '§eClique pour la créer !']
       : ['§aCréer son arbre de progression', '§7Créer votre plan en plusieurs étapes', '', '§eClique pour commencer !'];
     const R = guiRatio();
-    renderTooltip(tip, font, lines, tooltipScale(pg.layout.S));
+    if (isMobileLayout()) {   // téléphone : même taille de texte que les autres overlays, coupé à la largeur de l'écran
+      const ts = Math.max(2, Math.round(state.S * R * 0.55));
+      renderTooltip(tip, font, wrapTipLines(lines, (viewW() - 8) * R / ts - 2 * (3 + TOOLTIP_PADDING)), ts);
+    } else renderTooltip(tip, font, lines, tooltipScale(pg.layout.S));
     tip.style.width = tip.width / R + 'px';
     tip.style.height = tip.height / R + 'px';
     tip.hidden = false;
@@ -4362,14 +4366,20 @@ progCanvas.addEventListener('pointerdown', ev => {
   if (inRect(ev, pg.layout.back, S)) { playClick(); location.hash = 'main'; return; }
   if (!inRect(ev, [area.x, area.y, area.w, area.h], S)) return;
   progCanvas.setPointerCapture(ev.pointerId);
-  pg.drag = { x0: evX(ev), y0: evY(ev), pan0: { ...pg.pan }, moved: false };
+  progTip(null, ev);   // un nouveau toucher ferme l'overlay de l'appui long précédent
+  const drag = pg.drag = { x0: evX(ev), y0: evY(ev), pan0: { ...pg.pan }, moved: false, long: false };
+  // téléphone : appui long sur une étape ou un « + » = son overlay (au-dessus du doigt), sans l'ouvrir
+  if (ev.pointerType === 'touch') {
+    const hit = progHit(ev), at = { clientX: ev.clientX, clientY: ev.clientY, touch: true, pointerType: 'touch' };
+    if (hit) drag.timer = setTimeout(() => { if (pg.drag === drag && !drag.moved) { drag.long = true; progTip(hit, at, true); } }, LONG_PRESS_MS);
+  }
 });
 progCanvas.addEventListener('pointermove', ev => {
   if (!pg.layout) return;
   const d = pg.drag, S = pg.layout.S;
   if (d) {
     const dx = evX(ev) - d.x0, dy = evY(ev) - d.y0;
-    if (Math.hypot(dx, dy) > 4) d.moved = true;
+    if (Math.hypot(dx, dy) > 4) { d.moved = true; clearTimeout(d.timer); }
     if (d.moved) {
       pg.pan = { x: d.pan0.x + Math.round(dx / S), y: d.pan0.y + Math.round(dy / S) };
       progTip(null, ev);
@@ -4386,7 +4396,8 @@ progCanvas.addEventListener('pointermove', ev => {
 progCanvas.addEventListener('pointerup', ev => {
   const d = pg.drag;
   pg.drag = null;
-  if (!d || d.moved) return;
+  if (d) clearTimeout(d.timer);
+  if (!d || d.moved || d.long) return;   // appui long : l'overlay reste affiché, rien ne s'ouvre
   const hit = progHit(ev);
   if (!hit) return;
   playClick();
@@ -4394,7 +4405,11 @@ progCanvas.addEventListener('pointerup', ev => {
   if (hit.spot) createStep(hit.spot);
   else { pg.selected = hit.etape.id; location.hash = `etape-${hit.etape.id}`; }   // page de l'étape (au retour : ses « + »)
 });
-progCanvas.addEventListener('pointerleave', ev => { progTip(null, ev); if (pg.hover) { pg.hover = null; renderProg(); } });
+progCanvas.addEventListener('pointerleave', ev => {
+  if (ev.pointerType === 'touch') return;   // doigt levé : l'overlay d'un appui long reste affiché
+  progTip(null, ev);
+  if (pg.hover) { pg.hover = null; renderProg(); }
+});
 progCanvas.addEventListener('wheel', ev => {
   ev.preventDefault();
   pg.pan = { x: pg.pan.x - Math.round(ev.deltaX / pg.layout.S / 2), y: pg.pan.y - Math.round(ev.deltaY / pg.layout.S / 2) };
