@@ -1238,7 +1238,8 @@ function progressLine(a, pct, valeur = a.valeur ?? a.depart) {
 const LEVEL_LABELS = { done: '§aTerminé', current: '§6En cours', todo: '§cPas commencé' };
 const LEVEL_PANES = { done: 'lime_stained_glass', current: 'orange_stained_glass', todo: 'red_stained_glass' };
 // Ajout d'un arbre : titre (panneau) -> description (livre) -> type de progression -> valeurs de départ / ciblée.
-function addArbre() {
+// onCreated (facultatif) : appelé avec le nouvel arbre (ex. le lier à une étape de l'Arbre de progression)
+function addArbre(onCreated) {
   openSign({
     title: "Titre de l'arbre",
     lines: 1, fixed: ['', '^^^^^^^^^^^^', "Titre de l'arbre", ''],
@@ -1251,6 +1252,7 @@ function addArbre() {
         onDone: description => {
           arbres.push({ titre, description: description.trim(), icone: randomArbreIcon(), progression: 0 });
           saveArbres();
+          if (typeof onCreated === 'function') onCreated(arbres[arbres.length - 1]);
           refreshArbres();
           location.hash = `arbre-${arbres.length}-type`;
         },
@@ -1630,7 +1632,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'fil', 'birch_log', 'birch_log_top', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -1937,9 +1939,10 @@ const MOBILE_PLACES = {
   // livre (serments), bûche (arbres), papier (liste de choses à faire), montre (agenda), chacun avec son titre
   main: { '1,4': '0,4', '2,4': '1,0', '2,1': '3,0', '3,1': '5,0', '2,5': '7,0', '2,6': '9,0' },   // 5 lignes (rangées 1 à 9)
   arbre: { '4,0': '9,0' },   // page d'un arbre : bloc d'améthyste (épingler) juste au-dessus de l'orbe d'expérience
+  etape: { '4,0': '9,0', '4,8': '9,4' },   // page d'une étape : livre au-dessus de l'étiquette, fil au-dessus de la bûche
 };
 // Pages construites pour chaque arbre (arbre-1, arbre-2…) : mêmes places à la main pour toutes.
-const placesId = id => /^arbre-\d+$/.test(id) ? 'arbre' : id;
+const placesId = id => /^arbre-\d+$/.test(id) ? 'arbre' : /^etape-/.test(id) ? 'etape' : id;
 // Téléphone : titre dans un bloc de couleur (façon Timeblock) sur les 3 cases de droite, à côté de l'item
 // placé en colonne 0 (clé ordinateur -> couleur, ou { color, gradient: [haut, bas], text }) ; même overlay
 // et même clic que l'item.
@@ -1988,6 +1991,7 @@ const DESK_PLACES = {
   // page d'une action : terminée / supprimer collés à gauche, les 3 priorités collées à droite
   action: { '4,1': '4,1', '4,6': '4,8', '4,7': '4,9', '4,8': '4,10' },
   arbre: { '4,0': '5,0' },   // bloc d'améthyste (épingler) juste au-dessus de l'orbe d'expérience
+  etape: { '4,0': '5,0', '4,8': '5,10' },   // page d'une étape : livre et fil juste au-dessus des coins du bas
 };
 function deskSlots(id, slots) {
   const cache = deskCache[da];
@@ -4097,6 +4101,7 @@ const pg = { open: false, layout: null, pan: { x: 0, y: 0 }, selected: null, hov
 function saveProg() {
   try { localStorage.setItem(PROG_KEY, JSON.stringify(prog)); } catch {}
   cloudChanged();
+  buildEtapePages();
 }
 const progAt = (x, y) => prog.etapes.find(e => e.x === x && e.y === y);
 // Places des « + » : la racine tant que l'arbre est vide, sinon autour de l'étape sélectionnée (dessous, gauche, droite)
@@ -4174,7 +4179,7 @@ function renderProg() {
 
   // Sous le fond : l'étape sélectionnée (utile sur téléphone, sans survol)
   const s = prog.etapes.find(e => e.id === pg.selected);
-  const info = s ? `Étape ${s.niveau} : ${s.titre}` : prog.etapes.length ? 'Touche une étape pour la sélectionner' : 'Touche le + pour commencer';
+  const info = s ? `Étape ${s.niveau} : ${s.titre}` : prog.etapes.length ? 'Touche une étape pour l\'ouvrir' : 'Touche le + pour commencer';
   drawText(ctx, font, fitText(info, area.w), area.x, area.y + area.h + 7, '#404040', S);
   const back = [Math.floor(W / 2) - 40, py + ph + 4, 80, 20];
   drawButton(ctx, back[0], back[1], back[2], 'Retour', pg.hover === 'back', S);
@@ -4239,34 +4244,76 @@ function createStep(spot) {
     },
   });
 }
-// Clic sur l'étape déjà sélectionnée : renommer, modifier la description, supprimer (si rien n'en part)
-function stepMenu(e) {
-  hideProg();
-  const leaf = !prog.etapes.some(q => q.parent === e.id);
+// Page d'une étape (comme les autres pages) : son item au centre ; en bas à gauche l'étiquette (renommer) et au-dessus
+// le livre et la plume (description) ; en bas à droite la bûche (créer un arbre de progression lié à l'étape) et
+// au-dessus le fil (lier un arbre existant : la page des Racines s'ouvre, un clic sur un arbre le lie).
+// Le lien est l'identifiant de l'arbre (etape.arbre), comme pour un bloc du Timeblock (voir blockArbre).
+function editEtapeTitle(e) {
+  openSign({
+    title: "Renommer l'étape", lines: 2, fixed: ['', '', '^^^^^^^^^^^^', `Étape ${e.niveau}`], initial: wrapForSign(e.titre, 2),
+    onDone: text => { e.titre = text.split('\n').map(l => l.trim()).filter(Boolean).join(' ') || e.titre; saveProg(); },
+  });
+}
+function editEtapeDescription(e) {
+  openSign({
+    book: true, title: e.titre, lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: e.description || '',
+    onDone: desc => { e.description = desc.split('\n').filter(l => l.trim()).join('\n'); saveProg(); },
+  });
+}
+function linkEtapeArbre(e) {
+  const back = `etape-${e.id}`;
+  PAGES['lier-arbre'] = arbresScrollPage({
+    trees: arbreLists()[0].trees, title: PAGE_TITLES.arbres,
+    nav: { '5,4': { item: 'barrier', tooltip: ['§cAnnuler', '', "§eClique pour revenir à l'étape !"], open: back } },
+    pick: a => { e.arbre = arbreId(a); saveProg(); showToast({ title: 'Arbre lié', text: fitText(a.titre, 150) }); location.hash = back; },
+  });
+  location.hash = 'lier-arbre';
+}
+function deleteEtape(e) {
   openConfirm({
-    question: e.titre,
-    detail: [`Étape ${e.niveau}`, ...(e.description ? e.description.split('\n') : [])],
-    noLabel: 'Renommer', yesLabel: 'Retour',
-    editLabel: 'Modifier la description',
-    onNo: () => openSign({
-      title: "Renommer l'étape", lines: 2, fixed: ['', '', '^^^^^^^^^^^^', `Étape ${e.niveau}`], initial: wrapForSign(e.titre, 2),
-      onCancel: showProg,
-      onDone: text => { e.titre = text.split('\n').map(l => l.trim()).filter(Boolean).join(' ') || e.titre; saveProg(); showProg(); },
-    }),
-    onEdit: () => openSign({
-      book: true, title: "Description de l'étape", lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: e.description || '',
-      onCancel: showProg,
-      onDone: desc => { e.description = desc.split('\n').filter(l => l.trim()).join('\n'); saveProg(); showProg(); },
-    }),
-    onYes: showProg,
-    onCancel: showProg,
-    ...(leaf ? { onDelete: () => {
+    question: 'Supprimer cette étape ?', detail: [e.titre],
+    noLabel: 'Retour', yesLabel: '§cSupprimer',
+    onYes: () => {
       prog.etapes.splice(prog.etapes.indexOf(e), 1);
       pg.selected = e.parent;
       saveProg();
-      showProg();
-    } } : {}),
+      location.hash = 'progression';
+    },
   });
+}
+function buildEtapePages() {
+  for (const id of Object.keys(PAGES)) if (id.startsWith('etape-')) delete PAGES[id];
+  for (const e of prog.etapes) {
+    const linked = () => blockArbre(e);
+    const slots = {
+      '2,4': { image: e.item, count: e.niveau, tooltip: () => [`§a${e.titre}`, `§8Étape ${e.niveau}`, ...descLines(e.description)] },
+      '5,0': { item: 'name_tag', tooltip: ['§aRenommer', "§7Modifie le nom de l'étape.", '', '§eClique pour modifier !'], action: () => editEtapeTitle(e) },
+      '4,0': {
+        item: 'writable_book', action: () => editEtapeDescription(e),
+        tooltip: () => ['§aDescription', ...(e.description ? descLines(e.description) : ['§7Aucune description.']), '', '§eClique pour modifier !'],
+      },
+      '5,8': {
+        block: 'birch_log', tooltip: ['§aCréer un arbre de progression', "§7Crée un arbre lié à cette étape.", '', '§eClique pour créer !'],
+        action: () => addArbre(a => { e.arbre = arbreId(a); saveProg(); }),
+      },
+      '4,8': {
+        image: 'fil', action: () => linkEtapeArbre(e),
+        tooltip: () => linked()
+          ? ['§aArbre lié', `§e${linked().titre}`, progressLine(linked(), arbreProgress(linked())), '', '§eClique pour en lier un autre !']
+          : ['§aLier un arbre de progression', "§7Relie un arbre existant à l'étape.", '', '§eClique pour choisir !'],
+      },
+      ...navSlots('progression'),
+    };
+    if (!prog.etapes.some(q => q.parent === e.id))   // supprimer : seulement si aucune étape n'en part
+      slots['0,0'] = { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cette étape.", '', '§eClique pour supprimer !'], action: () => deleteEtape(e) };
+    const a = linked();
+    if (a) {   // arbre lié : son icône sous l'étape (clic : sa page)
+      const n = arbres.indexOf(a) + 1;
+      slots['3,4'] = { ...arbreIcon(a), tooltip: () => [`§a${a.titre}`, progressLine(a, arbreProgress(a)), '', "§eClique pour voir l'arbre !"], action: () => { location.hash = `arbre-${n}`; } };
+    }
+    PAGES[`etape-${e.id}`] = { title: fitText(e.titre, 160), slots };
+  }
+  if (state.page.startsWith('etape-') && PAGES[state.page]) renderGui();
 }
 function progTip(hit, ev) {
   if (!hit || ev.pointerType === 'touch') { if (pg.tipKey) { pg.tipKey = null; tip.hidden = true; } return; }
@@ -4274,7 +4321,7 @@ function progTip(hit, ev) {
   if (pg.tipKey !== key) {
     pg.tipKey = key;
     const lines = hit.etape
-      ? [`§a${hit.etape.titre}`, `§8Étape ${hit.etape.niveau}`, ...descLines(hit.etape.description), '', hit.etape.id === pg.selected ? '§eClique pour modifier !' : '§eClique pour sélectionner !']
+      ? [`§a${hit.etape.titre}`, `§8Étape ${hit.etape.niveau}`, ...descLines(hit.etape.description), ...(blockArbre(hit.etape) ? [`§7Arbre lié : §e${blockArbre(hit.etape).titre}`] : []), '', '§eClique pour ouvrir !']
       : hit.spot.parent ? ['§aNouvelle étape', `§7Étape ${hit.spot.niveau}`, '', '§eClique pour la créer !']
       : ['§aCréer son arbre de progression', '§7Créer votre plan en plusieurs étapes', '', '§eClique pour commencer !'];
     const R = guiRatio();
@@ -4321,8 +4368,7 @@ progCanvas.addEventListener('pointerup', ev => {
   playClick();
   progTip(null, ev);
   if (hit.spot) createStep(hit.spot);
-  else if (hit.etape.id === pg.selected) stepMenu(hit.etape);
-  else { pg.selected = hit.etape.id; renderProg(); }
+  else { pg.selected = hit.etape.id; location.hash = `etape-${hit.etape.id}`; }   // page de l'étape (au retour : ses « + »)
 });
 progCanvas.addEventListener('pointerleave', ev => { progTip(null, ev); if (pg.hover) { pg.hover = null; renderProg(); } });
 progCanvas.addEventListener('wheel', ev => {
@@ -4868,8 +4914,10 @@ async function main() {
     black_terracotta: { top: T.black_terracotta, front: T.black_terracotta, side: T.black_terracotta },
     cyan_terracotta: { top: T.cyan_terracotta, front: T.cyan_terracotta, side: T.cyan_terracotta },
     tnt: { top: T.tnt_top, front: T.tnt_side, side: T.tnt_side },
+    birch_log: { top: T.birch_log_top, front: T.birch_log, side: T.birch_log },   // bûche blanche (créer un arbre)
   };
   refreshArbres();
+  buildEtapePages();   // une page par étape de l'Arbre de progression
   refreshAgenda();   // pages « Autres Journées » 2, 3… (créées selon le nombre d'anciens agendas)
   HEADS.profile = headFaces(T.steve);
   HEADS.steve = headFaces(T.steve);   // tête neutre (menu « Modifier le profil »)
