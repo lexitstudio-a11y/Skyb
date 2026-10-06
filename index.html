@@ -890,8 +890,8 @@ const PAGES = {
         tooltip: () => ['§aAlterner D.A', `§7D.A actuelle : §e${DA_LABELS[da]}`, "§7Passe d'une direction artistique", "§7à l'autre (l'ancienne est gardée).", '', '§eClique pour changer !'],
       },
       '1,4': { head: 'profile', tooltip: profileTooltip, action: editProfile },
-      '2,1': { image: 'arbres_progression', tooltip: ['§aRacines', ...LORE], open: 'arbres' },
-      '3,1': { image: 'arbre_logo', tooltip: ['§aArbre de progression', ...LORE], open: 'progression' },   // sous Racines
+      '2,1': { image: 'arbre_logo', tooltip: ['§aArbre de progression', ...LORE], open: 'progression' },
+      '3,1': { image: 'arbres_progression', tooltip: ['§aRacines', ...LORE], open: 'arbres' },   // sous Arbre de progression
       '2,4': { item: 'book', tooltip: ['§aLes Pilliers Temporels', ...LORE], open: 'serments' },
       '2,5': {
         item: 'paper', open: 'todo',
@@ -1964,7 +1964,7 @@ const placesId = id => /^arbre-\d+$/.test(id) ? 'arbre' : id;
 const MOBILE_LABELS = {
   main: {
     '2,4': { color: '#1A2F80', gradient: ['#3456C8', '#0A1650'], text: '#FFFF55' },   // Pilliers Temporels : bleu foncé, texte jaune
-    '2,1': '#88B253', '3,1': '#397E49', '2,5': '#EEC14C', '2,6': '#E25D33',
+    '2,1': '#397E49', '3,1': '#88B253', '2,5': '#EEC14C', '2,6': '#E25D33',
   },
 };
 const slotDesc = slot => {   // 2e ligne de l'overlay (description), sans ses couleurs
@@ -1992,7 +1992,7 @@ const mobileCache = { minecraft: new WeakMap(), test: new WeakMap() };   // une 
 // titre sur les 3 cases à partir de la colonne 2 ou 8). Clé 9 x 6 -> place dans le coffre de 11 x 7.
 const PC_PLACES_DA2 = {
   // Profil : Pilliers Temporels en haut au centre, puis Arbres / Liste de choses à faire / Agenda côte à côte (blocs étroits)
-  // Arbre de progression : sous Racines (tout remonte d'une rangée pour lui laisser la place)
+  // Racines sous Arbre de progression (tout remonte d'une rangée pour leur laisser la place)
   main: { '1,4': '0,10', '2,4': '0,3', '2,1': { to: '2,0', narrow: true }, '3,1': { to: '4,0', narrow: true }, '2,5': { to: '2,4', narrow: true }, '2,6': { to: '2,8', narrow: true } },
   serments: { '0,2': '1,0', '0,4': '1,6', '0,6': '3,0' },
 };
