@@ -4188,8 +4188,9 @@ function renderProg() {
   for (const e of prog.etapes) {
     const [x, y] = center(e), nx = x - PROG_NODE / 2, ny = y - PROG_NODE / 2;
     const sel = e.id === pg.selected;
-    // étape validée : bloc vert à coche à la place de son item (il revient si on la dévalide), case assombrie
-    const done = etapeDone(e), icon = done ? T.etape_valider : T[e.item];
+    // étape validée : bloc vert à coche, assombri, à la place de son item (il revient si on la dévalide) ;
+    // le fond et le numéro restent normaux
+    const done = etapeDone(e), icon = done ? dimmed(T.etape_valider) : T[e.item];
     frame(nx, ny, PROG_NODE, sel ? '#B8862E' : '#C6C6C6', pg.hover === e.id);
     if (icon) {
       ctx.imageSmoothingEnabled = done;   // image fournie en grand : lissée en la réduisant
@@ -4198,7 +4199,6 @@ function renderProg() {
     }
     const num = String(e.niveau);
     drawText(ctx, font, num, nx + PROG_NODE - 3 - textWidth(font, num), ny + PROG_NODE - 10, '#FFFFFF', S, true);
-    if (done) fr(nx + 1, ny + 1, PROG_NODE - 2, PROG_NODE - 2, 'rgba(0, 0, 0, 0.45)');   // sans toucher aux coins coupés
     hits.push({ r: [nx, ny, PROG_NODE, PROG_NODE], etape: e });
   }
   progSpots().forEach((p, i) => {
