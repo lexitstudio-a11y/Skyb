@@ -4335,7 +4335,16 @@ function buildEtapePages() {
         ? { image: 'etape_devalider', tooltip: ['§cDévalider', "§7L'étape redevient à faire.", '', '§eClique pour dévalider !'],
             action: () => { delete e.valide; saveProg(); } }
         : { image: 'etape_valider', tooltip: ['§aValider', "§7L'étape est terminée.", '', '§eClique pour valider !'],
-            action: () => { e.valide = formatDate(new Date()); saveProg(); showToast({ title: 'Étape validée', text: fitText(e.titre, 150) }); } };
+            action: () => {
+              e.valide = formatDate(new Date());
+              // retour à l'Arbre de progression, sur l'étape suivante : à gauche si elle existe et n'est pas validée,
+              // sinon à droite, sinon celle du dessous (s'il n'y en a aucune, l'étape validée reste sélectionnée)
+              const next = [[-1, 0], [1, 0], [0, 1]].map(([dx, dy]) => progAt(e.x + dx, e.y + dy)).find(q => q && !etapeDone(q));
+              pg.selected = (next || e).id;
+              saveProg();
+              showToast({ title: 'Étape validée', text: fitText(e.titre, 150) });
+              location.hash = 'progression';
+            } };
     if (!prog.etapes.some(q => q.parent === e.id))   // supprimer : seulement si aucune étape n'en part
       slots['0,0'] = { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cette étape.", '', '§eClique pour supprimer !'], action: () => deleteEtape(e) };
     const a = linked();
