@@ -4652,8 +4652,11 @@ function accountTooltip() {
   if (!session || !session.user) {
     return ['§aSauvegarde en ligne', '§7Connecte-toi pour sauvegarder tes', '§7données et les retrouver sur', '§7tous tes appareils.', '', '§eClique pour te connecter !'];
   }
+  // date de la dernière version du compte (la même sur tous les appareils une fois synchronisés), pas celle du
+  // dernier envoi fait depuis cet appareil
+  const last = sync.at ? new Date(sync.at) : sync.savedAt ? new Date(sync.savedAt) : null;
   const status = sync.dirty ? '§6Modifications en cours d\'envoi…'
-    : sync.savedAt ? `§7Dernière sauvegarde : §f${formatDate(new Date(sync.savedAt))} ${fmtMin(new Date(sync.savedAt).getHours() * 60 + new Date(sync.savedAt).getMinutes())}`
+    : last ? `§7Dernière sauvegarde : §f${formatDate(last)} ${fmtMin(last.getHours() * 60 + last.getMinutes())}`
     : '§7Données sauvegardées.';
   return ['§aSauvegarde en ligne', `§7Connecté : §f${session.user.email}`, status, '', '§eClique pour gérer !'];
 }
