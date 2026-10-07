@@ -1321,9 +1321,10 @@ const groupBack = groupe => groupe.replace(/-(action|identite)$/, '');
 const groupTitle = groupe => groupe.endsWith('-action') ? "Arbres d'Action" : "Arbres d'Identité";
 // La liste principale montre tous les arbres ; ceux d'un round sont aussi dans leur liste à part.
 function arbreLists() {
-  // arbres épinglés en tête de liste, objectifs complétés (100 %) tout en bas ; sinon l'ordre de création
+  // arbres épinglés en tête de liste, objectifs complétés (100 %) tout en bas ; dans chaque groupe, le plus avancé
+  // en haut (à progression égale : l'ordre de création)
   const rank = a => a.epingle ? 0 : arbreProgress(a) >= 100 ? 2 : 1;
-  const pinnedFirst = list => [...list].sort((x, y) => rank(x) - rank(y));
+  const pinnedFirst = list => [...list].sort((x, y) => rank(x) - rank(y) || arbreProgress(y) - arbreProgress(x));
   const lists = [{ trees: pinnedFirst(arbres), pageId: arbresPageId, title: PAGE_TITLES.arbres, back: 'main', add: true }];
   for (const groupe of new Set(arbres.map(a => a.groupe).filter(Boolean)))
     lists.push({ trees: pinnedFirst(arbres.filter(a => a.groupe === groupe)), pageId: k => groupPageId(groupe, k), title: groupTitle(groupe), back: groupBack(groupe) });
