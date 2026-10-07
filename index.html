@@ -1632,7 +1632,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -4110,6 +4110,8 @@ function saveProg() {
   buildEtapePages();
 }
 const progAt = (x, y) => prog.etapes.find(e => e.x === x && e.y === y);
+// Étape validée : à la main (bloc vert de sa page), ou, si elle est liée à un arbre, quand l'arbre est terminé (100 %)
+const etapeDone = e => { const a = blockArbre(e); return a ? arbreProgress(a) >= 100 : !!e.valide; };
 // Places des « + » : la racine tant que l'arbre est vide, sinon autour de l'étape sélectionnée (dessous, gauche, droite)
 function progSpots() {
   if (!prog.etapes.length) return [{ x: 0, y: 0, niveau: 1, parent: null }];
@@ -4186,7 +4188,7 @@ function renderProg() {
   for (const e of prog.etapes) {
     const [x, y] = center(e), nx = x - PROG_NODE / 2, ny = y - PROG_NODE / 2;
     const sel = e.id === pg.selected;
-    frame(nx, ny, PROG_NODE, sel ? '#B8862E' : '#C6C6C6', pg.hover === e.id);
+    frame(nx, ny, PROG_NODE, sel ? '#B8862E' : etapeDone(e) ? '#6FA83A' : '#C6C6C6', pg.hover === e.id);   // validée : verte
     if (T[e.item]) ctx.drawImage(T[e.item], (nx + 5) * S, (ny + 5) * S, 16 * S, 16 * S);
     const num = String(e.niveau);
     drawText(ctx, font, num, nx + PROG_NODE - 3 - textWidth(font, num), ny + PROG_NODE - 10, '#FFFFFF', S, true);
@@ -4310,7 +4312,7 @@ function buildEtapePages() {
   for (const e of prog.etapes) {
     const linked = () => blockArbre(e);
     const slots = {
-      '2,4': { image: e.item, count: e.niveau, tooltip: () => [`§a${e.titre}`, `§8Étape ${e.niveau}`, ...descLines(e.description)] },
+      '2,4': { image: e.item, count: e.niveau, tooltip: () => [`§a${e.titre}`, `§8Étape ${e.niveau}`, ...descLines(e.description), ...(etapeDone(e) ? ['', e.valide && !linked() ? `§aÉtape validée le ${e.valide}` : '§aÉtape validée'] : [])] },
       '5,0': { item: 'name_tag', tooltip: ['§aRenommer', "§7Modifie le nom de l'étape.", '', '§eClique pour modifier !'], action: () => editEtapeTitle(e) },
       '4,0': {
         item: 'writable_book', action: () => editEtapeDescription(e),
@@ -4328,6 +4330,12 @@ function buildEtapePages() {
       },
       ...navSlots('progression'),
     };
+    if (!linked())   // en haut à droite : valider l'étape (bloc vert), ou la dévalider (bloc rouge) ; étape liée à un arbre :
+      slots['0,8'] = e.valide   // rien, elle se valide quand l'arbre est terminé
+        ? { image: 'etape_devalider', tooltip: ['§cDévalider', "§7L'étape redevient à faire.", '', '§eClique pour dévalider !'],
+            action: () => { delete e.valide; saveProg(); } }
+        : { image: 'etape_valider', tooltip: ['§aValider', "§7L'étape est terminée.", '', '§eClique pour valider !'],
+            action: () => { e.valide = formatDate(new Date()); saveProg(); showToast({ title: 'Étape validée', text: fitText(e.titre, 150) }); } };
     if (!prog.etapes.some(q => q.parent === e.id))   // supprimer : seulement si aucune étape n'en part
       slots['0,0'] = { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cette étape.", '', '§eClique pour supprimer !'], action: () => deleteEtape(e) };
     const a = linked();
@@ -4346,7 +4354,7 @@ function progTip(hit, ev, force) {
   if (pg.tipKey !== key) {
     pg.tipKey = key;
     const lines = hit.etape
-      ? [`§a${hit.etape.titre}`, `§8Étape ${hit.etape.niveau}`, ...descLines(hit.etape.description), ...(blockArbre(hit.etape) ? [`§7Arbre lié : §e${blockArbre(hit.etape).titre}`] : []), '', '§eClique pour ouvrir !']
+      ? [`§a${hit.etape.titre}`, `§8Étape ${hit.etape.niveau}`, ...descLines(hit.etape.description), ...(etapeDone(hit.etape) ? ['§aÉtape validée'] : []), ...(blockArbre(hit.etape) ? [`§7Arbre lié : §e${blockArbre(hit.etape).titre}`] : []), '', '§eClique pour ouvrir !']
       : hit.spot.parent ? ['§aNouvelle étape', `§7Étape ${hit.spot.niveau}`, '', '§eClique pour la créer !']
       : ['§aCréer son arbre de progression', '§7Créer votre plan en plusieurs étapes', '', '§eClique pour commencer !'];
     const R = guiRatio();
