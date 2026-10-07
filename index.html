@@ -4110,6 +4110,14 @@ function saveProg() {
   buildEtapePages();
 }
 const progAt = (x, y) => prog.etapes.find(e => e.x === x && e.y === y);
+// Prochaine étape à faire : parmi les étapes pas encore validées dont l'étape précédente l'est (ou la racine),
+// la plus haute dans l'arbre, puis la plus à gauche.
+function nextEtape() {
+  const byId = id => prog.etapes.find(q => q.id === id);
+  return prog.etapes
+    .filter(e => !etapeDone(e) && (!e.parent || !byId(e.parent) || etapeDone(byId(e.parent))))
+    .sort((a, b) => a.y - b.y || a.x - b.x)[0] || null;
+}
 // Étape validée : à la main (bloc vert de sa page), ou, si elle est liée à un arbre, quand l'arbre est terminé (100 %)
 const etapeDone = e => { const a = blockArbre(e); return a ? arbreProgress(a) >= 100 : !!e.valide; };
 // Places des « + » : la racine tant que l'arbre est vide, sinon autour de l'étape sélectionnée (dessous, gauche, droite)
@@ -4211,9 +4219,9 @@ function renderProg() {
   });
   ctx.restore();
 
-  // Sous le fond : l'étape sélectionnée (utile sur téléphone, sans survol)
-  const s = prog.etapes.find(e => e.id === pg.selected);
-  const info = s ? `Étape ${s.niveau} : ${s.titre}` : prog.etapes.length ? 'Touche une étape pour l\'ouvrir' : 'Touche le + pour commencer';
+  // Sous le fond : la prochaine étape à faire (pas forcément celle qui est sélectionnée)
+  const s = nextEtape();
+  const info = s ? `Prochaine étape (${s.niveau}) : ${s.titre}` : prog.etapes.length ? 'Toutes les étapes sont validées' : 'Touche le + pour commencer';
   drawText(ctx, font, fitText(info, area.w), area.x, area.y + area.h + 7, '#404040', S);
   const back = [Math.floor(W / 2) - 40, py + ph + 4, 80, 20];
   drawButton(ctx, back[0], back[1], back[2], 'Retour', pg.hover === 'back', S);
