@@ -4174,7 +4174,7 @@ function renderProg() {
     }
     const [ax, bx, ay, by] = [Math.min(x1, x2), Math.max(x1, x2), Math.min(y1, y2), Math.max(y1, y2)];
     fr(ax - 2, ay - 2, bx - ax + 5, by - ay + 5, '#000000');
-    fr(ax - 1, ay - 1, bx - ax + 3, by - ay + 3, '#FFFFFF');
+    fr(ax - 1, ay - 1, bx - ax + 3, by - ay + 3, e.valide ? '#80FF20' : '#FFFFFF');   // étape validée : trait vert (comme une barre pleine)
   }
   const hits = [];
   // Cadre d'une étape (bords noirs aux coins coupés, relief clair en haut à gauche) ; doré si sélectionnée
