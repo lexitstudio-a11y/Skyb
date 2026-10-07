@@ -4491,30 +4491,61 @@ function applyCloudData(row) {
   for (const k of SYNC_KEYS) {
     try { row.data[k] == null ? localStorage.removeItem(k) : localStorage.setItem(k, row.data[k]); } catch {}
   }
-  Object.assign(sync, { at: row.updated_at, dirty: false });
+  Object.assign(sync, { at: row.updated_at, dirty: false, base: snapshot(row.data) });
   saveSyncState();
   setDataOwner(session.user.id);
   location.reload();   // les données sont lues au chargement de la page
+}
+// Empreinte de chaque donnée au moment de la dernière synchronisation (sync.base) : permet de savoir ce qui a
+// changé sur cet appareil depuis, pour fusionner avec ce qu'un autre appareil a envoyé entre-temps.
+const hashStr = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return h; };
+const snapshot = data => Object.fromEntries(SYNC_KEYS.map(k => [k, data[k] == null ? null : hashStr(data[k])]));
+// Fusion donnée par donnée (arbres, agendas, Arbre de progression…) : celle de cet appareil si elle y a changé depuis
+// la dernière synchronisation ou si le compte ne l'a pas, sinon celle du compte (modifiée sur un autre appareil).
+function mergeData(local, cloud) {
+  const base = sync.base, out = {};
+  for (const k of SYNC_KEYS) {
+    const l = local[k], c = cloud[k];
+    const changedHere = l != null && (base ? hashStr(l) !== base[k] : !!sync.dirty);
+    const v = c == null ? l : l == null ? c : changedHere ? l : c;
+    if (v != null) out[k] = v;
+  }
+  return out;
 }
 async function pullCloud() {
   await freshSession();
   const rows = await supa(`/rest/v1/user_data?select=data,updated_at&user_id=eq.${session.user.id}`);
   return rows[0] || null;
 }
-async function pushCloud() {
+// Synchronisation : relit d'abord le compte. S'il a été modifié ailleurs depuis la dernière synchronisation, les deux
+// versions sont fusionnées (rien n'est écrasé à l'aveugle) ; puis on envoie le résultat s'il diffère du compte, et
+// on recharge la page si cet appareil reçoit des données d'un autre. force : envoie cet appareil tel quel (choix fait
+// à la connexion : « Celles de cet appareil ») ; reload : false pendant la déconnexion (les données vont être effacées).
+async function pushCloud({ force = false, reload = true } = {}) {
   if (pushing) return pushing;   // un seul envoi à la fois
   pushing = (async () => {
     await freshSession();
     const owner = dataOwner();
     if (owner && owner !== session.user.id) throw new CloudError('Données d\'un autre compte');   // jamais envoyées ailleurs
-    const [row] = await supa('/rest/v1/user_data?on_conflict=user_id', {
-      method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
-      body: { user_id: session.user.id, data: localData(), updated_at: new Date().toISOString() },
-    });
-    Object.assign(sync, { at: row.updated_at, dirty: false, savedAt: Date.now() });
+    const row = force ? null : await pullCloud();
+    const local = localData();
+    const data = row && row.updated_at !== sync.at ? mergeData(local, row.data || {}) : local;
+    const same = (a, b) => SYNC_KEYS.every(k => (a[k] ?? null) === (b[k] ?? null));
+    if (!row || !same(data, row.data || {})) {
+      const [saved] = await supa('/rest/v1/user_data?on_conflict=user_id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+        body: { user_id: session.user.id, data, updated_at: new Date().toISOString() },
+      });
+      Object.assign(sync, { at: saved.updated_at, savedAt: Date.now() });
+    } else sync.at = row.updated_at;
+    Object.assign(sync, { dirty: false, base: snapshot(data) });
     saveSyncState();
     setDataOwner(session.user.id);
+    if (reload && !same(data, local)) {   // des données venues d'un autre appareil : on les écrit ici et on recharge
+      for (const k of SYNC_KEYS) try { data[k] == null ? localStorage.removeItem(k) : localStorage.setItem(k, data[k]); } catch {}
+      location.reload();
+    }
   })().finally(() => { pushing = null; });
   return pushing;
 }
@@ -4530,11 +4561,7 @@ function cloudChanged() {
 // sinon envoie ce qui n'a pas encore pu l'être (hors connexion…).
 async function cloudCheck() {
   if (!session) return;
-  try {
-    const row = await pullCloud();
-    if (row && row.updated_at !== sync.at && !sync.dirty) applyCloudData(row);
-    else if (!row || sync.dirty) await pushCloud();
-  } catch {}
+  try { await pushCloud(); } catch {}   // relit le compte, fusionne s'il a changé ailleurs, envoie ce qui manque
 }
 addEventListener('online', cloudCheck);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') cloudCheck(); });
@@ -4568,7 +4595,7 @@ async function afterLogin() {
       detail: ['Ce compte a déjà des données sauvegardées,', 'et cet appareil aussi. Les autres seront remplacées.'],
       noLabel: 'Celles du compte', yesLabel: 'Celles de cet appareil', buttonWidth: 136,
       onNo: () => applyCloudData(row),
-      onYes: () => pushCloud().then(renderGui, () => {}),
+      onYes: () => pushCloud({ force: true }).then(renderGui, () => {}),
       onCancel: () => applyCloudData(row),
     });
   } else if (row && hasData(row.data)) applyCloudData(row);
@@ -4579,7 +4606,7 @@ async function afterLogin() {
       detail: ['Ce compte est vide. Les données déjà présentes', 'sur cet appareil peuvent y être ajoutées.'],
       noLabel: 'Partir de zéro', yesLabel: 'Les garder', buttonWidth: 120,
       onNo: () => { clearLocalData(); setDataOwner(session.user.id); location.reload(); },
-      onYes: () => pushCloud().then(renderGui, () => {}),
+      onYes: () => pushCloud({ force: true }).then(renderGui, () => {}),
       onCancel: () => { clearLocalData(); setDataOwner(session.user.id); location.reload(); },
     });
   }
@@ -4608,7 +4635,7 @@ function openAccount() {
 }
 async function logout() {
   const s = session;
-  if (sync.dirty) await pushCloud().catch(() => {});
+  if (sync.dirty) await pushCloud({ reload: false }).catch(() => {});
   supa('/auth/v1/logout', { method: 'POST', headers: { Authorization: `Bearer ${s.access_token}` } }).catch(() => {});
   session = null;
   saveSession();
