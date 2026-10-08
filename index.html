@@ -4214,6 +4214,16 @@ function renderProg() {
     }
     const num = String(e.niveau);   // par-dessus l'item, assombri comme le fond si l'étape est validée
     drawText(ctx, font, num, nx + PROG_NODE - 3 - textWidth(font, num), ny + PROG_NODE - 10, done ? '#8C8C8C' : '#FFFFFF', S, true);
+    // étape glissée par-dessus : cible d'un échange = case assombrie ; insertion au-dessus = barre jaune dans l'espace
+    const drop = pg.drag && pg.drag.moved && pg.drag.drop;
+    if (drop && drop.etape === e) {
+      if (drop.mode === 'swap') fr(nx + 1, ny + 1, PROG_NODE - 2, PROG_NODE - 2, 'rgba(0, 0, 0, 0.5)');
+      else {
+        const by = ny - Math.round((PROG_PITCH - PROG_NODE) / 2) - 2;
+        fr(nx - 4, by - 1, PROG_NODE + 8, 5, '#000000');
+        fr(nx - 3, by, PROG_NODE + 6, 3, '#FFFF55');
+      }
+    }
   }
   progSpots().forEach((p, i) => {
     const [x, y] = center(p), nx = x - PROG_PLUS / 2, ny = y - PROG_PLUS / 2;
@@ -4223,7 +4233,11 @@ function renderProg() {
     hits.push({ r: [nx, ny, PROG_PLUS, PROG_PLUS], spot: p, key });
   });
   const dn = pg.drag && pg.drag.node && pg.drag.moved ? pg.drag : null;
-  if (dn) drawNode(dn.node, Math.round(dn.gx - PROG_NODE / 2), Math.round(dn.gy - PROG_NODE / 2));   // suit le curseur
+  if (dn) {   // suit le curseur, semi-transparente pour laisser voir la cible (assombrie) ou la barre d'insertion
+    ctx.globalAlpha = 0.55;
+    drawNode(dn.node, Math.round(dn.gx - PROG_NODE / 2), Math.round(dn.gy - PROG_NODE / 2));
+    ctx.globalAlpha = 1;
+  }
   ctx.restore();
 
   // Sous le fond : la prochaine étape à faire (pas forcément celle qui est sélectionnée)
@@ -4379,18 +4393,45 @@ function buildEtapePages() {
   }
   if (state.page.startsWith('etape-') && PAGES[state.page]) renderGui();
 }
-// force : appui long sur téléphone (sinon pas d'overlay au toucher)
-// Échange de place de deux étapes : chacune prend le nom, la description, l'item, la validation et l'arbre lié de
-// l'autre ; l'arbre lui-même (positions, numéros, liens entre étapes) ne bouge pas. La sélection suit l'étape déplacée.
-function swapEtapes(a, b) {
-  const fields = ['titre', 'description', 'item', 'valide', 'arbre'];
-  const ca = Object.fromEntries(fields.map(f => [f, a[f]])), cb = Object.fromEntries(fields.map(f => [f, b[f]]));
-  for (const f of fields) { delete a[f]; delete b[f]; }
-  for (const f of fields) { if (cb[f] !== undefined) a[f] = cb[f]; if (ca[f] !== undefined) b[f] = ca[f]; }
-  if (pg.selected === a.id) pg.selected = b.id;
-  else if (pg.selected === b.id) pg.selected = a.id;
+// Déplacement d'étapes : seul le contenu bouge (nom, description, item, validation, arbre lié) ; l'arbre lui-même
+// (positions, numéros, liens entre étapes) reste en place.
+const ETAPE_FIELDS = ['titre', 'description', 'item', 'valide', 'arbre'];
+// Contenus décalés le long d'une suite d'étapes : la dernière (l'étape déplacée) prend la place de la première, et
+// chacune des autres descend d'un cran vers l'ancienne place de l'étape déplacée. Deux étapes : un simple échange.
+function shiftEtapes(path) {
+  const contents = path.map(e => Object.fromEntries(ETAPE_FIELDS.map(f => [f, e[f]])));
+  path.forEach((e, i) => {
+    const c = contents[(i - 1 + path.length) % path.length];
+    for (const f of ETAPE_FIELDS) { if (c[f] === undefined) delete e[f]; else e[f] = c[f]; }
+  });
+  pg.selected = path[0].id;   // la sélection suit l'étape déplacée
   saveProg();
 }
+const swapEtapes = (moved, target) => shiftEtapes([target, moved]);
+// Insertion : l'étape déplacée prend la place de la cible, qui descend avec les suivantes jusqu'à l'ancienne place de
+// l'étape déplacée (chemin entre les deux dans l'arbre).
+function insertEtape(moved, target) {
+  const byId = id => prog.etapes.find(q => q.id === id);
+  const up = e => { const out = []; for (let q = e; q; q = byId(q.parent)) out.push(q); return out; };
+  const fromTarget = up(target), fromMoved = up(moved);
+  const common = fromTarget.find(q => fromMoved.includes(q));
+  const path = [...fromTarget.slice(0, fromTarget.indexOf(common) + 1), ...fromMoved.slice(0, fromMoved.indexOf(common)).reverse()];
+  shiftEtapes(path);
+}
+// Cible d'une étape glissée : au centre / en bas d'une étape = échange ; juste au-dessus (haut de la case ou espace
+// au-dessus) = insertion à sa place, les étapes suivantes se décalent.
+function progDropAt(ev, moved) {
+  const { S } = pg.layout, gx = evX(ev) / S, gy = evY(ev) / S, gap = PROG_PITCH - PROG_NODE;
+  for (const h of pg.layout.hits) {
+    if (!h.etape || h.etape === moved) continue;
+    const [x, y] = h.r;
+    if (gx < x || gx >= x + PROG_NODE) continue;
+    if (gy >= y - gap && gy < y + PROG_NODE * 0.3) return { etape: h.etape, mode: 'insert' };
+    if (gy >= y + PROG_NODE * 0.3 && gy < y + PROG_NODE) return { etape: h.etape, mode: 'swap' };
+  }
+  return null;
+}
+// force : appui long sur téléphone (sinon pas d'overlay au toucher)
 function progTip(hit, ev, force) {
   if (!hit || (ev.pointerType === 'touch' && !force)) { if (pg.tipKey) { pg.tipKey = null; tip.hidden = true; } return; }
   const key = hit.etape ? hit.etape.id : hit.key;
@@ -4436,8 +4477,8 @@ progCanvas.addEventListener('pointermove', ev => {
     if (d.moved) {
       if (d.node) {   // l'étape suit le curseur ; l'étape survolée (cible de l'échange) s'éclaircit
         Object.assign(d, { gx: evX(ev) / S, gy: evY(ev) / S });
-        const target = progHit(ev);
-        pg.hover = target && target.etape ? target.etape.id : null;
+        d.drop = progDropAt(ev, d.node);
+        pg.hover = null;
         progCanvas.style.cursor = 'grabbing';
       } else pg.pan = { x: d.pan0.x + Math.round(dx / S), y: d.pan0.y + Math.round(dy / S) };
       progTip(null, ev);
@@ -4456,8 +4497,8 @@ progCanvas.addEventListener('pointerup', ev => {
   pg.drag = null;
   if (d) clearTimeout(d.timer);
   if (d && d.node && d.moved) {   // étape lâchée : sur une autre, elles échangent leur contenu ; ailleurs, elle revient
-    const target = progHit(ev);
-    if (target && target.etape && target.etape !== d.node) swapEtapes(d.node, target.etape);
+    const drop = progDropAt(ev, d.node);
+    if (drop) (drop.mode === 'swap' ? swapEtapes : insertEtape)(d.node, drop.etape);
     pg.hover = null;
     renderProg();
     return;
