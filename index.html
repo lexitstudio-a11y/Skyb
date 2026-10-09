@@ -4699,7 +4699,7 @@ function progTip(hit, ev, force) {
 const miniCanvas = document.getElementById('miniTree');
 const miniTree = { pan: { x: 0, y: 0 }, hover: null, selected: null, view: null, drag: null, layout: null, S: 2, w: 0, h: 0, framed: false };
 const MINI_W = 54;   // largeur du panneau (pixels GUI) : une colonne d'étapes, sans titre
-const miniShown = () => state.page === 'main' && !isMobileLayout() && !!prog.etapes.length;
+const miniShown = () => (state.page === 'main' || state.page === 'agenda') && !isMobileLayout() && !!prog.etapes.length;   // Profil et Agenda
 // Place réservée à droite (px CSS) : le coffre se centre dans le reste de l'écran
 const miniReserve = () => miniShown() ? Math.round(MINI_W * Math.max(1, Math.min(3, Math.floor(viewH() / 300))) + 16) : 0;
 function renderMiniTree() {
