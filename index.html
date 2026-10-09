@@ -3837,25 +3837,20 @@ function editBlockTitle(block, isNew) {
 }
 function blockMenu(block) {
   hideTimeblock();
-  prepareTimer(block);   // la vidéo du timer doit déjà tourner au moment du clic (exigence du navigateur)
   openConfirm({
     question: block.titre,
     detail: [`De ${fmtMin(block.debut)} à ${fmtMin(block.fin)}`],
     noLabel: 'Renommer', yesLabel: 'Retour',
-    editLabel: 'Pop-up Timer',
     colors: {
       list: TB_COLORS,
       current: () => (block.couleur ?? (timeblocks[tb.date] || []).indexOf(block)) % TB_COLORS.length,
       onPick: i => {
         block.couleur = i;
         saveTimeblocks();
-        if (timer.next && timer.next.block === block) timer.next.color = TB_COLORS[i];   // le Pop-up Timer suit
-        if (timer.block === block) { timer.color = TB_COLORS[i]; drawTimer(); }
       },
       onOrb: () => pickArbreForBlock(block),   // orbe d'expérience : relier le bloc à un arbre de progression
       onTree: () => pickProgTreeForBlock(block),   // pousse : relier le bloc à un Arbre de progression (plan en étapes)
     },
-    onEdit: () => { openTimer(); showTimeblock(); },
     onNo: () => editBlockTitle(block, false),
     onYes: showTimeblock,
     onCancel: showTimeblock,
