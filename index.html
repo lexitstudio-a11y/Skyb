@@ -3228,22 +3228,25 @@ function renderConfirm() {
   y += 6;
   for (const line of lines) { centered(line, y, '#AAAAAA'); y += 10; }
   // Nuancier (cfg.colors = { list, current(), onPick(i) }) : 2 rangées de cases de couleur, la choisie encadrée de blanc.
-  let swatches = null, orb = null;
+  let swatches = null, orb = null, tree = null;
   if (dialog.cfg.colors) {
     const { list, current } = dialog.cfg.colors, perRow = Math.ceil(list.length / 2), gap = 2;
-    // cfg.colors.onOrb : orbe d'expérience à gauche du nuancier (haute comme ses 2 rangées) ; cases plus petites
-    // si l'ensemble ne tient pas dans la largeur (téléphone)
-    const onOrb = !!dialog.cfg.colors.onOrb;
-    const size = Math.min(12, Math.floor((W - 8 - (perRow - 1) * gap - (onOrb ? gap + 4 : 0)) / (perRow + (onOrb ? 2 : 0))));
-    const orbW = onOrb ? 2 * size + gap + 4 : 0;
+    // à gauche du nuancier (hautes comme ses 2 rangées) : cfg.colors.onTree (pousse : Arbre de progression) puis
+    // cfg.colors.onOrb (orbe d'expérience : arbre des Racines) ; cases plus petites si tout ne tient pas (téléphone)
+    const icons = [dialog.cfg.colors.onTree && ['tree', 'arbre_logo'], dialog.cfg.colors.onOrb && ['orb', 'orbe_xp']].filter(Boolean);
+    const n = icons.length;
+    const size = Math.min(12, Math.floor((W - 8 - (perRow - 1) * gap - n * (gap + 4)) / (perRow + 2 * n)));
+    const o = 2 * size + gap, orbW = n * (o + 4);
     const x0 = Math.floor(W / 2 - (perRow * (size + gap) - gap + orbW) / 2) + orbW;
     y += 8;
-    if (orbW) {
-      const o = 2 * size + gap;
-      orb = [x0 - orbW, y, o, o];
-      ctx.drawImage(T.orbe_xp, orb[0] * S, orb[1] * S, o * S, o * S);
-      if (dialog.hover === 'orb') { ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; ctx.fillRect(orb[0] * S, orb[1] * S, o * S, o * S); }
-    }
+    icons.forEach(([key, img], i) => {
+      const r = [x0 - orbW + i * (o + 4), y, o, o];
+      if (key === 'orb') orb = r; else tree = r;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(T[img], r[0] * S, r[1] * S, o * S, o * S);
+      ctx.imageSmoothingEnabled = false;
+      if (dialog.hover === key) { ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; ctx.fillRect(r[0] * S, r[1] * S, o * S, o * S); }
+    });
     swatches = list.map((color, i) => {
       const r = [x0 + (i % perRow) * (size + gap), y + Math.floor(i / perRow) * (size + gap), size, size];
       if (i === current()) { ctx.fillStyle = '#FFFFFF'; ctx.fillRect((r[0] - 1) * S, (r[1] - 1) * S, (size + 2) * S, (size + 2) * S); }
@@ -3265,7 +3268,7 @@ function renderConfirm() {
     if (r.prio) drawButton(ctx, ...r.prio.slice(0, 3), dialog.cfg.priorityLabel, dialog.hover === 'prio', S);
     if (r.del) drawButton(ctx, ...r.del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
     drawButton(ctx, ...no.slice(0, 3), dialog.cfg.noLabel || 'Non', dialog.hover === 'no', S);
-    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb };
+    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb, tree };
     return;
   }
   if (stacked) {
@@ -3289,7 +3292,7 @@ function renderConfirm() {
   if (edit) drawButton(ctx, ...edit.slice(0, 3), dialog.cfg.editLabel || 'Modifier le titre', dialog.hover === 'edit', S);
   if (prio) drawButton(ctx, ...prio.slice(0, 3), dialog.cfg.priorityLabel || 'Priorité', dialog.hover === 'prio', S);
   if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
-  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb };
+  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb, tree };
 }
 function openConfirm(cfg) {
   dialog.cfg = cfg;
@@ -3306,17 +3309,18 @@ function closeConfirm() {
   renderGui();
 }
 dialogCanvas.addEventListener('mousemove', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree } = dialog.layout;
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
-  const hover = orb && inRect(ev, orb, S) ? 'orb' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
+  const hover = orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
     : prio && inRect(ev, prio, S) ? 'prio' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
 });
 dialogCanvas.addEventListener('click', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree } = dialog.layout;
   const cfg = dialog.cfg;
   if (orb && inRect(ev, orb, S)) { playClick(); closeConfirm(); cfg.colors.onOrb(); return; }
+  if (tree && inRect(ev, tree, S)) { playClick(); closeConfirm(); cfg.colors.onTree(); return; }
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
   if (sw >= 0) { playClick(); cfg.colors.onPick(sw); renderConfirm(); return; }   // la fenêtre reste ouverte
   if (edit && inRect(ev, edit, S)) { playClick(); closeConfirm(); cfg.onEdit(); return; }
@@ -3447,7 +3451,7 @@ function renderTimeblock() {
   ctx.clip();
   for (let m = TB_START; m <= TB_END; m += 30) fr(grid.x, yOf(m), grid.w, 1, m % 60 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.3)');
   const orbs = [];   // orbes visibles (blocs reliés à un arbre)
-  const drawBlock = (debut, fin, title, color, orb) => {
+  const drawBlock = (debut, fin, title, color, orb, progBlock) => {
     const y1 = yOf(debut), h = yOf(fin) - y1;
     drawColorBlock(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, color, S);
     ctx.save();
@@ -3455,7 +3459,13 @@ function renderTimeblock() {
     ctx.rect((grid.x + 3) * S, (y1 + 2) * S, (grid.w - 6) * S, (h - 3) * S);
     ctx.clip();
     // Horaires toujours affichés : sous le titre si le bloc est assez haut, sinon à sa droite.
-    const hours = `${fmtMin(debut)} - ${fmtMin(fin)}`, tx = grid.x + 10, maxW = grid.w - 22 - (orb ? 12 : 0);
+    const hours = `${fmtMin(debut)} - ${fmtMin(fin)}`, tx = grid.x + 10, maxW = grid.w - 22 - (orb ? 12 : 0) - (progBlock ? 12 : 0);
+    // bloc relié à un Arbre de progression : petite pousse à gauche de l'orbe (ou à sa place s'il n'y en a pas)
+    if (progBlock) {
+      const r = [grid.x + grid.w - 15 - (orb ? 12 : 0), h >= 28 ? y1 + 6 : y1 + Math.floor((h - 9) / 2) + 1, 9, 9];
+      ctx.drawImage(T.arbre_logo, r[0] * S, r[1] * S, 9 * S, 9 * S);
+      if (r[1] + 9 > grid.y && r[1] < grid.y + grid.h) orbs.push({ r, block: progBlock, prog: true });
+    }
     // bloc venu d'un arbre : petite orbe d'expérience à droite
     // (survol : nom et progression de l'arbre ; clic : page de l'arbre)
     if (orb) {
@@ -3475,7 +3485,7 @@ function renderTimeblock() {
     ctx.restore();
   };
   const colorOf = (b, i) => TB_COLORS[(b.couleur ?? i) % TB_COLORS.length];
-  tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, colorOf(b, i), blockArbre(b) && b); });
+  tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, colorOf(b, i), blockArbre(b) && b, b.prog && treeById(b.prog) && b); });
   const d = tb.drag;
   if (d && d.mode === 'place' && d.inGrid) drawBlock(d.debut, d.fin, tb.arbre.titre, TB_COLORS[tb.arbre.couleur], true);
   if (d && d.mode === 'create' && d.color == null) d.color = randomColor();
@@ -3773,6 +3783,20 @@ function tbInGrid(p) {
 const tbOrbAt = ev => tb.layout.orbs.find(o => inRect(ev, o.r, tb.layout.S));
 // Survol d'une orbe : overlay avec le nom de l'arbre relié et sa progression.
 function tbOrbTip(orb, ev) {
+  if (orb && orb.prog) {   // pousse : l'Arbre de progression relié (étapes validées)
+    const t = treeById(orb.block.prog);
+    if (t && tb.tipFor !== t.id) {
+      tb.tipFor = t.id;
+      const done = t.etapes.filter(etapeDone).length, R = guiRatio();
+      const lines = [`§a${t.name}`, t.fin ? `§7Terminé le ${t.fin}` : `§7${done}/${t.etapes.length} étapes validées`, '', "§eClique pour voir l'arbre !"];
+      renderTooltip(tip, font, lines, tooltipScale(tb.layout.S));
+      tip.style.width = tip.width / R + 'px';
+      tip.style.height = tip.height / R + 'px';
+      tip.hidden = false;
+    }
+    if (t) placeTooltip(ev);
+    return;
+  }
   const a = orb && blockArbre(orb.block);
   if (!a) { if (tb.tipFor) { tb.tipFor = null; tip.hidden = true; } return; }
   if (tb.tipFor !== a) {
@@ -3829,6 +3853,7 @@ function blockMenu(block) {
         if (timer.block === block) { timer.color = TB_COLORS[i]; drawTimer(); }
       },
       onOrb: () => pickArbreForBlock(block),   // orbe d'expérience : relier le bloc à un arbre de progression
+      onTree: () => pickProgTreeForBlock(block),   // pousse : relier le bloc à un Arbre de progression (plan en étapes)
     },
     onEdit: () => { openTimer(); showTimeblock(); },
     onNo: () => editBlockTitle(block, false),
@@ -3845,6 +3870,21 @@ function blockMenu(block) {
 
 // Orbe d'expérience d'un bloc : page « Arbre de progression » (même liste que les arbres) ; l'arbre choisi donne
 // au bloc son titre, sa couleur et l'orbe (comme un bloc posé depuis la page de l'arbre). Retour au Timeblock ensuite.
+// Pousse d'un bloc : page des Arbres de progression (en cours et terminés) ; l'arbre choisi est relié au bloc
+// (block.prog), qui affiche une petite pousse à gauche de son orbe.
+function pickProgTreeForBlock(block) {
+  const back = state.page;
+  hideTimeblock();
+  const done = () => { state.page = back; delete PAGES['tb-prog']; showTimeblock(); };
+  PAGES['tb-prog'] = treeListPage({
+    title: PAGE_TITLES.progression, trees: allTrees(), linked: block.prog, linkedText: 'Lié à ce bloc',
+    nav: { '5,4': { item: 'barrier', tooltip: ['§cAnnuler', '', '§eClique pour revenir au Timeblock !'], action: done } },
+    pick: t => { block.prog = t.id; saveTimeblocks(); showToast({ title: 'Bloc lié', text: fitText(t.name, 150) }); done(); },
+  });
+  state.page = 'tb-prog';
+  canvas.hidden = false;
+  renderGui();
+}
 function pickArbreForBlock(block) {
   const back = state.page;
   hideTimeblock();
@@ -4034,6 +4074,12 @@ timeblockCanvas.addEventListener('pointerdown', ev => {
   if (inRect(ev, tb.layout.photo, tb.layout.S)) { playClick(); timeblockPhoto(); return; }
   if (inRect(ev, tb.layout.cal, tb.layout.S)) { playClick(); exportTimeblockIcs(); return; }
   const orb = tbOrbAt(ev);
+  if (orb && orb.prog) {   // pousse : écran de l'Arbre de progression relié (en cours ou terminé)
+    const t = treeById(orb.block.prog);
+    tip.hidden = true;
+    if (t) { playClick(); location.hash = t.fin ? `prog-archive-${t.id}` : 'progression'; }
+    return;
+  }
   if (orb) {   // orbe d'un bloc relié à un arbre : page de l'arbre (le Timeblock se ferme)
     const a = blockArbre(orb.block);
     tip.hidden = true;
@@ -4206,7 +4252,7 @@ function finishTree() {
 }
 // Page de choix d'un arbre (arbres précédents, lien d'un agenda) : une ligne par arbre, carte remplie pour un arbre
 // terminé, carte vide pour celui en cours ; barre = part des étapes validées.
-function treeListPage({ title, trees, pick, nav, linked }) {
+function treeListPage({ title, trees, pick, nav, linked, linkedText = 'Lié à cet agenda' }) {
   const slots = { ...nav }, mobile = isMobileLayout();
   if (!trees.length) {
     slots[mobile ? 'v2,2' : 'v1,5'] = { image: 'arbre_fini', look: () => ({ dim: true }), tooltip: ['§7Aucun arbre', "§7Termine un arbre de progression", '§7pour le retrouver ici.'] };
@@ -4215,7 +4261,7 @@ function treeListPage({ title, trees, pick, nav, linked }) {
   const lines = trees.map(t => {
     const total = t.etapes.length, done = t.etapes.filter(etapeDone).length, pct = total ? Math.floor(done / total * 100) : 0;
     const desc = t.fin ? `Terminé le ${t.fin}` : `En cours : ${done}/${total} étapes`;
-    const tooltip = () => [`§a${t.name}`, `§7${desc}`, ...(linked && linked === t.id ? ['§eLié à cet agenda'] : []), '', '§eClique pour choisir !'];
+    const tooltip = () => [`§a${t.name}`, `§7${desc}`, ...(linked && linked === t.id ? [`§e${linkedText}`] : []), '', '§eClique pour choisir !'];
     const icon = { image: t.fin ? 'arbre_fini' : 'arbre_en_cours', tooltip, action: () => pick(t) };
     return {
       icons: [[0, icon]], data: t, refresh: renderGui,
