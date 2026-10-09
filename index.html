@@ -4321,7 +4321,7 @@ function renderProg(st = pg) {
   const tree = st.view || prog, titleRect = [px + 6, py + 3, pw - 12, 13];
   const titleText = st.editTitle ? progTitleInput.value + (st.blink ? '_' : '')
     : tree.titre || (st.view ? treeName(st.view.etapes) : PAGE_TITLES.progression);
-  drawText(ctx, font, st.editTitle ? titleText : fitText(titleText, pw - 16), px + 8, py + 6, st.hover === 'title' || st.editTitle ? '#202020' : '#404040', S);
+  if (!mini) drawText(ctx, font, st.editTitle ? titleText : fitText(titleText, pw - 16), px + 8, py + 6, st.hover === 'title' || st.editTitle ? '#202020' : '#404040', S);
   if (st.editTitle || st.hover === 'title') fr(px + 8, py + 15, Math.min(pw - 16, textWidth(font, titleText) || 40), 1, '#808080');   // souligné
   if (!mini) Object.assign(progTitleInput.style, { left: titleRect[0] * S + 'px', top: titleRect[1] * S + 'px', width: titleRect[2] * S + 'px', height: titleRect[3] * S + 'px' });
   // Sous le titre : « Terminer l'arbre » (ou, sur un arbre terminé, « Arbre en cours ») et « Arbres précédents »
@@ -4333,7 +4333,7 @@ function renderProg(st = pg) {
   ];
   if (mini) tops.length = 0;   // panneau du Profil : pas de « Terminer » ni « Arbres précédents »
   for (const t of tops) drawButton(ctx, t.r[0], t.r[1], t.r[2], t.label, st.hover === t.key, S);
-  const area = mini ? { x: px + 7, y: py + 17, w: pw - 14, h: ph - 17 - 19 } : { x: px + 9, y: py + 42, w: pw - 18, h: ph - 42 - 21 };
+  const area = mini ? { x: px + 5, y: py + 5, w: pw - 10, h: ph - 10 } : { x: px + 9, y: py + 42, w: pw - 18, h: ph - 42 - 21 };
   // Cadre creusé, puis le fond de pierre (il suit la vue quand on la déplace)
   fr(area.x - 1, area.y - 1, area.w + 2, area.h + 2, '#FFFFFF');
   fr(area.x - 1, area.y - 1, area.w + 1, area.h + 1, '#373737');
@@ -4438,7 +4438,7 @@ function renderProg(st = pg) {
   const s = !st.view && nextEtape();
   const info = st.view ? `Terminé le ${st.view.fin}`
     : s ? `Prochaine étape (${s.niveau}) : ${s.titre}` : prog.etapes.length ? 'Toutes les étapes sont validées' : 'Touche le + pour commencer';
-  drawText(ctx, font, fitText(mini && s ? `Prochaine : ${s.titre}` : info, area.w), area.x, area.y + area.h + 6, '#404040', S);
+  if (!mini) drawText(ctx, font, fitText(info, area.w), area.x, area.y + area.h + 7, '#404040', S);
   const back = mini ? [-99, -99, 0, 0] : [Math.floor(W / 2) - 40, py + ph + 4, 80, 20];
   if (!mini) drawButton(ctx, back[0], back[1], back[2], 'Retour', st.hover === 'back', S);
   st.layout = { S, area, hits: hits.filter(h => h.r[0] + h.r[2] > area.x && h.r[0] < area.x + area.w && h.r[1] + h.r[3] > area.y && h.r[1] < area.y + area.h), back, tops, titleRect };
@@ -4690,7 +4690,7 @@ function progTip(hit, ev, force) {
 // défiler, clic sur une étape = sa page (la flèche de retour mène ensuite à l'Arbre de progression). ---
 const miniCanvas = document.getElementById('miniTree');
 const miniTree = { pan: { x: 0, y: 0 }, hover: null, selected: null, view: null, drag: null, layout: null, S: 2, w: 0, h: 0, framed: false };
-const MINI_W = 150;   // largeur du panneau (pixels GUI)
+const MINI_W = 54;   // largeur du panneau (pixels GUI) : une colonne d'étapes, sans titre
 const miniShown = () => state.page === 'main' && !isMobileLayout() && !!prog.etapes.length;
 // Place réservée à droite (px CSS) : le coffre se centre dans le reste de l'écran
 const miniReserve = () => miniShown() ? Math.round(MINI_W * Math.max(1, Math.min(3, Math.floor(viewH() / 300))) + 16) : 0;
