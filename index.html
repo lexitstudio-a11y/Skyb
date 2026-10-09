@@ -703,7 +703,10 @@ function agendaSlot(agenda, n, image) {
   const lines = agenda.texte.split('\n').map(l => l.trim()).filter(Boolean);
   return {
     image, count: n,
-    tooltip: ['§aAgenda ' + agenda.date, ...(lines.length ? lines.map(l => '§g- ' + l) : ['§7Aucun objectif.']), '', '§eClique pour voir !'],
+    tooltip: () => {
+      const t = agenda.arbre && treeById(agenda.arbre);
+      return ['§aAgenda ' + agenda.date, ...(lines.length ? lines.map(l => '§g- ' + l) : ['§7Aucun objectif.']), ...(t ? ['', `§7Arbre lié : §e${t.name}`] : []), '', '§eClique pour voir !'];
+    },
     action: () => editAgenda(agenda.date),
   };
 }
@@ -829,6 +832,9 @@ function refreshAgenda() {
 }
 // Ouvre le livre de l'agenda de cette date (le crée s'il n'existe pas encore).
 // text : texte déjà tapé mais pas encore enregistré (retour depuis le Timeblock).
+// « Lier à un arbre » : arbre de progression lié à l'agenda (agenda.arbre = son identifiant) ; pour un agenda pas encore
+// enregistré, le lien attend dans agendaLinks jusqu'à « Terminé ».
+const agendaLinks = {};
 function editAgenda(date, text) {
   const existing = agendas.find(a => a.date === date);
   openSign({
@@ -836,16 +842,37 @@ function editAgenda(date, text) {
     lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
     initial: text != null ? text : existing ? existing.texte : '',
     onExtra: typed => openTimeblock(date, () => editAgenda(date, typed)),
+    extra2Label: 'Lier à un arbre',
+    onExtra2: typed => linkAgendaTree(date, typed),
     onDone: text => {
       const clean = text.split('\n').filter(l => l.trim()).join('\n');
       const i = agendas.findIndex(a => a.date === date);
       if (!clean) { if (i >= 0) agendas.splice(i, 1); }   // livre vide : pas d'agenda
       else if (i >= 0) agendas[i].texte = clean;
-      else agendas.push({ date, texte: clean });
+      else agendas.push({ date, texte: clean, ...(agendaLinks[date] ? { arbre: agendaLinks[date] } : {}) });
+      delete agendaLinks[date];
       saveAgendas();
       refreshAgenda();
     },
   });
+}
+
+// Page « Lier à un arbre » : tous les arbres de progression (en cours : carte vide, terminés : carte remplie) ;
+// un clic lie l'agenda à l'arbre et rouvre le livre avec le texte déjà tapé.
+function linkAgendaTree(date, typed) {
+  const back = state.page, existing = agendas.find(a => a.date === date);
+  const reopen = () => { state.page = back; delete PAGES['lier-arbre-agenda']; renderGui(); editAgenda(date, typed); };
+  PAGES['lier-arbre-agenda'] = treeListPage({
+    title: 'Lier à un arbre', trees: allTrees(), linked: existing ? existing.arbre : agendaLinks[date],
+    nav: { '5,4': { item: 'barrier', tooltip: ['§cAnnuler', '', "§eClique pour revenir à l'agenda !"], action: reopen } },
+    pick: t => {
+      if (existing) { existing.arbre = t.id; saveAgendas(); refreshAgenda(); } else agendaLinks[date] = t.id;
+      showToast({ title: 'Agenda lié', text: fitText(t.name, 150) });
+      reopen();
+    },
+  });
+  state.page = 'lier-arbre-agenda';
+  renderGui();
 }
 
 function renameSlot(n) {
@@ -1633,7 +1660,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -2761,7 +2788,7 @@ function showPageFromHash() {
   if (tb.date) closeTimeblock(false);
   const page = location.hash.slice(1);
   state.page = defaultPage(PAGES[page] ? page : 'main');
-  if (state.page === 'progression') { openProg(); return; }   // écran à part (fond de pierre, étapes)
+  if (state.page === 'progression' || state.page.startsWith('prog-archive-')) { openProg(); return; }   // écran à part (fond de pierre, étapes)
   if (pg.open) closeProg();
   headMenu.open = false;
   hideTooltip();
@@ -2995,12 +3022,18 @@ function renderBook() {
   }
   sign.pages = { rows, per, page, back, fwd };
 
-  // « Terminé » ; avec cfg.onExtra, un 2e bouton « Timeblock » à droite.
-  const btnW = 64, gap = 4, btnY = Math.min(H - 22, top + 196);
-  const btnX = cfg.onExtra ? Math.floor(W / 2) - btnW - gap / 2 : Math.floor(W / 2) - btnW / 2, btn2X = Math.floor(W / 2) + gap / 2;
+  // « Terminé » ; avec cfg.onExtra, un 2e bouton « Timeblock » à droite ; avec cfg.onExtra2, un 3e bouton
+  // (cfg.extra2Label, ex. « Lier à un arbre ») encore à droite, ou en dessous si la largeur manque (téléphone).
+  const btnW = 64, gap = 4, w3 = cfg.onExtra2 ? textWidth(font, cfg.extra2Label) + 14 : 0;
+  const oneRow = !cfg.onExtra2 || 2 * btnW + w3 + 2 * gap <= W - 8;
+  const btnY = Math.min(H - (oneRow ? 22 : 46), top + 196);
+  const rowW = cfg.onExtra ? 2 * btnW + gap + (cfg.onExtra2 && oneRow ? w3 + gap : 0) : btnW;
+  const btnX = Math.floor(W / 2 - rowW / 2), btn2X = btnX + btnW + gap;
+  const b3 = cfg.onExtra2 ? (oneRow ? [btn2X + btnW + gap, btnY, w3, 20] : [Math.floor(W / 2 - w3 / 2), btnY + 24, w3, 20]) : null;
   drawButton(ctx, btnX, btnY, btnW, 'Terminé', sign.hoverDone, S);
   if (cfg.onExtra) drawButton(ctx, btn2X, btnY, btnW, 'Timeblock', sign.hoverExtra, S);
-  sign.layout = { S, board: [left + 36, textTop - 2, 118, cfg.lines * 9], button: [btnX, btnY, btnW, 20], button2: cfg.onExtra ? [btn2X, btnY, btnW, 20] : null };
+  if (b3) drawButton(ctx, b3[0], b3[1], b3[2], cfg.extra2Label, sign.hoverExtra2, S);
+  sign.layout = { S, board: [left + 36, textTop - 2, 118, cfg.lines * 9], button: [btnX, btnY, btnW, 20], button2: cfg.onExtra ? [btn2X, btnY, btnW, 20] : null, button3: b3 };
   Object.assign(signInput.style, { left: (left + 36) * S + 'px', top: (textTop - 2) * S + 'px', width: 118 * S + 'px', height: cfg.lines * 9 * S + 'px' });
 }
 
@@ -3106,10 +3139,12 @@ signCanvas.addEventListener('mousemove', ev => {
   if (!sign.layout) return;
   const hover = inRect(ev, sign.layout.button);
   const hover2 = !!sign.layout.button2 && inRect(ev, sign.layout.button2);
+  const hover3 = !!sign.layout.button3 && inRect(ev, sign.layout.button3);
+  if (hover3 !== !!sign.hoverExtra2) { sign.hoverExtra2 = hover3; renderSign(); }
   const pg = sign.cfg && sign.cfg.book && sign.pages;
   const hb = !!(pg && pg.back && inRect(ev, pg.back)), hf = !!(pg && pg.fwd && inRect(ev, pg.fwd));
   if (hb !== !!sign.hoverBack || hf !== !!sign.hoverFwd) { sign.hoverBack = hb; sign.hoverFwd = hf; renderSign(); }
-  signCanvas.style.cursor = hover || hover2 || hb || hf ? 'pointer' : '';
+  signCanvas.style.cursor = hover || hover2 || hover3 || hb || hf ? 'pointer' : '';
   if (hover !== sign.hoverDone || hover2 !== !!sign.hoverExtra) { sign.hoverDone = hover; sign.hoverExtra = hover2; renderSign(); }
 });
 signCanvas.addEventListener('click', ev => {
@@ -3125,6 +3160,12 @@ signCanvas.addEventListener('click', ev => {
     return;
   }
   if (sign.layout && inRect(ev, sign.layout.button)) { playClick(); finishSign(); }
+  else if (sign.layout && sign.layout.button3 && inRect(ev, sign.layout.button3)) {   // ex. lier l'agenda à un arbre
+    playClick();
+    const cfg = sign.cfg, text = signInput.value;
+    closeSign();
+    cfg.onExtra2(text);
+  }
   else if (sign.layout && sign.layout.button2 && inRect(ev, sign.layout.button2)) {
     playClick();
     const cfg = sign.cfg, text = signInput.value;
@@ -4122,7 +4163,74 @@ function nextEtape() {
 // Étape validée : à la main (bloc vert de sa page), ou, si elle est liée à un arbre, quand l'arbre est terminé (100 %)
 const etapeDone = e => { const a = blockArbre(e); return a ? arbreProgress(a) >= 100 : !!e.valide; };
 // Places des « + » : la racine tant que l'arbre est vide, sinon autour de l'étape sélectionnée (dessous, gauche, droite)
+// Un seul arbre à la fois : « Terminer l'arbre » le range dans prog.archives ({ id, fin, etapes }, le plus récent en
+// premier) et libère la place pour un nouveau. pg.view : arbre terminé affiché (lecture seule), sinon l'arbre en cours.
+prog.archives ||= [];
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+function progId() {   // identifiant de l'arbre en cours (donné à la première demande et enregistré : un agenda peut y être lié)
+  if (!prog.id) { prog.id = newId(); try { localStorage.setItem(PROG_KEY, JSON.stringify(prog)); } catch {} cloudChanged(); }
+  return prog.id;
+}
+const treeName = etapes => ((etapes.find(e => !e.parent) || etapes[0] || {}).titre) || 'Arbre sans nom';
+const progEtapes = () => pg.view ? pg.view.etapes : prog.etapes;
+// Tous les arbres (celui en cours d'abord, s'il a des étapes) : { id, name, etapes, fin (date, si terminé) }
+function allTrees() {
+  const cur = prog.etapes.length ? [{ id: progId(), name: treeName(prog.etapes), etapes: prog.etapes, fin: null }] : [];
+  return [...cur, ...prog.archives.map(a => ({ id: a.id, name: treeName(a.etapes), etapes: a.etapes, fin: a.fin }))];
+}
+const treeById = id => allTrees().find(t => t.id === id) || null;
+function finishTree() {
+  if (!prog.etapes.length) { showToast({ title: 'Aucun arbre en cours', text: 'Touche le + pour en créer un.' }); return; }
+  const left = prog.etapes.filter(e => !etapeDone(e)).length;
+  hideProg();
+  openConfirm({
+    question: "Terminer l'arbre ?",
+    detail: [treeName(prog.etapes), left ? `${left} étape${left > 1 ? 's' : ''} pas encore validée${left > 1 ? 's' : ''}.` : 'Toutes les étapes sont validées.',
+      'Il passera dans les arbres précédents.'],
+    noLabel: 'Retour', yesLabel: 'Terminer',
+    onNo: showProg, onCancel: showProg,
+    onYes: () => {
+      prog.archives.unshift({ id: progId(), fin: formatDate(new Date()), etapes: prog.etapes });
+      prog.etapes = [];
+      delete prog.id;
+      pg.selected = null;
+      pg.pan = { x: 0, y: 0 };
+      saveProg();
+      showToast({ title: 'Arbre terminé', text: fitText(treeName(prog.archives[0].etapes), 150) });
+      showProg();
+    },
+  });
+}
+// Page de choix d'un arbre (arbres précédents, lien d'un agenda) : une ligne par arbre, carte remplie pour un arbre
+// terminé, carte vide pour celui en cours ; barre = part des étapes validées.
+function treeListPage({ title, trees, pick, nav, linked }) {
+  const slots = { ...nav }, mobile = isMobileLayout();
+  if (!trees.length) {
+    slots[mobile ? 'v2,2' : 'v1,5'] = { image: 'arbre_fini', look: () => ({ dim: true }), tooltip: ['§7Aucun arbre', "§7Termine un arbre de progression", '§7pour le retrouver ici.'] };
+    return { title, slots, scrollRows: 3 };
+  }
+  const lines = trees.map(t => {
+    const total = t.etapes.length, done = t.etapes.filter(etapeDone).length, pct = total ? Math.floor(done / total * 100) : 0;
+    const desc = t.fin ? `Terminé le ${t.fin}` : `En cours : ${done}/${total} étapes`;
+    const tooltip = () => [`§a${t.name}`, `§7${desc}`, ...(linked && linked === t.id ? ['§eLié à cet agenda'] : []), '', '§eClique pour choisir !'];
+    const icon = { image: t.fin ? 'arbre_fini' : 'arbre_en_cours', tooltip, action: () => pick(t) };
+    return {
+      icons: [[0, icon]], data: t, refresh: renderGui,
+      span: { span: 3, label: t.name, color: t.fin ? '#397E49' : '#4599DF', desc, progress: () => pct, compact: true, tooltip, action: () => pick(t), descFull: () => [desc] },
+    };
+  });
+  return { title, slots, scrollRows: placeLines(slots, mobile ? 1 : 0, lines) };
+}
+function openPreviousTrees() {
+  PAGES.precedents = treeListPage({
+    title: 'Arbres précédents', trees: allTrees().filter(t => t.fin),
+    nav: { '5,4': { item: 'barrier', tooltip: ['§cRetour', '', "§eClique pour revenir à l'arbre !"], open: 'progression' } },
+    pick: t => { location.hash = `prog-archive-${t.id}`; },
+  });
+  location.hash = 'precedents';
+}
 function progSpots() {
+  if (pg.view) return [];   // arbre terminé : lecture seule
   if (!prog.etapes.length) return [{ x: 0, y: 0, niveau: 1, parent: null }];
   const s = prog.etapes.find(e => e.id === pg.selected);
   if (!s) return [];
@@ -4139,8 +4247,16 @@ function renderProg() {
   const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph - 26) / 2));
   const fr = (x, y, w, h, c) => { if (w > 0 && h > 0) { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); } };
   drawPanel(ctx, px, py, pw, ph, S);
-  drawText(ctx, font, PAGE_TITLES.progression, px + 8, py + 6, '#404040', S);
-  const area = { x: px + 9, y: py + 18, w: pw - 18, h: ph - 18 - 21 };
+  drawText(ctx, font, pg.view ? 'Arbre terminé' : PAGE_TITLES.progression, px + 8, py + 6, '#404040', S);
+  // Sous le titre : « Terminer l'arbre » (ou, sur un arbre terminé, « Arbre en cours ») et « Arbres précédents »
+  const bw = Math.floor((pw - 18 - 4) / 2), wide = bw >= 100;
+  const tops = [
+    { r: [px + 9, py + 17, bw, 20], key: 'top0', label: pg.view ? (wide ? 'Arbre en cours' : 'En cours') : wide ? "Terminer l'arbre" : 'Terminer',
+      action: () => pg.view ? (location.hash = 'progression') : finishTree() },
+    { r: [px + 9 + bw + 4, py + 17, bw, 20], key: 'top1', label: wide ? 'Arbres précédents' : 'Précédents', action: openPreviousTrees },
+  ];
+  for (const t of tops) drawButton(ctx, t.r[0], t.r[1], t.r[2], t.label, pg.hover === t.key, S);
+  const area = { x: px + 9, y: py + 42, w: pw - 18, h: ph - 42 - 21 };
   // Cadre creusé, puis le fond de pierre (il suit la vue quand on la déplace)
   fr(area.x - 1, area.y - 1, area.w + 2, area.h + 2, '#FFFFFF');
   fr(area.x - 1, area.y - 1, area.w + 1, area.h + 1, '#373737');
@@ -4161,8 +4277,9 @@ function renderProg() {
   // Liens : trait blanc bordé de noir, d'un centre à l'autre (les étapes se dessinent par-dessus) ; étape liée à un
   // arbre de progression : petite barre d'expérience entre les deux étapes, remplie selon la progression de l'arbre
   // (depuis l'étape précédente)
-  for (const e of prog.etapes) {
-    const p = prog.etapes.find(q => q.id === e.parent);
+  const etapes = progEtapes();
+  for (const e of etapes) {
+    const p = etapes.find(q => q.id === e.parent);
     if (!p) continue;
     const [x1, y1] = center(p), [x2, y2] = center(e), a = blockArbre(e);
     if (a) {
@@ -4194,14 +4311,14 @@ function renderProg() {
     fr(x + 2, y + 2, s - 3, s - 3, '#555555');
     fr(x + 2, y + 2, s - 4, s - 4, hover ? shade(fill, 1.25) : fill);
   };
-  for (const e of prog.etapes) {
+  for (const e of etapes) {
     const [x, y] = center(e);
     if (pg.drag && pg.drag.node === e && pg.drag.moved) continue;   // étape déplacée : dessinée sous le curseur, plus bas
     drawNode(e, x - PROG_NODE / 2, y - PROG_NODE / 2);
     hits.push({ r: [x - PROG_NODE / 2, y - PROG_NODE / 2, PROG_NODE, PROG_NODE], etape: e });
   }
   function drawNode(e, nx, ny) {
-    const sel = e.id === pg.selected;
+    const sel = !pg.view && e.id === pg.selected;
     // étape validée : bloc vert à coche à la place de son item (il revient si on la dévalide) ; le fond et le numéro
     // sont assombris, le bloc garde sa luminosité
     const done = etapeDone(e), icon = done ? T.etape_valider : T[e.item];
@@ -4241,15 +4358,19 @@ function renderProg() {
   ctx.restore();
 
   // Sous le fond : la prochaine étape à faire (pas forcément celle qui est sélectionnée)
-  const s = nextEtape();
-  const info = s ? `Prochaine étape (${s.niveau}) : ${s.titre}` : prog.etapes.length ? 'Toutes les étapes sont validées' : 'Touche le + pour commencer';
+  const s = !pg.view && nextEtape();
+  const info = pg.view ? `${treeName(pg.view.etapes)} : terminé le ${pg.view.fin}`
+    : s ? `Prochaine étape (${s.niveau}) : ${s.titre}` : prog.etapes.length ? 'Toutes les étapes sont validées' : 'Touche le + pour commencer';
   drawText(ctx, font, fitText(info, area.w), area.x, area.y + area.h + 7, '#404040', S);
   const back = [Math.floor(W / 2) - 40, py + ph + 4, 80, 20];
   drawButton(ctx, back[0], back[1], back[2], 'Retour', pg.hover === 'back', S);
-  pg.layout = { S, area, hits: hits.filter(h => h.r[0] + h.r[2] > area.x && h.r[0] < area.x + area.w && h.r[1] + h.r[3] > area.y && h.r[1] < area.y + area.h), back };
+  pg.layout = { S, area, hits: hits.filter(h => h.r[0] + h.r[2] > area.x && h.r[0] < area.x + area.w && h.r[1] + h.r[3] > area.y && h.r[1] < area.y + area.h), back, tops };
 }
 
 function openProg() {
+  const view = state.page.startsWith('prog-archive-') ? prog.archives.find(a => `prog-archive-${a.id}` === state.page) || null : null;
+  if (view !== pg.view) pg.pan = { x: 0, y: 0 };
+  pg.view = view;
   pg.open = true;
   hideTooltip();
   canvas.hidden = true;
@@ -4345,7 +4466,8 @@ function deleteEtape(e) {
   });
 }
 function buildEtapePages() {
-  for (const id of Object.keys(PAGES)) if (id.startsWith('etape-')) delete PAGES[id];
+  for (const id of Object.keys(PAGES)) if (id.startsWith('etape-') || id.startsWith('prog-archive-')) delete PAGES[id];
+  for (const a of prog.archives) PAGES[`prog-archive-${a.id}`] = { title: 'Arbre terminé', slots: {} };   // écran à part
   for (const e of prog.etapes) {
     const linked = () => blockArbre(e);
     const slots = {
@@ -4455,13 +4577,15 @@ function progTip(hit, ev, force) {
 progCanvas.addEventListener('pointerdown', ev => {
   if (!pg.layout) return;
   const { S, area } = pg.layout;
-  if (inRect(ev, pg.layout.back, S)) { playClick(); location.hash = 'main'; return; }
+  if (inRect(ev, pg.layout.back, S)) { playClick(); if (pg.view) openPreviousTrees(); else location.hash = 'main'; return; }
+  const top = pg.layout.tops.find(t => inRect(ev, t.r, S));
+  if (top) { playClick(); top.action(); return; }
   if (!inRect(ev, [area.x, area.y, area.w, area.h], S)) return;
   progCanvas.setPointerCapture(ev.pointerId);
   progTip(null, ev);   // un nouveau toucher ferme l'overlay de l'appui long précédent
   // sur une étape : glisser la déplace (lâchée sur une autre, les deux échangent leur place) ; sur le mur : la vue
   const start = progHit(ev);
-  const drag = pg.drag = { x0: evX(ev), y0: evY(ev), pan0: { ...pg.pan }, moved: false, long: false, node: start && start.etape || null };
+  const drag = pg.drag = { x0: evX(ev), y0: evY(ev), pan0: { ...pg.pan }, moved: false, long: false, node: !pg.view && start && start.etape || null };
   // téléphone : appui long sur une étape ou un « + » = son overlay (au-dessus du doigt), sans l'ouvrir
   if (ev.pointerType === 'touch') {
     const hit = progHit(ev), at = { clientX: ev.clientX, clientY: ev.clientY, touch: true, pointerType: 'touch' };
@@ -4486,8 +4610,8 @@ progCanvas.addEventListener('pointermove', ev => {
     }
     return;
   }
-  const hit = progHit(ev), onBack = inRect(ev, pg.layout.back, S);
-  const hover = onBack ? 'back' : hit ? (hit.etape ? hit.etape.id : hit.key) : null;
+  const hit = progHit(ev), onBack = inRect(ev, pg.layout.back, S), top = pg.layout.tops.find(t => inRect(ev, t.r, S));
+  const hover = onBack ? 'back' : top ? top.key : hit ? (hit.etape ? hit.etape.id : hit.key) : null;
   progCanvas.style.cursor = hover ? 'pointer' : inRect(ev, [pg.layout.area.x, pg.layout.area.y, pg.layout.area.w, pg.layout.area.h], S) ? 'grab' : '';
   if (hover !== pg.hover) { pg.hover = hover; renderProg(); }
   progTip(hit, ev);
@@ -4509,6 +4633,7 @@ progCanvas.addEventListener('pointerup', ev => {
   playClick();
   progTip(null, ev);
   if (hit.spot) createStep(hit.spot);
+  else if (pg.view) return;   // arbre terminé : lecture seule
   else { pg.selected = hit.etape.id; location.hash = `etape-${hit.etape.id}`; }   // page de l'étape (au retour : ses « + »)
 });
 progCanvas.addEventListener('pointerleave', ev => {
@@ -5101,7 +5226,7 @@ async function main() {
   resize();
   addEventListener('resize', resize);
   addEventListener('popstate', showPageFromHash);
-  if (state.page === 'progression') openProg();
+  if (state.page === 'progression' || state.page.startsWith('prog-archive-')) openProg();
   canvas.addEventListener('click', onClick);
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseleave', onLeave);
