@@ -2700,12 +2700,28 @@ function onMove(ev) {
         tip.style.width = tip.width / R + 'px';
         tip.style.height = tip.height / R + 'px';
       }
-      // ordinateur : taille de texte fixe ; une ligne trop longue pour l'écran est coupée et finit par « ... »
-      else for (let ts = tooltipScale(state.S); ; ts--) {
-        renderTooltip(tip, font, lines.map(l => cutTipLine(l, (viewW() - 8) * R / ts - 2 * (3 + TOOLTIP_PADDING))), ts);
-        tip.style.width = tip.width / R + 'px';
-        tip.style.height = tip.height / R + 'px';
-        if (ts <= 1 || tipH() <= viewH() - 8) break;   // texte réduit seulement si l'overlay est trop haut
+      // ordinateur : taille de texte fixe ; lignes coupées (retour à la ligne) à la moitié de la largeur de la fenêtre ;
+      // si l'overlay dépasse la hauteur de l'écran, les dernières lignes avant la fin (« Clique pour… ») sont retirées
+      // et un seul « ... » termine la dernière ligne gardée
+      else {
+        const ts = tooltipScale(state.S);
+        let out = wrapTipLines(lines, viewW() * 0.5 * R / ts - 2 * (3 + TOOLTIP_PADDING));
+        const draw = () => {
+          renderTooltip(tip, font, out, ts);
+          tip.style.width = tip.width / R + 'px';
+          tip.style.height = tip.height / R + 'px';
+        };
+        draw();
+        if (tipH() > viewH() - 8) {
+          const foot = out.lastIndexOf('') > 0 ? out.lastIndexOf('') : out.length;   // fin gardée : ligne vide + action
+          const tail = out.slice(foot);
+          let body = out.slice(0, foot);
+          while (body.length > 1 && tipH() > viewH() - 8) {
+            body = body.slice(0, -1);
+            out = [...body.slice(0, -1), body[body.length - 1].replace(/\.*$/, '') + '...', ...tail];
+            draw();
+          }
+        }
       }
       tip.hidden = false;
     } else tip.hidden = true;
