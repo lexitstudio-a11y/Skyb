@@ -28,6 +28,7 @@
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    box-sizing: border-box;   /* place réservée au panneau de l'arbre (padding) prise dans l'écran, pas en plus */
   }
   /* Ordinateur, Profil Joueur : l'Arbre de progression en cours dans un panneau à droite du coffre. */
   #miniTree {
@@ -35,6 +36,7 @@
     top: 8px;
     right: 8px;
     z-index: 5;
+    touch-action: none;   /* téléphone : glisser déplace l'arbre, pas la page */
   }
   #miniTree[hidden] {
     display: none;
@@ -2117,7 +2119,7 @@ function setGuiSize(L) {
 let lastReserve = 0;
 function renderGui() {
   // panneau de l'arbre en cours (Profil, ordinateur) affiché ou retiré : le coffre se redimensionne pour la place restante
-  if (miniReserve() !== lastReserve) { lastReserve = miniReserve(); sizeGui(); }
+  if (miniReserve() + 10000 * miniReserveTop() !== lastReserve) { lastReserve = miniReserve() + 10000 * miniReserveTop(); sizeGui(); }
   const S = state.S * guiRatio();
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
@@ -4375,8 +4377,10 @@ function renderProg(st = pg) {
   fr(area.x, area.y, area.w, 2, 'rgba(0,0,0,0.35)');
   fr(area.x, area.y + 2, 2, area.h - 2, 'rgba(0,0,0,0.35)');
 
-  const cx = area.x + Math.floor(area.w / 2) + st.pan.x, cy = area.y + 26 + st.pan.y;   // centre de la racine
-  const center = e => [cx + e.x * PROG_PITCH, cy + e.y * PROG_PITCH];
+  // centre de la racine ; bande du téléphone (st.horizontal) : arbre basculé, la suite des étapes va de gauche à droite
+  const cx = st.horizontal ? area.x + 26 + st.pan.x : area.x + Math.floor(area.w / 2) + st.pan.x;
+  const cy = st.horizontal ? area.y + Math.floor(area.h / 2) + st.pan.y : area.y + 26 + st.pan.y;
+  const center = e => st.horizontal ? [cx + e.y * PROG_PITCH, cy + e.x * PROG_PITCH] : [cx + e.x * PROG_PITCH, cy + e.y * PROG_PITCH];
   // Liens : trait blanc bordé de noir, d'un centre à l'autre (les étapes se dessinent par-dessus) ; étape liée à un
   // arbre de progression : petite barre d'expérience entre les deux étapes, remplie selon la progression de l'arbre
   // (depuis l'étape précédente)
@@ -4386,7 +4390,7 @@ function renderProg(st = pg) {
     if (!p) continue;
     const [x1, y1] = center(p), [x2, y2] = center(e), a = blockArbre(e);
     if (a) {
-      const h = x1 !== x2, dir = h ? Math.sign(x2 - x1) : 1, len = PROG_PITCH - PROG_NODE + 2, half = PROG_NODE / 2 - 1;
+      const h = x1 !== x2, dir = h ? Math.sign(x2 - x1) : Math.sign(y2 - y1), len = PROG_PITCH - PROG_NODE + 2, half = PROG_NODE / 2 - 1;
       const pct = arbreProgress(a), fill = Math.round((len - 2) * pct / 100);
       // barre de len pixels, du bord de l'étape précédente vers celui de l'étape (horizontale ou verticale)
       const bar = (o, l, w, c) => {   // o : décalage depuis le début, l : longueur, w : épaisseur (centrée), c : couleur
@@ -4717,21 +4721,24 @@ function progTip(hit, ev, force) {
 const miniCanvas = document.getElementById('miniTree');
 const miniTree = { pan: { x: 0, y: 0 }, hover: null, selected: null, view: null, drag: null, layout: null, S: 2, w: 0, h: 0, framed: false };
 const MINI_W = 54;   // largeur du panneau (pixels GUI) : une colonne d'étapes, sans titre
-const miniShown = () => (state.page === 'main' || state.page === 'agenda') && !isMobileLayout() && !!prog.etapes.length;   // Profil et Agenda
-// Place réservée à droite (px CSS) : le coffre se centre dans le reste de l'écran
-const miniReserve = () => miniShown() ? Math.round(MINI_W * Math.max(1, Math.min(3, Math.floor(viewH() / 300))) + 16) : 0;
+const miniShown = () => (state.page === 'main' || state.page === 'agenda') && !!prog.etapes.length;   // Profil et Agenda
+// Ordinateur : colonne à droite (étapes de haut en bas) ; téléphone : bande en haut (étapes de gauche à droite)
+const miniScale = () => isMobileLayout() ? Math.max(1, Math.min(3, Math.floor(viewW() / 180))) : Math.max(1, Math.min(3, Math.floor(viewH() / 300)));
+// Place réservée (px CSS) à droite (ordinateur) ou en haut (téléphone) : le coffre se centre dans le reste de l'écran
+const miniReserve = () => miniShown() && !isMobileLayout() ? Math.round(MINI_W * miniScale() + 16) : 0;
+const miniReserveTop = () => miniShown() && isMobileLayout() ? Math.round(MINI_W * miniScale() + 16) : 0;
 function renderMiniTree() {
-  const show = miniShown();
-  document.body.style.paddingRight = show ? miniReserve() + 'px' : '';
+  const show = miniShown(), horizontal = isMobileLayout();
+  document.body.style.paddingRight = show && !horizontal ? miniReserve() + 'px' : '';
+  document.body.style.paddingTop = show && horizontal ? miniReserveTop() + 'px' : '';
   miniCanvas.hidden = !show;
   if (!show) { miniTree.framed = false; return; }
-  const S = Math.max(1, Math.min(3, Math.floor(viewH() / 300)));
-  Object.assign(miniTree, { S, w: MINI_W * S, h: viewH() - 16 });
-  miniCanvas.style.width = miniTree.w + 'px';
-  miniCanvas.style.height = miniTree.h + 'px';
-  if (!miniTree.framed) {   // à l'affichage : cadrage sur la prochaine étape à faire, en haut
+  const S = miniScale();
+  Object.assign(miniTree, { S, horizontal, w: horizontal ? viewW() - 16 : MINI_W * S, h: horizontal ? MINI_W * S : viewH() - 16 });
+  Object.assign(miniCanvas.style, { width: miniTree.w + 'px', height: miniTree.h + 'px', left: horizontal ? '8px' : '', right: horizontal ? '' : '8px' });
+  if (!miniTree.framed) {   // à l'affichage : cadrage sur la prochaine étape à faire, en haut (à gauche sur téléphone)
     const next = nextEtape();
-    miniTree.pan = next ? { x: -next.x * PROG_PITCH, y: -next.y * PROG_PITCH } : { x: 0, y: 0 };
+    miniTree.pan = !next ? { x: 0, y: 0 } : horizontal ? { x: -next.y * PROG_PITCH, y: -next.x * PROG_PITCH } : { x: -next.x * PROG_PITCH, y: -next.y * PROG_PITCH };
     miniTree.framed = true;
   }
   renderProg(miniTree);
@@ -5392,7 +5399,7 @@ function sizeGui() {
   const L = guiLayout(), maxH = L.mobile ? 18 + (MOBILE_TITLE_LINES - 1) * 9 - 1 + MOBILE_ROWS * 18 + 7 : GUI_H;
   // même échelle avec ou sans barre de défilement (ordinateur : seulement en D.A test, où des listes défilent)
   const maxW = L.mobile ? MOBILE_W + SCROLLBAR_EXTRA : GUI_W + (da === 'test' ? SCROLLBAR_EXTRA : 0);
-  const fit = Math.min((viewW() - miniReserve()) / (maxW + 16), viewH() / (maxH + 16)), R = guiRatio();
+  const fit = Math.min((viewW() - miniReserve()) / (maxW + 16), (viewH() - miniReserveTop()) / (maxH + 16)), R = guiRatio();
   // téléphone : échelle au 1/R près (pixels de l'écran entiers), pour remplir au mieux la hauteur
   state.S = Math.max(2, Math.min(5, Math.floor(fit * R) / R));
   setGuiSize(L);
