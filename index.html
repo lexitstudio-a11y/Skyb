@@ -136,6 +136,7 @@
 </div>
 <div id="progScreen" class="screen" hidden>
   <canvas id="progCanvas"></canvas>
+  <input id="progTitleInput" class="loginInput" type="text" maxlength="40" autocomplete="off" spellcheck="false" aria-label="Nom de l'arbre">
 </div>
 <div id="photoScreen" class="screen" hidden>
   <canvas id="photoCanvas"></canvas>
@@ -4171,12 +4172,13 @@ function progId() {   // identifiant de l'arbre en cours (donné à la première
   if (!prog.id) { prog.id = newId(); try { localStorage.setItem(PROG_KEY, JSON.stringify(prog)); } catch {} cloudChanged(); }
   return prog.id;
 }
-const treeName = etapes => ((etapes.find(e => !e.parent) || etapes[0] || {}).titre) || 'Arbre sans nom';
+// Nom d'un arbre : celui donné en cliquant sur le titre de l'écran, sinon le nom de sa première étape (la racine)
+const treeName = (etapes, titre) => titre || ((etapes.find(e => !e.parent) || etapes[0] || {}).titre) || 'Arbre sans nom';
 const progEtapes = () => pg.view ? pg.view.etapes : prog.etapes;
 // Tous les arbres (celui en cours d'abord, s'il a des étapes) : { id, name, etapes, fin (date, si terminé) }
 function allTrees() {
-  const cur = prog.etapes.length ? [{ id: progId(), name: treeName(prog.etapes), etapes: prog.etapes, fin: null }] : [];
-  return [...cur, ...prog.archives.map(a => ({ id: a.id, name: treeName(a.etapes), etapes: a.etapes, fin: a.fin }))];
+  const cur = prog.etapes.length ? [{ id: progId(), name: treeName(prog.etapes, prog.titre), etapes: prog.etapes, fin: null }] : [];
+  return [...cur, ...prog.archives.map(a => ({ id: a.id, name: treeName(a.etapes, a.titre), etapes: a.etapes, fin: a.fin }))];
 }
 const treeById = id => allTrees().find(t => t.id === id) || null;
 function finishTree() {
@@ -4185,18 +4187,19 @@ function finishTree() {
   hideProg();
   openConfirm({
     question: "Terminer l'arbre ?",
-    detail: [treeName(prog.etapes), left ? `${left} étape${left > 1 ? 's' : ''} pas encore validée${left > 1 ? 's' : ''}.` : 'Toutes les étapes sont validées.',
+    detail: [treeName(prog.etapes, prog.titre), left ? `${left} étape${left > 1 ? 's' : ''} pas encore validée${left > 1 ? 's' : ''}.` : 'Toutes les étapes sont validées.',
       'Il passera dans les arbres précédents.'],
     noLabel: 'Retour', yesLabel: 'Terminer',
     onNo: showProg, onCancel: showProg,
     onYes: () => {
-      prog.archives.unshift({ id: progId(), fin: formatDate(new Date()), etapes: prog.etapes });
+      prog.archives.unshift({ id: progId(), fin: formatDate(new Date()), etapes: prog.etapes, ...(prog.titre ? { titre: prog.titre } : {}) });
       prog.etapes = [];
       delete prog.id;
+      delete prog.titre;
       pg.selected = null;
       pg.pan = { x: 0, y: 0 };
       saveProg();
-      showToast({ title: 'Arbre terminé', text: fitText(treeName(prog.archives[0].etapes), 150) });
+      showToast({ title: 'Arbre terminé', text: fitText(treeName(prog.archives[0].etapes, prog.archives[0].titre), 150) });
       showProg();
     },
   });
@@ -4247,7 +4250,13 @@ function renderProg() {
   const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph - 26) / 2));
   const fr = (x, y, w, h, c) => { if (w > 0 && h > 0) { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); } };
   drawPanel(ctx, px, py, pw, ph, S);
-  drawText(ctx, font, pg.view ? 'Arbre terminé' : PAGE_TITLES.progression, px + 8, py + 6, '#404040', S);
+  // Titre = nom de l'arbre ; un clic dessus permet de l'écrire directement (champ invisible par-dessus, comme les panneaux)
+  const tree = pg.view || prog, titleRect = [px + 6, py + 3, pw - 12, 13];
+  const titleText = pg.editTitle ? progTitleInput.value + (pg.blink ? '_' : '')
+    : tree.titre || (pg.view ? treeName(pg.view.etapes) : PAGE_TITLES.progression);
+  drawText(ctx, font, pg.editTitle ? titleText : fitText(titleText, pw - 16), px + 8, py + 6, pg.hover === 'title' || pg.editTitle ? '#202020' : '#404040', S);
+  if (pg.editTitle || pg.hover === 'title') fr(px + 8, py + 15, Math.min(pw - 16, textWidth(font, titleText) || 40), 1, '#808080');   // souligné
+  Object.assign(progTitleInput.style, { left: titleRect[0] * S + 'px', top: titleRect[1] * S + 'px', width: titleRect[2] * S + 'px', height: titleRect[3] * S + 'px' });
   // Sous le titre : « Terminer l'arbre » (ou, sur un arbre terminé, « Arbre en cours ») et « Arbres précédents »
   const bw = Math.floor((pw - 18 - 4) / 2), wide = bw >= 100;
   const tops = [
@@ -4359,14 +4368,46 @@ function renderProg() {
 
   // Sous le fond : la prochaine étape à faire (pas forcément celle qui est sélectionnée)
   const s = !pg.view && nextEtape();
-  const info = pg.view ? `${treeName(pg.view.etapes)} : terminé le ${pg.view.fin}`
+  const info = pg.view ? `Terminé le ${pg.view.fin}`
     : s ? `Prochaine étape (${s.niveau}) : ${s.titre}` : prog.etapes.length ? 'Toutes les étapes sont validées' : 'Touche le + pour commencer';
   drawText(ctx, font, fitText(info, area.w), area.x, area.y + area.h + 7, '#404040', S);
   const back = [Math.floor(W / 2) - 40, py + ph + 4, 80, 20];
   drawButton(ctx, back[0], back[1], back[2], 'Retour', pg.hover === 'back', S);
-  pg.layout = { S, area, hits: hits.filter(h => h.r[0] + h.r[2] > area.x && h.r[0] < area.x + area.w && h.r[1] + h.r[3] > area.y && h.r[1] < area.y + area.h), back, tops };
+  pg.layout = { S, area, hits: hits.filter(h => h.r[0] + h.r[2] > area.x && h.r[0] < area.x + area.w && h.r[1] + h.r[3] > area.y && h.r[1] < area.y + area.h), back, tops, titleRect };
 }
 
+// Nom de l'arbre écrit directement dans le titre : Entrée (ou un clic ailleurs) enregistre, Échap annule.
+const progTitleInput = document.getElementById('progTitleInput');
+// le champ invisible est posé sur le titre : un clic (ou un toucher) sur le titre le sélectionne directement
+function startTitleEdit() {
+  if (pg.editTitle) return;
+  const tree = pg.view || prog;
+  pg.editTitle = true;
+  progTitleInput.value = tree.titre || '';
+  if (document.activeElement !== progTitleInput) progTitleInput.focus();
+  clearInterval(pg.blinkTimer);
+  pg.blink = true;
+  pg.blinkTimer = setInterval(() => { pg.blink = !pg.blink; renderProg(); }, 300);
+  renderProg();
+}
+function endTitleEdit(save) {
+  if (!pg.editTitle) return;
+  pg.editTitle = false;
+  clearInterval(pg.blinkTimer);
+  const tree = pg.view || prog, name = progTitleInput.value.trim();
+  if (save) { if (name) tree.titre = name; else delete tree.titre; saveProg(); }
+  progTitleInput.blur();
+  renderProg();
+}
+progTitleInput.addEventListener('focus', startTitleEdit);
+progTitleInput.addEventListener('mouseenter', () => { if (!pg.editTitle) { pg.hover = 'title'; progTitleInput.style.cursor = 'text'; renderProg(); } });
+progTitleInput.addEventListener('mouseleave', () => { if (pg.hover === 'title') { pg.hover = null; renderProg(); } });
+progTitleInput.addEventListener('input', () => { pg.blink = true; renderProg(); });
+progTitleInput.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter') { ev.preventDefault(); endTitleEdit(true); }
+  else if (ev.key === 'Escape') { ev.preventDefault(); endTitleEdit(false); }
+});
+progTitleInput.addEventListener('blur', () => endTitleEdit(true));
 function openProg() {
   const view = state.page.startsWith('prog-archive-') ? prog.archives.find(a => `prog-archive-${a.id}` === state.page) || null : null;
   if (view !== pg.view) pg.pan = { x: 0, y: 0 };
@@ -4580,6 +4621,7 @@ progCanvas.addEventListener('pointerdown', ev => {
   if (inRect(ev, pg.layout.back, S)) { playClick(); if (pg.view) openPreviousTrees(); else location.hash = 'main'; return; }
   const top = pg.layout.tops.find(t => inRect(ev, t.r, S));
   if (top) { playClick(); top.action(); return; }
+  if (inRect(ev, pg.layout.titleRect, S)) { ev.preventDefault(); startTitleEdit(); return; }   // pas de perte de focus juste après
   if (!inRect(ev, [area.x, area.y, area.w, area.h], S)) return;
   progCanvas.setPointerCapture(ev.pointerId);
   progTip(null, ev);   // un nouveau toucher ferme l'overlay de l'appui long précédent
@@ -4611,7 +4653,8 @@ progCanvas.addEventListener('pointermove', ev => {
     return;
   }
   const hit = progHit(ev), onBack = inRect(ev, pg.layout.back, S), top = pg.layout.tops.find(t => inRect(ev, t.r, S));
-  const hover = onBack ? 'back' : top ? top.key : hit ? (hit.etape ? hit.etape.id : hit.key) : null;
+  const onTitle = inRect(ev, pg.layout.titleRect, S) && !pg.editTitle;
+  const hover = onBack ? 'back' : top ? top.key : onTitle ? 'title' : hit ? (hit.etape ? hit.etape.id : hit.key) : null;
   progCanvas.style.cursor = hover ? 'pointer' : inRect(ev, [pg.layout.area.x, pg.layout.area.y, pg.layout.area.w, pg.layout.area.h], S) ? 'grab' : '';
   if (hover !== pg.hover) { pg.hover = hover; renderProg(); }
   progTip(hit, ev);
