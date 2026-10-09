@@ -717,7 +717,8 @@ function agendaSlot(agenda, n, image) {
     image, count: n,
     tooltip: () => {
       const t = agenda.arbre && treeById(agenda.arbre);
-      return ['§aAgenda ' + agenda.date, ...(lines.length ? lines.map(l => '§g- ' + l) : ['§7Aucun objectif.']), ...(t ? ['', `§7Arbre lié : §e${t.name}`] : []), '', '§eClique pour voir !'];
+      // une ligne vide entre deux objectifs (tirets), pour les distinguer quand ils passent sur plusieurs lignes
+      return ['§aAgenda ' + agenda.date, ...(lines.length ? lines.flatMap((l, i) => i ? ['', '§g- ' + l] : ['§g- ' + l]) : ['§7Aucun objectif.']), ...(t ? ['', `§7Arbre lié : §e${t.name}`] : []), '', '§eClique pour voir !'];
     },
     action: () => editAgenda(agenda.date),
   };
@@ -2718,6 +2719,7 @@ function onMove(ev) {
           let body = out.slice(0, foot);
           while (body.length > 1 && tipH() > viewH() - 8) {
             body = body.slice(0, -1);
+            while (body.length > 1 && !body[body.length - 1].replace(/§./g, '').trim()) body = body.slice(0, -1);   // pas de « ... » seul
             out = [...body.slice(0, -1), body[body.length - 1].replace(/\.*$/, '') + '...', ...tail];
             draw();
           }
