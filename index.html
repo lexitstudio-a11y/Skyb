@@ -4453,6 +4453,9 @@ function openProg() {
   const view = state.page.startsWith('prog-archive-') ? prog.archives.find(a => `prog-archive-${a.id}` === state.page) || null : null;
   if (view !== pg.view) pg.pan = { x: 0, y: 0 };
   pg.view = view;
+  // arbre en cours : cadrage sur la prochaine étape à faire, en haut de la zone (centrée en largeur)
+  const next = !view && nextEtape();
+  if (next) pg.pan = { x: -next.x * PROG_PITCH, y: -next.y * PROG_PITCH };
   pg.open = true;
   hideTooltip();
   canvas.hidden = true;
