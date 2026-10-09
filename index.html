@@ -2649,6 +2649,13 @@ function wrapTipLines(lines, w) {
     });
   });
 }
+// Ligne d'overlay coupée à la largeur w (pixels de la police) avec « ... » ; jamais au milieu d'un code de couleur.
+function cutTipLine(line, w) {
+  if (textWidth(font, line) <= w) return line;
+  let t = line;
+  while (t && textWidth(font, t + '...') > w) t = t.slice(0, -1).replace(/§$/, '');
+  return t.trimEnd() + '...';
+}
 // Taille affichée de l'overlay (en px CSS ; le canvas peut être en pixels de l'écran)
 const tipW = () => parseFloat(tip.style.width) || tip.width;
 const tipH = () => parseFloat(tip.style.height) || tip.height;
@@ -2693,11 +2700,12 @@ function onMove(ev) {
         tip.style.width = tip.width / R + 'px';
         tip.style.height = tip.height / R + 'px';
       }
+      // ordinateur : taille de texte fixe ; une ligne trop longue pour l'écran est coupée et finit par « ... »
       else for (let ts = tooltipScale(state.S); ; ts--) {
-        renderTooltip(tip, font, lines, ts);
+        renderTooltip(tip, font, lines.map(l => cutTipLine(l, (viewW() - 8) * R / ts - 2 * (3 + TOOLTIP_PADDING))), ts);
         tip.style.width = tip.width / R + 'px';
         tip.style.height = tip.height / R + 'px';
-        if (ts <= 1 || (tipW() <= viewW() - 8 && tipH() <= viewH() - 8)) break;
+        if (ts <= 1 || tipH() <= viewH() - 8) break;   // texte réduit seulement si l'overlay est trop haut
       }
       tip.hidden = false;
     } else tip.hidden = true;
