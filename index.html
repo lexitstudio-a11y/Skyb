@@ -29,6 +29,16 @@
     justify-content: center;
     overflow: hidden;
   }
+  /* Ordinateur, Profil Joueur : l'Arbre de progression en cours dans un panneau à droite du coffre. */
+  #miniTree {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    z-index: 5;
+  }
+  #miniTree[hidden] {
+    display: none;
+  }
   #tooltip {
     position: fixed;
     pointer-events: none;
@@ -134,6 +144,7 @@
 <div id="timeblockScreen" class="screen" hidden>
   <canvas id="timeblockCanvas"></canvas>
 </div>
+<canvas id="miniTree" hidden></canvas>
 <div id="progScreen" class="screen" hidden>
   <canvas id="progCanvas"></canvas>
   <input id="progTitleInput" class="loginInput" type="text" maxlength="40" autocomplete="off" spellcheck="false" aria-label="Nom de l'arbre">
@@ -2102,7 +2113,10 @@ function setGuiSize(L) {
   canvas.style.width = L.w * state.S + 'px';
   canvas.style.height = L.h * state.S + 'px';
 }
+let lastReserve = 0;
 function renderGui() {
+  // panneau de l'arbre en cours (Profil, ordinateur) affiché ou retiré : le coffre se redimensionne pour la place restante
+  if (miniReserve() !== lastReserve) { lastReserve = miniReserve(); sizeGui(); }
   const S = state.S * guiRatio();
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
@@ -2151,6 +2165,7 @@ function renderGui() {
   }
   if (isTabPage(state.page)) drawTabs(ctx, S, L);
   if (menuHead && headMenu.open) drawHeadMenu(ctx, S);
+  renderMiniTree();
 }
 // --- D.A test sur téléphone : pas de page Profil ; 4 onglets en bas (Arbres, Pilliers, Liste, Agenda) ---
 // Arbres de Progression = page par défaut. Les boutons de la barre du bas de ces pages passent en haut (rangée 0).
@@ -4283,30 +4298,42 @@ function progSpots() {
     .filter(p => !progAt(p.x, p.y));
 }
 
-function renderProg() {
-  const S = tbScale();
-  const { ctx, W, H } = prepareScreen(progCanvas, S);
+function renderProg(st = pg) {
+  // st = miniTree : petit panneau à droite du Profil (ordinateur) ; seulement l'arbre en cours, sans boutons
+  const mini = st !== pg;
+  let S, ctx, W, H;
+  if (mini) {
+    S = st.S;
+    W = Math.floor(st.w / S); H = Math.floor(st.h / S);
+    miniCanvas.width = st.w; miniCanvas.height = st.h;
+    ctx = miniCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+  } else {
+    S = tbScale();
+    ({ ctx, W, H } = prepareScreen(progCanvas, S));
+  }
   // téléphone : toute la hauteur de l'écran (le bouton Retour en dessous)
-  const pw = Math.min(W - 6, 320), ph = isMobileLayout() ? H - 36 : Math.min(H - 34, 260);
-  const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph - 26) / 2));
+  const pw = mini ? W : Math.min(W - 6, 320), ph = mini ? H : isMobileLayout() ? H - 36 : Math.min(H - 34, 260);
+  const px = mini ? 0 : Math.floor((W - pw) / 2), py = mini ? 0 : Math.max(4, Math.floor((H - ph - 26) / 2));
   const fr = (x, y, w, h, c) => { if (w > 0 && h > 0) { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); } };
   drawPanel(ctx, px, py, pw, ph, S);
   // Titre = nom de l'arbre ; un clic dessus permet de l'écrire directement (champ invisible par-dessus, comme les panneaux)
-  const tree = pg.view || prog, titleRect = [px + 6, py + 3, pw - 12, 13];
-  const titleText = pg.editTitle ? progTitleInput.value + (pg.blink ? '_' : '')
-    : tree.titre || (pg.view ? treeName(pg.view.etapes) : PAGE_TITLES.progression);
-  drawText(ctx, font, pg.editTitle ? titleText : fitText(titleText, pw - 16), px + 8, py + 6, pg.hover === 'title' || pg.editTitle ? '#202020' : '#404040', S);
-  if (pg.editTitle || pg.hover === 'title') fr(px + 8, py + 15, Math.min(pw - 16, textWidth(font, titleText) || 40), 1, '#808080');   // souligné
-  Object.assign(progTitleInput.style, { left: titleRect[0] * S + 'px', top: titleRect[1] * S + 'px', width: titleRect[2] * S + 'px', height: titleRect[3] * S + 'px' });
+  const tree = st.view || prog, titleRect = [px + 6, py + 3, pw - 12, 13];
+  const titleText = st.editTitle ? progTitleInput.value + (st.blink ? '_' : '')
+    : tree.titre || (st.view ? treeName(st.view.etapes) : PAGE_TITLES.progression);
+  drawText(ctx, font, st.editTitle ? titleText : fitText(titleText, pw - 16), px + 8, py + 6, st.hover === 'title' || st.editTitle ? '#202020' : '#404040', S);
+  if (st.editTitle || st.hover === 'title') fr(px + 8, py + 15, Math.min(pw - 16, textWidth(font, titleText) || 40), 1, '#808080');   // souligné
+  if (!mini) Object.assign(progTitleInput.style, { left: titleRect[0] * S + 'px', top: titleRect[1] * S + 'px', width: titleRect[2] * S + 'px', height: titleRect[3] * S + 'px' });
   // Sous le titre : « Terminer l'arbre » (ou, sur un arbre terminé, « Arbre en cours ») et « Arbres précédents »
   const bw = Math.floor((pw - 18 - 4) / 2), wide = bw >= 100;
   const tops = [
-    { r: [px + 9, py + 17, bw, 20], key: 'top0', label: pg.view ? (wide ? 'Arbre en cours' : 'En cours') : wide ? "Terminer l'arbre" : 'Terminer',
-      action: () => pg.view ? (location.hash = 'progression') : finishTree() },
+    { r: [px + 9, py + 17, bw, 20], key: 'top0', label: st.view ? (wide ? 'Arbre en cours' : 'En cours') : wide ? "Terminer l'arbre" : 'Terminer',
+      action: () => st.view ? (location.hash = 'progression') : finishTree() },
     { r: [px + 9 + bw + 4, py + 17, bw, 20], key: 'top1', label: wide ? 'Arbres précédents' : 'Précédents', action: openPreviousTrees },
   ];
-  for (const t of tops) drawButton(ctx, t.r[0], t.r[1], t.r[2], t.label, pg.hover === t.key, S);
-  const area = { x: px + 9, y: py + 42, w: pw - 18, h: ph - 42 - 21 };
+  if (mini) tops.length = 0;   // panneau du Profil : pas de « Terminer » ni « Arbres précédents »
+  for (const t of tops) drawButton(ctx, t.r[0], t.r[1], t.r[2], t.label, st.hover === t.key, S);
+  const area = mini ? { x: px + 7, y: py + 17, w: pw - 14, h: ph - 17 - 19 } : { x: px + 9, y: py + 42, w: pw - 18, h: ph - 42 - 21 };
   // Cadre creusé, puis le fond de pierre (il suit la vue quand on la déplace)
   fr(area.x - 1, area.y - 1, area.w + 2, area.h + 2, '#FFFFFF');
   fr(area.x - 1, area.y - 1, area.w + 1, area.h + 1, '#373737');
@@ -4315,19 +4342,19 @@ function renderProg() {
   ctx.rect(area.x * S, area.y * S, area.w * S, area.h * S);
   ctx.clip();
   const mod = (a, n) => ((a % n) + n) % n;
-  for (let y = area.y - 16 + mod(pg.pan.y, 16); y < area.y + area.h; y += 16)
-    for (let x = area.x - 16 + mod(pg.pan.x, 16); x < area.x + area.w; x += 16)
+  for (let y = area.y - 16 + mod(st.pan.y, 16); y < area.y + area.h; y += 16)
+    for (let x = area.x - 16 + mod(st.pan.x, 16); x < area.x + area.w; x += 16)
       ctx.drawImage(T.pierre_fond, x * S, y * S, 16 * S, 16 * S);
   // ombre intérieure en haut et à gauche (comme le fond creusé de l'écran des progrès)
   fr(area.x, area.y, area.w, 2, 'rgba(0,0,0,0.35)');
   fr(area.x, area.y + 2, 2, area.h - 2, 'rgba(0,0,0,0.35)');
 
-  const cx = area.x + Math.floor(area.w / 2) + pg.pan.x, cy = area.y + 26 + pg.pan.y;   // centre de la racine
+  const cx = area.x + Math.floor(area.w / 2) + st.pan.x, cy = area.y + 26 + st.pan.y;   // centre de la racine
   const center = e => [cx + e.x * PROG_PITCH, cy + e.y * PROG_PITCH];
   // Liens : trait blanc bordé de noir, d'un centre à l'autre (les étapes se dessinent par-dessus) ; étape liée à un
   // arbre de progression : petite barre d'expérience entre les deux étapes, remplie selon la progression de l'arbre
   // (depuis l'étape précédente)
-  const etapes = progEtapes();
+  const etapes = mini ? prog.etapes : progEtapes();
   for (const e of etapes) {
     const p = etapes.find(q => q.id === e.parent);
     if (!p) continue;
@@ -4363,16 +4390,16 @@ function renderProg() {
   };
   for (const e of etapes) {
     const [x, y] = center(e);
-    if (pg.drag && pg.drag.node === e && pg.drag.moved) continue;   // étape déplacée : dessinée sous le curseur, plus bas
+    if (st.drag && st.drag.node === e && st.drag.moved) continue;   // étape déplacée : dessinée sous le curseur, plus bas
     drawNode(e, x - PROG_NODE / 2, y - PROG_NODE / 2);
     hits.push({ r: [x - PROG_NODE / 2, y - PROG_NODE / 2, PROG_NODE, PROG_NODE], etape: e });
   }
   function drawNode(e, nx, ny) {
-    const sel = !pg.view && e.id === pg.selected;
+    const sel = !st.view && e.id === st.selected;
     // étape validée : bloc vert à coche à la place de son item (il revient si on la dévalide) ; le fond et le numéro
     // sont assombris, le bloc garde sa luminosité
     const done = etapeDone(e), icon = done ? T.etape_valider : T[e.item];
-    frame(nx, ny, PROG_NODE, sel ? '#B8862E' : '#C6C6C6', pg.hover === e.id);
+    frame(nx, ny, PROG_NODE, sel ? '#B8862E' : '#C6C6C6', st.hover === e.id);
     if (done) fr(nx + 1, ny + 1, PROG_NODE - 2, PROG_NODE - 2, 'rgba(0, 0, 0, 0.45)');   // sans toucher aux coins coupés
     if (icon) {
       ctx.imageSmoothingEnabled = done;   // image fournie en grand : lissée en la réduisant
@@ -4382,7 +4409,7 @@ function renderProg() {
     const num = String(e.niveau);   // par-dessus l'item, assombri comme le fond si l'étape est validée
     drawText(ctx, font, num, nx + PROG_NODE - 3 - textWidth(font, num), ny + PROG_NODE - 10, done ? '#8C8C8C' : '#FFFFFF', S, true);
     // étape glissée par-dessus : cible d'un échange = case assombrie ; insertion au-dessus = barre jaune dans l'espace
-    const drop = pg.drag && pg.drag.moved && pg.drag.drop;
+    const drop = st.drag && st.drag.moved && st.drag.drop;
     if (drop && drop.etape === e) {
       if (drop.mode === 'swap') fr(nx + 1, ny + 1, PROG_NODE - 2, PROG_NODE - 2, 'rgba(0, 0, 0, 0.5)');
       else {
@@ -4392,14 +4419,14 @@ function renderProg() {
       }
     }
   }
-  progSpots().forEach((p, i) => {
+  (mini ? [] : progSpots()).forEach((p, i) => {
     const [x, y] = center(p), nx = x - PROG_PLUS / 2, ny = y - PROG_PLUS / 2;
     const key = 'plus' + i;
-    frame(nx, ny, PROG_PLUS, '#C6C6C6', pg.hover === key);
+    frame(nx, ny, PROG_PLUS, '#C6C6C6', st.hover === key);
     drawText(ctx, font, '+', nx + Math.floor((PROG_PLUS - textWidth(font, '+')) / 2) + 1, ny + 5, '#404040', S);
     hits.push({ r: [nx, ny, PROG_PLUS, PROG_PLUS], spot: p, key });
   });
-  const dn = pg.drag && pg.drag.node && pg.drag.moved ? pg.drag : null;
+  const dn = st.drag && st.drag.node && st.drag.moved ? st.drag : null;
   if (dn) {   // suit le curseur, semi-transparente pour laisser voir la cible (assombrie) ou la barre d'insertion
     ctx.globalAlpha = 0.55;
     drawNode(dn.node, Math.round(dn.gx - PROG_NODE / 2), Math.round(dn.gy - PROG_NODE / 2));
@@ -4408,13 +4435,13 @@ function renderProg() {
   ctx.restore();
 
   // Sous le fond : la prochaine étape à faire (pas forcément celle qui est sélectionnée)
-  const s = !pg.view && nextEtape();
-  const info = pg.view ? `Terminé le ${pg.view.fin}`
+  const s = !st.view && nextEtape();
+  const info = st.view ? `Terminé le ${st.view.fin}`
     : s ? `Prochaine étape (${s.niveau}) : ${s.titre}` : prog.etapes.length ? 'Toutes les étapes sont validées' : 'Touche le + pour commencer';
-  drawText(ctx, font, fitText(info, area.w), area.x, area.y + area.h + 7, '#404040', S);
-  const back = [Math.floor(W / 2) - 40, py + ph + 4, 80, 20];
-  drawButton(ctx, back[0], back[1], back[2], 'Retour', pg.hover === 'back', S);
-  pg.layout = { S, area, hits: hits.filter(h => h.r[0] + h.r[2] > area.x && h.r[0] < area.x + area.w && h.r[1] + h.r[3] > area.y && h.r[1] < area.y + area.h), back, tops, titleRect };
+  drawText(ctx, font, fitText(mini && s ? `Prochaine : ${s.titre}` : info, area.w), area.x, area.y + area.h + 6, '#404040', S);
+  const back = mini ? [-99, -99, 0, 0] : [Math.floor(W / 2) - 40, py + ph + 4, 80, 20];
+  if (!mini) drawButton(ctx, back[0], back[1], back[2], 'Retour', st.hover === 'back', S);
+  st.layout = { S, area, hits: hits.filter(h => h.r[0] + h.r[2] > area.x && h.r[0] < area.x + area.w && h.r[1] + h.r[3] > area.y && h.r[1] < area.y + area.h), back, tops, titleRect };
 }
 
 // Nom de l'arbre écrit directement dans le titre : Entrée (ou un clic ailleurs) enregistre, Échap annule.
@@ -4659,6 +4686,86 @@ function progTip(hit, ev, force) {
   }
   placeTooltip(ev);
 }
+// --- Panneau de l'arbre en cours sur le Profil Joueur (ordinateur) : survol = overlay des étapes, molette ou glisser =
+// défiler, clic sur une étape = sa page (la flèche de retour mène ensuite à l'Arbre de progression). ---
+const miniCanvas = document.getElementById('miniTree');
+const miniTree = { pan: { x: 0, y: 0 }, hover: null, selected: null, view: null, drag: null, layout: null, S: 2, w: 0, h: 0, framed: false };
+const MINI_W = 150;   // largeur du panneau (pixels GUI)
+const miniShown = () => state.page === 'main' && !isMobileLayout() && !!prog.etapes.length;
+// Place réservée à droite (px CSS) : le coffre se centre dans le reste de l'écran
+const miniReserve = () => miniShown() ? Math.round(MINI_W * Math.max(1, Math.min(3, Math.floor(viewH() / 300))) + 16) : 0;
+function renderMiniTree() {
+  const show = miniShown();
+  document.body.style.paddingRight = show ? miniReserve() + 'px' : '';
+  miniCanvas.hidden = !show;
+  if (!show) { miniTree.framed = false; return; }
+  const S = Math.max(1, Math.min(3, Math.floor(viewH() / 300)));
+  Object.assign(miniTree, { S, w: MINI_W * S, h: viewH() - 16 });
+  miniCanvas.style.width = miniTree.w + 'px';
+  miniCanvas.style.height = miniTree.h + 'px';
+  if (!miniTree.framed) {   // à l'affichage : cadrage sur la prochaine étape à faire, en haut
+    const next = nextEtape();
+    miniTree.pan = next ? { x: -next.x * PROG_PITCH, y: -next.y * PROG_PITCH } : { x: 0, y: 0 };
+    miniTree.framed = true;
+  }
+  renderProg(miniTree);
+}
+const miniPoint = ev => { const r = miniCanvas.getBoundingClientRect(); return { x: (ev.clientX - r.left) / miniTree.S, y: (ev.clientY - r.top) / miniTree.S }; };
+const miniHit = ev => {
+  const { area, hits } = miniTree.layout, p = miniPoint(ev);
+  const inR = r => p.x >= r[0] && p.x < r[0] + r[2] && p.y >= r[1] && p.y < r[1] + r[3];
+  return inR([area.x, area.y, area.w, area.h]) ? [...hits].reverse().find(h => h.etape && inR(h.r)) || null : null;
+};
+function miniTip(hit, ev) {
+  if (!hit) { if (miniTree.tipKey) { miniTree.tipKey = null; tip.hidden = true; } return; }
+  if (miniTree.tipKey !== hit.etape.id) {
+    miniTree.tipKey = hit.etape.id;
+    const e = hit.etape, R = guiRatio(), a = blockArbre(e);
+    const lines = [`§a${e.titre}`, `§8Étape ${e.niveau}`, ...descLines(e.description), ...(etapeDone(e) ? ['§aÉtape validée'] : []), ...(a ? [`§7Arbre lié : §e${a.titre}`] : []), '', '§eClique pour ouvrir !'];
+    renderTooltip(tip, font, lines, tooltipScale(miniTree.S));
+    tip.style.width = tip.width / R + 'px';
+    tip.style.height = tip.height / R + 'px';
+    tip.hidden = false;
+  }
+  placeTooltip(ev);
+}
+miniCanvas.addEventListener('pointerdown', ev => {
+  if (!miniTree.layout) return;
+  miniCanvas.setPointerCapture(ev.pointerId);
+  miniTree.drag = { x0: ev.clientX, y0: ev.clientY, pan0: { ...miniTree.pan }, moved: false };
+});
+miniCanvas.addEventListener('pointermove', ev => {
+  if (!miniTree.layout) return;
+  const d = miniTree.drag;
+  if (d) {
+    const dx = ev.clientX - d.x0, dy = ev.clientY - d.y0;
+    if (Math.hypot(dx, dy) > 4) d.moved = true;
+    if (d.moved) { miniTree.pan = { x: d.pan0.x + Math.round(dx / miniTree.S), y: d.pan0.y + Math.round(dy / miniTree.S) }; miniTip(null, ev); renderProg(miniTree); }
+    return;
+  }
+  const hit = miniHit(ev), hover = hit ? hit.etape.id : null;
+  miniCanvas.style.cursor = hover ? 'pointer' : 'grab';
+  if (hover !== miniTree.hover) { miniTree.hover = hover; renderProg(miniTree); }
+  miniTip(hit, ev);
+});
+miniCanvas.addEventListener('pointerup', ev => {
+  const d = miniTree.drag;
+  miniTree.drag = null;
+  if (!d || d.moved) return;
+  const hit = miniHit(ev);
+  if (!hit) return;
+  playClick();
+  miniTip(null, ev);
+  pg.selected = hit.etape.id;
+  location.hash = `etape-${hit.etape.id}`;
+});
+miniCanvas.addEventListener('pointerleave', ev => { miniTip(null, ev); if (miniTree.hover) { miniTree.hover = null; renderProg(miniTree); } });
+miniCanvas.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  miniTree.pan = { x: miniTree.pan.x - Math.round(ev.deltaX / miniTree.S / 2), y: miniTree.pan.y - Math.round(ev.deltaY / miniTree.S / 2) };
+  miniTip(null, ev);
+  renderProg(miniTree);
+}, { passive: false });
 progCanvas.addEventListener('pointerdown', ev => {
   if (!pg.layout) return;
   const { S, area } = pg.layout;
@@ -5259,7 +5366,7 @@ function sizeGui() {
   const L = guiLayout(), maxH = L.mobile ? 18 + (MOBILE_TITLE_LINES - 1) * 9 - 1 + MOBILE_ROWS * 18 + 7 : GUI_H;
   // même échelle avec ou sans barre de défilement (ordinateur : seulement en D.A test, où des listes défilent)
   const maxW = L.mobile ? MOBILE_W + SCROLLBAR_EXTRA : GUI_W + (da === 'test' ? SCROLLBAR_EXTRA : 0);
-  const fit = Math.min(viewW() / (maxW + 16), viewH() / (maxH + 16)), R = guiRatio();
+  const fit = Math.min((viewW() - miniReserve()) / (maxW + 16), viewH() / (maxH + 16)), R = guiRatio();
   // téléphone : échelle au 1/R près (pixels de l'écran entiers), pour remplir au mieux la hauteur
   state.S = Math.max(2, Math.min(5, Math.floor(fit * R) / R));
   setGuiSize(L);
