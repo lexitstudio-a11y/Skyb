@@ -4596,13 +4596,33 @@ function linkEtapeArbre(e) {
   });
   location.hash = 'lier-arbre';
 }
+// Suppression d'une étape (tête rouge en haut à gauche de sa page) :
+// - sans suite : elle disparaît ;
+// - suivie d'une simple chaîne (une seule étape après chacune) : les étapes suivantes remontent d'un cran ;
+// - avec plusieurs branches après elle : elle est supprimée avec toutes les étapes qui en partent (prévenu avant).
 function deleteEtape(e) {
+  const kids = q => prog.etapes.filter(c => c.parent === q.id);
+  const chain = [e];
+  while (kids(chain[chain.length - 1]).length === 1) chain.push(kids(chain[chain.length - 1])[0]);
+  const linear = kids(chain[chain.length - 1]).length === 0;
+  const subtree = [], walk = q => { subtree.push(q); kids(q).forEach(walk); };
+  walk(e);
+  const detail = linear ? (chain.length > 1 ? [e.titre, '', `Les ${chain.length - 1} étape${chain.length > 2 ? 's' : ''} suivante${chain.length > 2 ? 's' : ''} remonte${chain.length > 2 ? 'nt' : ''} d'un cran.`] : [e.titre])
+    : [e.titre, '', `Les ${subtree.length - 1} étapes qui en partent seront aussi supprimées.`];
   openConfirm({
-    question: 'Supprimer cette étape ?', detail: [e.titre],
+    question: 'Supprimer cette étape ?', detail,
     noLabel: 'Retour', yesLabel: '§cSupprimer',
     onYes: () => {
-      prog.etapes.splice(prog.etapes.indexOf(e), 1);
-      pg.selected = e.parent;
+      if (linear) {   // chaque étape de la chaîne prend le contenu de la suivante ; la dernière place disparaît
+        for (let i = 0; i < chain.length - 1; i++)
+          for (const f of ETAPE_FIELDS) { const v = chain[i + 1][f]; if (v === undefined) delete chain[i][f]; else chain[i][f] = v; }
+        const last = chain[chain.length - 1];
+        prog.etapes.splice(prog.etapes.indexOf(last), 1);
+        pg.selected = chain.length > 1 ? e.id : e.parent;
+      } else {
+        for (const q of subtree) prog.etapes.splice(prog.etapes.indexOf(q), 1);
+        pg.selected = e.parent;
+      }
       saveProg();
       location.hash = 'progression';
     },
@@ -4647,8 +4667,7 @@ function buildEtapePages() {
               showToast({ title: 'Étape validée', text: fitText(e.titre, 150), sound: doneSound });
               location.hash = 'progression';
             } };
-    if (!prog.etapes.some(q => q.parent === e.id))   // supprimer : seulement si aucune étape n'en part
-      slots['0,0'] = { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cette étape.", '', '§eClique pour supprimer !'], action: () => deleteEtape(e) };
+    slots['0,0'] = { image: 'etape_devalider', tooltip: ['§cSupprimer', "§7Supprime cette étape.", '', '§eClique pour supprimer !'], action: () => deleteEtape(e) };   // en haut à gauche
     const a = linked();
     if (a) {   // arbre lié : son icône sous l'étape (clic : sa page)
       const n = arbres.indexOf(a) + 1;
