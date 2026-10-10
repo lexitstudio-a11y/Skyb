@@ -4600,6 +4600,8 @@ function linkEtapeArbre(e) {
 // - sans suite : elle disparaît ;
 // - suivie d'une simple chaîne (une seule étape après chacune) : les étapes suivantes remontent d'un cran ;
 // - avec plusieurs branches après elle : elle est supprimée avec toutes les étapes qui en partent (prévenu avant).
+// Description d'une étape dans un overlay : une ligne vide avant, et entre deux lignes (chaque ligne = un point du livre)
+const stepDesc = d => descLines(d).flatMap(l => ['', l]);
 function deleteEtape(e) {
   const kids = q => prog.etapes.filter(c => c.parent === q.id);
   const chain = [e];
@@ -4634,11 +4636,11 @@ function buildEtapePages() {
   for (const e of prog.etapes) {
     const linked = () => blockArbre(e);
     const slots = {
-      '2,4': { image: e.item, count: e.niveau, tooltip: () => [`§a${e.titre}`, `§8Étape ${e.niveau}`, ...descLines(e.description), ...(etapeDone(e) ? ['', e.valide && !linked() ? `§aÉtape validée le ${e.valide}` : '§aÉtape validée'] : [])] },
+      '2,4': { image: e.item, count: e.niveau, tooltip: () => [`§a${e.titre}`, `§8Étape ${e.niveau}`, ...stepDesc(e.description), ...(etapeDone(e) ? ['', e.valide && !linked() ? `§aÉtape validée le ${e.valide}` : '§aÉtape validée'] : [])] },
       '5,0': { item: 'name_tag', tooltip: ['§aRenommer', "§7Modifie le nom de l'étape.", '', '§eClique pour modifier !'], action: () => editEtapeTitle(e) },
       '4,0': {
         item: 'writable_book', action: () => editEtapeDescription(e),
-        tooltip: () => ['§aDescription', ...(e.description ? descLines(e.description) : ['§7Aucune description.']), '', '§eClique pour modifier !'],
+        tooltip: () => ['§aDescription', ...(e.description ? stepDesc(e.description).slice(1) : ['§7Aucune description.']), '', '§eClique pour modifier !'],
       },
       '5,8': {
         image: 'bouleau', tooltip: ['§aCréer un arbre de progression', "§7Crée un arbre lié à cette étape.", '', '§eClique pour créer !'],
@@ -4722,7 +4724,7 @@ function progTip(hit, ev, force) {
   if (pg.tipKey !== key) {
     pg.tipKey = key;
     const lines = hit.etape
-      ? [`§a${hit.etape.titre}`, `§8Étape ${hit.etape.niveau}`, ...descLines(hit.etape.description), ...(etapeDone(hit.etape) ? ['§aÉtape validée'] : []), ...(blockArbre(hit.etape) ? [`§7Arbre lié : §e${blockArbre(hit.etape).titre}`] : []), '', '§eClique pour ouvrir !']
+      ? [`§a${hit.etape.titre}`, `§8Étape ${hit.etape.niveau}`, ...stepDesc(hit.etape.description), ...(etapeDone(hit.etape) ? ['§aÉtape validée'] : []), ...(blockArbre(hit.etape) ? [`§7Arbre lié : §e${blockArbre(hit.etape).titre}`] : []), '', '§eClique pour ouvrir !']
       : hit.spot.parent ? ['§aNouvelle étape', `§7Étape ${hit.spot.niveau}`, '', '§eClique pour la créer !']
       : ['§aCréer son arbre de progression', '§7Créer votre plan en plusieurs étapes', '', '§eClique pour commencer !'];
     const R = guiRatio();
@@ -4774,7 +4776,7 @@ function miniTip(hit, ev) {
   if (miniTree.tipKey !== hit.etape.id) {
     miniTree.tipKey = hit.etape.id;
     const e = hit.etape, R = guiRatio(), a = blockArbre(e);
-    const lines = [`§a${e.titre}`, `§8Étape ${e.niveau}`, ...descLines(e.description), ...(etapeDone(e) ? ['§aÉtape validée'] : []), ...(a ? [`§7Arbre lié : §e${a.titre}`] : []), '', '§eClique pour ouvrir !'];
+    const lines = [`§a${e.titre}`, `§8Étape ${e.niveau}`, ...stepDesc(e.description), ...(etapeDone(e) ? ['§aÉtape validée'] : []), ...(a ? [`§7Arbre lié : §e${a.titre}`] : []), '', '§eClique pour ouvrir !'];
     renderTooltip(tip, font, lines, tooltipScale(miniTree.S));
     tip.style.width = tip.width / R + 'px';
     tip.style.height = tip.height / R + 'px';
