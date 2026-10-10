@@ -4061,7 +4061,8 @@ function drawTimer() {
 // Elles descendent depuis le haut (en haut à droite), restent quelques secondes puis remontent ; un son au hasard parmi 4 (volume réduit).
 const NOTIF_SOUNDS = [1, 2, 3, 4].map(i => { const a = new Audio(`assets/sounds/notif${i}.mp3`); a.preload = 'auto'; a.volume = 0.02; return a; });   // son des notifications : très bas
 const toastBox = document.getElementById('toasts');
-function showToast({ icon = 'clock_00', title, text, color = '#FFFF55', duration = 6000 }) {
+// sound : son à jouer à la place d'un son de notification (ex. « Action terminée » quand une étape est validée)
+function showToast({ icon = 'clock_00', title, text, color = '#FFFF55', duration = 6000, sound = null }) {
   if (!font) return;
   const W = Math.max(160, 34 + Math.max(textWidth(font, title), textWidth(font, text)) + 8), H = 32;
   // téléphone : dessinée en pixels de l'écran et réduite pour tenir dans la largeur (marges comprises)
@@ -4085,7 +4086,7 @@ function showToast({ icon = 'clock_00', title, text, color = '#FFFF55', duration
   if (R > 1 || isMobileLayout()) { cv.style.width = W * S / R + 'px'; cv.style.height = H * S / R + 'px'; }
   toastBox.append(cv);
   requestAnimationFrame(() => requestAnimationFrame(() => cv.classList.add('shown')));
-  playSound(NOTIF_SOUNDS[Math.floor(Math.random() * NOTIF_SOUNDS.length)]);
+  playSound(sound || NOTIF_SOUNDS[Math.floor(Math.random() * NOTIF_SOUNDS.length)]);
   setTimeout(() => { cv.classList.remove('shown'); setTimeout(() => cv.remove(), 400); }, duration);
 }
 // Rappel 5 minutes avant chaque bloc du Timeblock du jour (une seule fois par bloc, même après rechargement).
@@ -4643,7 +4644,7 @@ function buildEtapePages() {
               const next = [[-1, 0], [1, 0], [0, 1]].map(([dx, dy]) => progAt(e.x + dx, e.y + dy)).find(q => q && !etapeDone(q));
               pg.selected = (next || e).id;
               saveProg();
-              showToast({ title: 'Étape validée', text: fitText(e.titre, 150) });
+              showToast({ title: 'Étape validée', text: fitText(e.titre, 150), sound: doneSound });
               location.hash = 'progression';
             } };
     if (!prog.etapes.some(q => q.parent === e.id))   // supprimer : seulement si aucune étape n'en part
