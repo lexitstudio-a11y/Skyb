@@ -1231,18 +1231,26 @@ function addArbreValue(a, n) {
     numeric: 'decimal',
     transform: t => t.replace(/[^0-9,.-]/g, ''),
     validate: t => !t.trim() || !isNaN(parseFloat(t.replace(',', '.'))),
-    onDone: t => {
-      if (!t.trim()) return;
-      a.valeur = parseFloat(t.replace(',', '.'));
-      // une seule valeur par jour dans l'historique : la dernière entrée de la journée remplace les précédentes
-      const today = formatDate(new Date());
-      a.historique = (a.historique || []).filter(h => h.date !== today);
-      a.historique.push({ date: today, valeur: a.valeur });
-      a.progression = computeProgress(a);
-      saveArbres();
-      refreshArbres();
-    },
+    onDone: t => { if (t.trim()) setArbreValue(a, parseFloat(t.replace(',', '.'))); },
   });
+}
+// Nouvelle valeur actuelle d'un arbre ; une seule valeur par jour dans l'historique (la dernière de la journée remplace
+// les précédentes).
+function setArbreValue(a, v) {
+  a.valeur = Math.round(v * 100) / 100;
+  const today = formatDate(new Date());
+  a.historique = (a.historique || []).filter(h => h.date !== today);
+  a.historique.push({ date: today, valeur: a.valeur });
+  a.progression = computeProgress(a);
+  saveArbres();
+  refreshArbres();
+}
+// Blocs rouge / vert / jaune de la page d'un arbre : -1 / +1 / +5 vers la cible (progression croissante) ; pour une
+// progression décroissante, le vert et le jaune font baisser la valeur et le rouge la fait monter.
+function stepArbreValue(a, n, steps) {
+  if (a.depart == null || a.cible == null) { location.hash = `arbre-${n}-type`; return; }
+  const sign = a.sens === 'decroissant' ? -1 : 1;
+  setArbreValue(a, (a.valeur ?? a.depart) + steps * sign);
 }
 // État d'un niveau (1 à 5) : terminé si la progression a dépassé sa fin, en cours si elle est dedans.
 function levelState(a, level) { return levelAt(arbreProgress(a), level); }
@@ -1479,6 +1487,15 @@ function buildArbrePages(a, n) {
         `§7Valeur actuelle : ${fmtNumber(a.valeur, a.unite)}`, `§7Progression : ${pctText(a, arbreProgress(a))}`, '',
         a.depart != null && a.cible != null ? '§eClique pour ajouter une valeur !' : '§eClique pour configurer !'],
     },
+    // au-dessus du papier (une case vide entre) : rouge (recule d'1), vert (avance d'1), jaune (avance de 5)
+    ...Object.fromEntries([['3,8', 'bloc_rouge', -1, '§c'], ['2,8', 'bloc_vert', 1, '§a'], ['1,8', 'bloc_jaune', 5, '§e']].map(([key, image, steps, c]) => [key, {
+      image, action: () => stepArbreValue(a, n, steps),
+      tooltip: () => {
+        const d = steps * (a.sens === 'decroissant' ? -1 : 1);
+        return [`${c}${d > 0 ? '+' : ''}${d}${a.unite ? ' ' + a.unite : ''}`, `§7Valeur actuelle : ${fmtNumber(a.valeur ?? a.depart, a.unite)}`,
+          `§7Après : ${fmtNumber((a.valeur ?? a.depart ?? 0) + d, a.unite)}`, '', '§eClique pour changer la valeur !'];
+      },
+    }])),
     '5,8': {
       item: 'paper', open: `arbre-${n}-historique`,
       tooltip: () => ['§aHistorique', `§7${(a.historique || []).length} valeur${(a.historique || []).length > 1 ? 's' : ''} enregistrée${(a.historique || []).length > 1 ? 's' : ''}`, '', '§eClique pour voir !'],
@@ -1680,7 +1697,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'bloc_rouge', 'bloc_vert', 'bloc_jaune', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -1986,7 +2003,9 @@ const MOBILE_PLACES = {
   // Profil Joueur (comme la liste des arbres) : tête en haut à droite, puis une ligne sur deux :
   // livre (serments), bûche (arbres), papier (liste de choses à faire), montre (agenda), chacun avec son titre
   main: { '1,4': '0,4', '2,4': '1,0', '2,1': '3,0', '3,1': '5,0', '2,5': '7,0', '2,6': '9,0' },   // 5 lignes (rangées 1 à 9)
-  arbre: { '4,0': '9,0' },   // page d'un arbre : bloc d'améthyste (épingler) juste au-dessus de l'orbe d'expérience
+  // page d'un arbre : bloc d'améthyste (épingler) juste au-dessus de l'orbe d'expérience ; à droite, une case vide
+  // au-dessus du papier puis les blocs rouge, vert et jaune
+  arbre: { '4,0': '9,0', '3,8': '8,4', '2,8': '7,4', '1,8': '6,4' },
   etape: { '4,0': '9,0', '4,8': '9,4' },   // page d'une étape : livre au-dessus de l'étiquette, fil au-dessus de la bûche
 };
 // Pages construites pour chaque arbre (arbre-1, arbre-2…) : mêmes places à la main pour toutes.
@@ -2038,7 +2057,7 @@ const deskCache = { minecraft: new WeakMap(), test: new WeakMap() };
 const DESK_PLACES = {
   // page d'une action : terminée / supprimer collés à gauche, les 3 priorités collées à droite
   action: { '4,1': '4,1', '4,6': '4,8', '4,7': '4,9', '4,8': '4,10' },
-  arbre: { '4,0': '5,0' },   // bloc d'améthyste (épingler) juste au-dessus de l'orbe d'expérience
+  arbre: { '4,0': '5,0', '3,8': '4,10', '2,8': '3,10', '1,8': '2,10' },   // améthyste au-dessus de l'orbe ; rouge, vert, jaune au-dessus du papier (une case vide entre)
   etape: { '4,0': '5,0', '4,8': '5,10' },   // page d'une étape : livre et fil juste au-dessus des coins du bas
 };
 function deskSlots(id, slots) {
