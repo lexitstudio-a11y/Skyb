@@ -4696,27 +4696,40 @@ function shiftEtapes(path) {
 const swapEtapes = (moved, target) => shiftEtapes([target, moved]);
 // Insertion : l'étape déplacée prend la place de la cible, qui descend avec les suivantes jusqu'à l'ancienne place de
 // l'étape déplacée (chemin entre les deux dans l'arbre).
-// Étape sans suite (cas courant, ex. une étape « sur le côté ») : vraie insertion. Elle quitte sa place, la cible et
-// toutes les étapes qui en partent descendent d'une rangée (numéros + 1), et elle prend la place de la cible.
-// Sinon (ou si la descente heurte une autre étape) : décalage des contenus le long du chemin entre les deux.
+// Insertion (lâchée juste au-dessus d'une étape) : l'étape déplacée quitte sa place et prend celle de la cible ; la cible
+// et toutes les étapes qui en partent descendent d'une rangée (numéros + 1). Si l'étape déplacée avait une suite, celle-ci
+// remonte à sa place. Travail sur une copie : en cas d'impossibilité (plusieurs branches sous l'étape déplacée,
+// chevauchement), décalage des contenus le long du chemin entre les deux, comme avant.
 function insertEtape(moved, target) {
-  const byId = id => prog.etapes.find(q => q.id === id);
-  if (!prog.etapes.some(q => q.parent === moved.id)) {
-    const rest = prog.etapes.filter(q => q !== moved);
-    const sub = [], walk = q => { sub.push(q); rest.filter(c => c.parent === q.id).forEach(walk); };
-    walk(target);
-    const blocked = sub.some(q => rest.some(o => !sub.includes(o) && o.x === q.x && o.y === q.y + 1));
-    if (!blocked) {
-      const etape = { id: newId(), x: target.x, y: target.y, niveau: target.niveau, parent: target.parent };
-      for (const f of ETAPE_FIELDS) if (moved[f] !== undefined) etape[f] = moved[f];
-      for (const q of sub) { q.y++; q.niveau++; }
-      target.parent = etape.id;
-      prog.etapes = [...rest, etape];
-      pg.selected = etape.id;
-      saveProg();
-      return;
+  const tryInsert = () => {
+    const list = JSON.parse(JSON.stringify(prog.etapes)), byId = id => list.find(q => q.id === id);
+    const sub = root => { const out = [], walk = q => { out.push(q); list.filter(c => c.parent === q.id).forEach(walk); }; walk(root); return out; };
+    const m = byId(moved.id), kids = list.filter(c => c.parent === m.id);
+    if (kids.length > 1) return null;
+    list.splice(list.indexOf(m), 1);
+    if (kids.length) {   // sa suite prend sa place (déplacée d'un bloc)
+      const k = kids[0], dx = m.x - k.x, dy = m.y - k.y, dn = m.niveau - k.niveau;
+      k.parent = m.parent;
+      for (const q of sub(k)) { q.x += dx; q.y += dy; q.niveau += dn; }
     }
-  }
+    const t = byId(target.id);
+    if (!t) return null;
+    const tsub = sub(t);
+    const blocked = tsub.some(q => list.some(o => !tsub.includes(o) && o.x === q.x && o.y === q.y + 1));
+    // la cible et sa suite descendent d'une rangée ; si elles heurtent d'autres étapes, toutes les rangées en dessous descendent
+    const down = blocked ? list.filter(q => q.y >= t.y) : tsub;
+    const etape = { id: newId(), x: t.x, y: t.y, niveau: t.niveau, parent: t.parent };
+    for (const f of ETAPE_FIELDS) if (m[f] !== undefined) etape[f] = m[f];
+    for (const q of down) { q.y++; q.niveau++; }
+    t.parent = etape.id;
+    list.push(etape);
+    const keys = new Set(list.map(q => q.x + ',' + q.y));
+    if (keys.size !== list.length) return null;   // deux étapes au même endroit : on renonce
+    return { list, id: etape.id };
+  };
+  const done = tryInsert();
+  if (done) { prog.etapes = done.list; pg.selected = done.id; saveProg(); return; }
+  const byId = id => prog.etapes.find(q => q.id === id);
   const up = e => { const out = []; for (let q = e; q; q = byId(q.parent)) out.push(q); return out; };
   const fromTarget = up(target), fromMoved = up(moved);
   const common = fromTarget.find(q => fromMoved.includes(q));
