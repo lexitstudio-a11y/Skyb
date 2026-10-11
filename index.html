@@ -4634,7 +4634,7 @@ function linkEtapeArbre(e) {
 // - suivie d'une simple chaîne (une seule étape après chacune) : les étapes suivantes remontent d'un cran ;
 // - avec plusieurs branches après elle : elle est supprimée avec toutes les étapes qui en partent (prévenu avant).
 // Description d'une étape dans un overlay : une ligne vide avant, et entre deux lignes (chaque ligne = un point du livre)
-const stepDesc = d => descLines(d).flatMap(l => ['', l]);
+const stepDesc = d => { const l = descLines(d); return l.length ? ['', ...l] : []; };   // les lignes vides tapées sont gardées telles quelles
 function deleteEtape(e) {
   const kids = q => prog.etapes.filter(c => c.parent === q.id);
   const chain = [e];
