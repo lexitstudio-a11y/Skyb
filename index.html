@@ -1195,6 +1195,8 @@ Object.entries(PAGES).forEach(([id, page]) => { if (!/^(todo|agenda|arbre)/.test
 // l'icône de l'arbre = niveau 1, puis vitres 2 à 5 (vert = terminé, orange = en cours, rouge = pas commencé).
 const ARBRES_KEY = 'arbres';
 const arbres = (() => { try { return JSON.parse(localStorage.getItem(ARBRES_KEY)) || []; } catch { return []; } })();
+// anciens historiques : plusieurs valeurs le même jour → seule la dernière de chaque journée est gardée
+for (const a of arbres) if (a.historique) a.historique = a.historique.filter((h, i, l) => !l.slice(i + 1).some(o => o.date === h.date));
 // Téléphone (5 × 9) : 9 arbres par page, rangées 2 / 4 / 6, colonnes 0 / 2 / 4 (cases déjà mobiles, préfixe « m »).
 // Téléphone : une seule page qui défile (voir arbresScrollSlots), donc tous les arbres sur la page 1.
 const ARBRE_CELLS = ['1,2', '1,4', '1,6', '3,2', '3,4', '3,6'];
@@ -1232,7 +1234,10 @@ function addArbreValue(a, n) {
     onDone: t => {
       if (!t.trim()) return;
       a.valeur = parseFloat(t.replace(',', '.'));
-      (a.historique ||= []).push({ date: formatDate(new Date()), valeur: a.valeur });
+      // une seule valeur par jour dans l'historique : la dernière entrée de la journée remplace les précédentes
+      const today = formatDate(new Date());
+      a.historique = (a.historique || []).filter(h => h.date !== today);
+      a.historique.push({ date: today, valeur: a.valeur });
       a.progression = computeProgress(a);
       saveArbres();
       refreshArbres();
