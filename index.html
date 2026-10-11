@@ -4598,7 +4598,7 @@ function createStep(spot) {
       openSign({
         book: true, title: "Description de l'étape",
         lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: '',
-        onDone: desc => add(desc.split('\n').filter(l => l.trim()).join('\n')),
+        onDone: desc => add(cleanDesc(desc)),
         onCancel: () => add(''),
       });
     },
@@ -4614,10 +4614,12 @@ function editEtapeTitle(e) {
     onDone: text => { e.titre = text.split('\n').map(l => l.trim()).filter(Boolean).join(' ') || e.titre; saveProg(); },
   });
 }
+// Garde les lignes vides tapées au milieu, retire seulement celles du début et de la fin.
+const cleanDesc = text => text.replace(/^(\s*\n)+/, '').replace(/\s+$/, '');
 function editEtapeDescription(e) {
   openSign({
     book: true, title: e.titre, lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: e.description || '',
-    onDone: desc => { e.description = desc.split('\n').filter(l => l.trim()).join('\n'); saveProg(); },
+    onDone: desc => { e.description = cleanDesc(desc); saveProg(); },
   });
 }
 function linkEtapeArbre(e) {
