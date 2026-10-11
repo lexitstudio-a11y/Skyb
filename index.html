@@ -4696,8 +4696,27 @@ function shiftEtapes(path) {
 const swapEtapes = (moved, target) => shiftEtapes([target, moved]);
 // Insertion : l'étape déplacée prend la place de la cible, qui descend avec les suivantes jusqu'à l'ancienne place de
 // l'étape déplacée (chemin entre les deux dans l'arbre).
+// Étape sans suite (cas courant, ex. une étape « sur le côté ») : vraie insertion. Elle quitte sa place, la cible et
+// toutes les étapes qui en partent descendent d'une rangée (numéros + 1), et elle prend la place de la cible.
+// Sinon (ou si la descente heurte une autre étape) : décalage des contenus le long du chemin entre les deux.
 function insertEtape(moved, target) {
   const byId = id => prog.etapes.find(q => q.id === id);
+  if (!prog.etapes.some(q => q.parent === moved.id)) {
+    const rest = prog.etapes.filter(q => q !== moved);
+    const sub = [], walk = q => { sub.push(q); rest.filter(c => c.parent === q.id).forEach(walk); };
+    walk(target);
+    const blocked = sub.some(q => rest.some(o => !sub.includes(o) && o.x === q.x && o.y === q.y + 1));
+    if (!blocked) {
+      const etape = { id: newId(), x: target.x, y: target.y, niveau: target.niveau, parent: target.parent };
+      for (const f of ETAPE_FIELDS) if (moved[f] !== undefined) etape[f] = moved[f];
+      for (const q of sub) { q.y++; q.niveau++; }
+      target.parent = etape.id;
+      prog.etapes = [...rest, etape];
+      pg.selected = etape.id;
+      saveProg();
+      return;
+    }
+  }
   const up = e => { const out = []; for (let q = e; q; q = byId(q.parent)) out.push(q); return out; };
   const fromTarget = up(target), fromMoved = up(moved);
   const common = fromTarget.find(q => fromMoved.includes(q));
