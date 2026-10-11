@@ -1380,7 +1380,12 @@ function arbreLists() {
   // en haut (à progression égale : l'ordre de création)
   const rank = a => a.epingle ? 0 : arbreProgress(a) >= 100 ? 2 : 1;
   const pinnedFirst = list => [...list].sort((x, y) => rank(x) - rank(y) || arbreProgress(y) - arbreProgress(x));
-  const lists = [{ trees: pinnedFirst(arbres), pageId: arbresPageId, title: PAGE_TITLES.arbres, back: 'main', add: true }];
+  // Racines : seulement les arbres en cours ; les terminés (100 %) ont leur page « Racines terminées »
+  const done = a => arbreProgress(a) >= 100;
+  const lists = [
+    { trees: pinnedFirst(arbres.filter(a => !done(a))), pageId: arbresPageId, title: PAGE_TITLES.arbres, back: 'main', add: true },
+    { trees: pinnedFirst(arbres.filter(done)), pageId: () => 'arbres-termines', title: 'Racines terminées', back: 'arbres' },
+  ];
   for (const groupe of new Set(arbres.map(a => a.groupe).filter(Boolean)))
     lists.push({ trees: pinnedFirst(arbres.filter(a => a.groupe === groupe)), pageId: k => groupPageId(groupe, k), title: groupTitle(groupe), back: groupBack(groupe) });
   return lists;
@@ -1595,6 +1600,10 @@ function arbresScrollPage(list) {
   const pitch = da === 'test' ? 2 : 3;   // D.A test : blocs « succès » plus rapprochés (2 rangées par arbre)
   const slots = { ...(list.nav || navSlots(list.back)) }, mobile = isMobileLayout(), lines = [];
   slots[mobile ? 'v0,2' : 'v0,5'] = { item: 'clock_00', tooltip: () => arbresOverview(list.trees) };
+  if (list.add) {   // en haut à gauche : carte remplie = page des racines terminées
+    const n = arbres.filter(a => arbreProgress(a) >= 100).length;
+    slots['v0,0'] = { image: 'arbre_fini', open: 'arbres-termines', tooltip: ['§aRacines terminées', `§7${n} arbre${n > 1 ? 's' : ''} arrivé${n > 1 ? 's' : ''} à 100 %`, '', '§eClique pour voir !'] };
+  }
   if (list.add) slots[mobile ? 'v0,4' : 'v0,10'] = { image: 'tete_plus_verte', tooltip: ['§aAjouter', '§7Ajoute un arbre de progression.', '', '§eClique pour ajouter !'], action: addArbre };
   let row = 2;
   list.trees.forEach(a => {
@@ -1623,8 +1632,8 @@ function arbresScrollPage(list) {
 function refreshArbres() {
   // les numéros changent après une suppression : on reconstruit toutes les pages des arbres
   for (const id of Object.keys(PAGES)) if (/^arbres?-/.test(id)) delete PAGES[id];
+  arbres.forEach((a, i) => buildArbrePages(a, i + 1));   // une fois par arbre (en cours ou terminé)
   for (const list of arbreLists()) {
-    if (list.add) list.trees.forEach(a => buildArbrePages(a, arbres.indexOf(a) + 1));   // une seule fois par arbre
     if (isMobileLayout() || da === 'test') { PAGES[list.pageId(1)] = arbresScrollPage(list); continue; }   // une page qui défile
     const pages = Math.max(1, Math.ceil(list.trees.length / arbresPerPage()));
     for (let k = 1; k <= pages; k++) {
