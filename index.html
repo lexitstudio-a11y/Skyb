@@ -3540,6 +3540,15 @@ function renderTimeblock() {
 
   drawPanel(ctx, px, py, pw, ph, S);
   drawText(ctx, font, 'Timeblock ' + tb.date, px + 8, py + 6, '#404040', S);
+  // Total discret des blocs « Deep Work » de la journée : en haut à gauche de l'écran (sous le titre si le
+  // panneau prend toute la largeur, comme sur téléphone)
+  const dwMin = tbBlocks().filter(b => b.deepWork).reduce((t, b) => t + b.fin - b.debut, 0);
+  if (dwMin) {
+    const dw = `Deep Work : ${Math.floor(dwMin / 60)}h${dwMin % 60 ? String(dwMin % 60).padStart(2, '0') : ''}`;
+    const tw = textWidth(font, dw);
+    if (px >= tw + 8) drawText(ctx, font, dw, 4, 4, '#8C8C8C', S, true);
+    else drawText(ctx, font, dw, px + 8, py + 16, '#707070', S);
+  }
   // Zone de la journée, creusée comme une case d'inventaire
   const fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
   fr(grid.x - 1, grid.y - 1, grid.w + 2, grid.h + 2, '#FFFFFF');
