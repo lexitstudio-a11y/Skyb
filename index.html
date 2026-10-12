@@ -3483,10 +3483,13 @@ function drawPanel(ctx, x, y, w, h, S) {
 }
 // Couleurs des blocs : palette fournie (24 teintes), dessinées en relief façon Minecraft.
 const TB_COLORS = [
-  '#9F2757', '#C73361', '#D88277', '#C3291C', '#E25D33', '#DF742D', '#E39835', '#EEC14C',
+  '#9F2757', '#C73361', '#D88277', '#E0483A', '#E25D33', '#DF742D', '#E39835', '#EEC14C',
   '#DFC55A', '#C2CA51', '#88B253', '#397E49', '#5EB47E', '#429488', '#4599DF', '#5384ED',
   '#7C86C6', '#4351AF', '#B09ED7', '#976CAB', '#832DA4', '#74574A', '#616161', '#A59C90',
 ];
+// Rouge réservé aux blocs « Deep Work » (hors nuancier) : un bloc coché prend toujours cette couleur.
+const TB_DW_COLOR = '#C3291C';
+const blockColor = (b, i) => b.deepWork ? TB_DW_COLOR : TB_COLORS[(b.couleur ?? i) % TB_COLORS.length];
 // Assombrit (k < 1) ou éclaircit (k > 1) une couleur #rrggbb.
 function shade(hex, k) {
   const n = parseInt(hex.slice(1), 16);
@@ -3594,14 +3597,13 @@ function renderTimeblock() {
     }
     ctx.restore();
   };
-  const colorOf = (b, i) => TB_COLORS[(b.couleur ?? i) % TB_COLORS.length];
-  tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, colorOf(b, i), blockArbre(b) && b, b.prog && treeById(b.prog) && b); });
+  tbBlocks().forEach((b, i) => { if (!(tb.drag && tb.drag.block === b && tb.drag.moved)) drawBlock(b.debut, b.fin, b.titre, blockColor(b, i), blockArbre(b) && b, b.prog && treeById(b.prog) && b); });
   const d = tb.drag;
   if (d && d.mode === 'place' && d.inGrid) drawBlock(d.debut, d.fin, tb.arbre.titre, TB_COLORS[tb.arbre.couleur], true);
   if (d && d.mode === 'create' && d.color == null) d.color = randomColor();
   if (d && d.moved && d.mode !== 'place') {   // bloc en cours de création / déplacement : on affiche ses horaires
     const [a, z] = d.mode === 'create' ? [Math.min(d.start, d.end), Math.max(d.start, d.end)] : [d.debut, d.fin];
-    const color = d.mode === 'create' ? TB_COLORS[d.color] : colorOf(d.block, tbBlocks().indexOf(d.block));
+    const color = d.mode === 'create' ? TB_COLORS[d.color] : blockColor(d.block, tbBlocks().indexOf(d.block));
     drawBlock(a, z, d.mode === 'create' ? 'Nouveau bloc' : d.block.titre, color, d.mode !== 'create' && !!blockArbre(d.block));
   }
   if (tb.date === formatDate(new Date())) {   // heure actuelle
@@ -3711,7 +3713,7 @@ async function drawTimeblockPhoto() {
   for (let m = start; m <= end; m += 60) drawText(ctx, font, fmtMin(m % 1440), px + 7, Math.round(yOf(m)) - 3, '#404040', S);
   blocks.forEach((b, i) => {
     const y1 = Math.round(yOf(b.debut)), h = Math.round(yOf(b.fin)) - y1;
-    drawColorBlock(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, TB_COLORS[(b.couleur ?? i) % TB_COLORS.length], S);
+    drawColorBlock(ctx, grid.x + 2, y1 + 1, grid.w - 4, h - 1, blockColor(b, i), S);
     ctx.save();
     ctx.beginPath();
     ctx.rect((grid.x + 3) * S, (y1 + 2) * S, (grid.w - 6) * S, (h - 3) * S);
@@ -3953,7 +3955,7 @@ function blockMenu(block) {
     noLabel: 'Renommer', yesLabel: 'Retour',
     colors: {
       list: TB_COLORS,
-      current: () => (block.couleur ?? (timeblocks[tb.date] || []).indexOf(block)) % TB_COLORS.length,
+      current: () => block.deepWork ? -1 : (block.couleur ?? (timeblocks[tb.date] || []).indexOf(block)) % TB_COLORS.length,   // Deep Work : rouge réservé, aucune case
       onPick: i => {
         block.couleur = i;
         saveTimeblocks();
@@ -4048,7 +4050,7 @@ function prepareTimer(block) {
     document.body.append(video);
   }
   const list = timeblocks[tb.date] || [];
-  const color = TB_COLORS[(block.couleur ?? list.indexOf(block)) % TB_COLORS.length];
+  const color = blockColor(block, list.indexOf(block));
   Object.assign(timer, { next: { block, color, date: tb.date } });
   if (!timer.block) {   // aucun timer ouvert : on prépare l'image de celui-ci
     Object.assign(timer, timer.next);
