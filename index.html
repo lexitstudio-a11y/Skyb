@@ -3295,7 +3295,7 @@ function renderConfirm() {
   const question = fit(dialog.cfg.question), lines = (dialog.cfg.detail || []).flatMap(l => l ? fit(l) : ['']);
   // Hauteur totale (question, détails, nuancier, boutons) pour centrer le tout verticalement
   const total = 6 + question.length * 10 + lines.length * 10 + (dialog.cfg.colors ? 36 : 0) + 14 + 20
-    + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
+    + (dialog.cfg.check ? 19 : 0) + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
   const bw0 = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2));
   // libellés trop larges pour deux boutons côte à côte (téléphone) : Non puis Oui, l'un sous l'autre
   const stacked = !dialog.cfg.choicesFirst && Math.max(textWidth(font, dialog.cfg.noLabel || 'Non'), textWidth(font, dialog.cfg.yesLabel || 'Oui')) > bw0 - 6;
@@ -3332,6 +3332,30 @@ function renderConfirm() {
     });
     y += 2 * (size + gap);
   }
+  // Case à cocher sous le nuancier (cfg.check = { label, checked(), onToggle() }) : case + libellé, centrés.
+  let check = null;
+  if (dialog.cfg.check) {
+    const box = 11, label = dialog.cfg.check.label, w = box + 4 + textWidth(font, label);
+    const x = Math.floor(W / 2 - w / 2), cy = y + 8;
+    check = [x, cy, w, box];
+    const hov = dialog.hover === 'check';
+    ctx.fillStyle = hov ? '#FFFFFF' : '#000000';
+    ctx.fillRect(x * S, cy * S, box * S, box * S);
+    ctx.fillStyle = '#8B8B8B';
+    ctx.fillRect((x + 1) * S, (cy + 1) * S, (box - 2) * S, (box - 2) * S);
+    ctx.fillStyle = '#373737';   // creux façon emplacement Minecraft : ombre en haut à gauche
+    ctx.fillRect((x + 1) * S, (cy + 1) * S, (box - 2) * S, S);
+    ctx.fillRect((x + 1) * S, (cy + 1) * S, S, (box - 2) * S);
+    if (dialog.cfg.check.checked()) {   // coche blanche pixelisée, avec ombre
+      const px = [[0, 4], [1, 5], [2, 6], [3, 5], [4, 4], [5, 3], [6, 2], [6, 1]];
+      for (const [dx, dy] of px) {
+        ctx.fillStyle = '#3F3F3F'; ctx.fillRect((x + 2 + dx + 1) * S, (cy + 1 + dy + 1) * S, S, S);
+        ctx.fillStyle = '#FFFFFF'; ctx.fillRect((x + 2 + dx) * S, (cy + 1 + dy) * S, S, S);
+      }
+    }
+    drawText(ctx, font, label, x + box + 4, cy + 2, hov ? '#FFFFA0' : '#FFFFFF', S, true);
+    y = cy + box;
+  }
   let bw = bw0, by = y + 14, no, yes;
   if (dialog.cfg.choicesFirst) {   // les choix d'abord (pleine largeur), puis un seul bouton « Non » en bas
     const full = Math.min(Math.floor((W - 20) / 2), Math.max(bw, 90));
@@ -3344,7 +3368,7 @@ function renderConfirm() {
     if (r.prio) drawButton(ctx, ...r.prio.slice(0, 3), dialog.cfg.priorityLabel, dialog.hover === 'prio', S);
     if (r.del) drawButton(ctx, ...r.del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
     drawButton(ctx, ...no.slice(0, 3), dialog.cfg.noLabel || 'Non', dialog.hover === 'no', S);
-    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb, tree };
+    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb, tree, check };
     return;
   }
   if (stacked) {
@@ -3368,7 +3392,7 @@ function renderConfirm() {
   if (edit) drawButton(ctx, ...edit.slice(0, 3), dialog.cfg.editLabel || 'Modifier le titre', dialog.hover === 'edit', S);
   if (prio) drawButton(ctx, ...prio.slice(0, 3), dialog.cfg.priorityLabel || 'Priorité', dialog.hover === 'prio', S);
   if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
-  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb, tree };
+  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb, tree, check };
 }
 function openConfirm(cfg) {
   dialog.cfg = cfg;
@@ -3385,16 +3409,17 @@ function closeConfirm() {
   renderGui();
 }
 dialogCanvas.addEventListener('mousemove', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb, tree } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree, check } = dialog.layout;
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
-  const hover = orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
+  const hover = check && inRect(ev, check, S) ? 'check' : orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
     : prio && inRect(ev, prio, S) ? 'prio' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
 });
 dialogCanvas.addEventListener('click', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb, tree } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree, check } = dialog.layout;
   const cfg = dialog.cfg;
+  if (check && inRect(ev, check, S)) { playClick(); cfg.check.onToggle(); renderConfirm(); return; }   // la fenêtre reste ouverte
   if (orb && inRect(ev, orb, S)) { playClick(); closeConfirm(); cfg.colors.onOrb(); return; }
   if (tree && inRect(ev, tree, S)) { playClick(); closeConfirm(); cfg.colors.onTree(); return; }
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
@@ -3926,6 +3951,11 @@ function blockMenu(block) {
       },
       onOrb: () => pickArbreForBlock(block),   // orbe d'expérience : relier le bloc à un arbre de progression
       onTree: () => pickProgTreeForBlock(block),   // pousse : relier le bloc à un Arbre de progression (plan en étapes)
+    },
+    check: {   // bloc de Deep Work
+      label: 'Deep Work ?',
+      checked: () => !!block.deepWork,
+      onToggle: () => { if (block.deepWork) delete block.deepWork; else block.deepWork = true; saveTimeblocks(); },
     },
     onNo: () => editBlockTitle(block, false),
     onYes: showTimeblock,
