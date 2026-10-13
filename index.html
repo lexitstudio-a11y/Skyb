@@ -3657,9 +3657,12 @@ function exportTimeblockIcs() {
   const at = min => new Date(+y, m - 1, +d, 0, min).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const esc = t => String(t || 'Bloc').replace(/[\\;,]/g, c => '\\' + c).replace(/\n/g, '\\n');
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const seq = Math.floor(Date.now() / 60000) - 29000000;   // minutes depuis ~2025 : augmente à chaque export
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//SkyBlock Menu//Timeblock//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
   blocks.forEach((b, i) => lines.push(
-    'BEGIN:VEVENT', `UID:skyblock-${day}-${b.debut}-${i}@skyblock-menu`, `DTSTAMP:${stamp}`,
+    // SEQUENCE / LAST-MODIFIED croissants : un nouvel export remplace bien l'ancien événement (même UID) dans les
+    // agendas synchronisés (iCloud, Google → Notion Calendar) au lieu d'être ignoré
+    'BEGIN:VEVENT', `UID:skyblock-${day}-${b.debut}-${i}@skyblock-menu`, `DTSTAMP:${stamp}`, `LAST-MODIFIED:${stamp}`, `SEQUENCE:${seq}`,
     `DTSTART:${at(b.debut)}`, `DTEND:${at(b.fin)}`, `SUMMARY:${esc(b.titre)}`, 'END:VEVENT'));
   lines.push('END:VCALENDAR');
   const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
