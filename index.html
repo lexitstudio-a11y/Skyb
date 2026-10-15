@@ -705,7 +705,20 @@ function saveAgendas() {
 }
 const tomorrow = () => formatDate(new Date(Date.now() + 864e5));
 function splitAgendas() {
-  const sorted = [...agendas].sort((a, b) => toDate(b.date) - toDate(a.date));   // le plus récent d'abord
+  const real = [...agendas].sort((a, b) => toDate(b.date) - toDate(a.date));   // le plus récent d'abord
+  // « Journée Fantôme » : un jour sans agenda entre deux journées écrites (ex. agendas le 12 et le 14 → fantôme le 13).
+  // Pas enregistrée : recalculée à chaque affichage, et elle disparaît dès que l'agenda de ce jour est écrit.
+  const sorted = [];
+  real.forEach((a, i) => {
+    sorted.push(a);
+    const next = real[i + 1];
+    if (!next) return;
+    for (let d = new Date(toDate(a.date).getTime()); ; ) {
+      d.setDate(d.getDate() - 1);
+      if (d <= toDate(next.date)) break;
+      sorted.push({ date: formatDate(d), texte: '', ghost: true });
+    }
+  });
   const limit = new Date();
   limit.setHours(0, 0, 0, 0);
   limit.setDate(limit.getDate() - 7);
@@ -714,6 +727,10 @@ function splitAgendas() {
 }
 // Page principale : papier ; page « Autres Journées » : carte vide.
 function agendaSlot(agenda, n, image) {
+  if (agenda.ghost) return {
+    image, count: n, action: () => editAgenda(agenda.date),
+    tooltip: ['§7Journée Fantôme', `§8${agenda.date}`, '§7Aucun agenda écrit ce jour-là.', '', '§eClique pour en écrire un !'],
+  };
   const lines = agenda.texte.split('\n').map(l => l.trim()).filter(Boolean);
   return {
     image, count: n,
@@ -733,6 +750,7 @@ const BILANS = {
   tres_bonne: { label: '§eTrès bonne journée', image: 'journee/jaune', question: "Les résultats d'une journée idéale" },
 };
 function bilanSlot(agenda, n) {
+  if (agenda.ghost) return { image: 'journee/fantome', count: n, tooltip: ['§7Journée Fantôme', `§8${agenda.date}`, '§7Pas de bilan sans agenda.'] };
   const b = agenda.bilan && BILANS[agenda.bilan.note];
   return {
     image: b ? b.image : 'journee/blanche', count: n,
@@ -780,9 +798,9 @@ function agendaGrid(list, slots, numbered) {
       return {
         icons: [[0, cell], [1, bilanSlot(a, n)]], data: a, refresh: refreshAgenda,
         span: {
-          inset: 2, label: 'Agenda ' + a.date, color: BILAN_COLORS[a.bilan && a.bilan.note] || '#616161',
-          desc: lines[0] || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
-          descFull: () => [...(lines.length ? lines.map(l => '- ' + l) : ['Aucun objectif.']),
+          inset: 2, label: a.ghost ? 'Journée Fantôme' : 'Agenda ' + a.date, color: BILAN_COLORS[a.bilan && a.bilan.note] || (a.ghost ? '#3A3A3A' : '#616161'),
+          desc: a.ghost ? a.date : lines[0] || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
+          descFull: () => a.ghost ? [a.date, '§7Aucun agenda écrit ce jour-là.'] : [...(lines.length ? lines.map(l => '- ' + l) : ['Aucun objectif.']),
             ...(a.bilan && BILANS[a.bilan.note] ? ['', BILANS[a.bilan.note].label, ...(a.bilan.texte ? a.bilan.texte.split('\n').map(l => '§7' + l) : [])] : [])],
         },
       };
@@ -1706,7 +1724,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'bloc_rouge', 'bloc_vert', 'bloc_jaune', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune', 'fantome'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'bloc_rouge', 'bloc_vert', 'bloc_jaune', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
