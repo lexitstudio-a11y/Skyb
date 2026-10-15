@@ -573,6 +573,8 @@ function todoSlots() {
   return todoGrid(newestFirst, {
     '5,0': { image: 'bouton_bois', tooltip: ['§aActions terminées', `§7Les actions terminées depuis moins`, `§7de ${TODO_KEEP_DAYS} jours.`, '', '§eClique pour voir !'], open: 'todo-finies' },
     '5,8': { image: 'tete_plus', tooltip: ['§aAjouter', '§7Ajoute une action à faire.', '', '§eClique pour ajouter !'], action: addTodo },
+    // téléphone (pas de page Profil) : la Liste d'Habitude en haut au centre de la liste de choses à faire
+    ...(isMobileLayout() ? { 'v0,2': { image: 'elytres', open: 'habitudes', tooltip: ["§aListe d'Habitude", '§7Les habitudes que je veux garder.', '', '§eClique pour voir !'] } } : {}),
     ...navSlots('main'),
   }, newestFirst.map(t => active.indexOf(t) + 1));
 }
@@ -691,6 +693,94 @@ function todoPage(todo) {
 function openTodoPage(todo) {
   PAGES.action = todoPage(todo);
   location.hash = 'action';
+}
+
+// --- Liste d'Habitude ---
+// Même style que la « Liste de choses à faire » : une habitude par ligne (image, titre, description), la plus récente
+// en haut ; tête « + » pour en ajouter une (titre sur un panneau, description dans un livre) ; clic = sa page
+// (modifier / supprimer). Chaque habitude : { titre, description, date }.
+const HABIT_KEY = 'habitudes';
+const habits = (() => { try { return JSON.parse(localStorage.getItem(HABIT_KEY)) || []; } catch { return []; } })();
+function saveHabits() {
+  try { localStorage.setItem(HABIT_KEY, JSON.stringify(habits)); } catch {}
+  cloudChanged();
+}
+function habitCell(h, n) {
+  return {
+    image: todoImage(n), count: n,
+    tooltip: () => ['§a' + (h.titre || 'Habitude'), ...(h.description ? wrapText(h.description, 180).map(l => '§7' + l) : []), '', `§8Ajoutée le ${h.date}`, '', '§eClique pour ouvrir !'],
+    action: () => openHabitPage(h),
+  };
+}
+function habitSlots() {
+  const list = [...habits].reverse();   // la plus récente d'abord (le numéro reste celui de l'ordre d'ajout)
+  const slots = {
+    '5,8': { image: 'tete_plus', tooltip: ['§aAjouter', '§7Ajoute une habitude.', '', '§eClique pour ajouter !'], action: addHabit },
+    ...navSlots(isMobileLayout() ? 'todo' : 'main'),   // téléphone : on y entre depuis la liste de choses à faire
+  };
+  return setRows(slots, placeLines(slots, isMobileLayout() ? 1 : 0, list.map(h => {
+    const cell = habitCell(h, habits.indexOf(h) + 1), firstLine = (h.description || '').split('\n')[0].trim();
+    return {
+      icons: [[0, cell]], data: h, refresh: refreshHabits,
+      span: {
+        label: h.titre || 'Habitude', color: () => TB_COLORS[(habits.indexOf(h) * 7 + 12) % TB_COLORS.length],
+        desc: () => firstLine || `Ajoutée le ${h.date}`,
+        descFull: () => h.description ? h.description.split('\n') : [],
+        tooltip: cell.tooltip, action: cell.action,
+      },
+    };
+  })));
+}
+function refreshHabits() {
+  PAGES.habitudes.slots = habitSlots();
+  if (state.page === 'habitudes') renderGui();
+}
+function editHabitText(h, onSave) {
+  openSign({
+    title: h ? "Modifier le titre de l'habitude" : "Titre de l'habitude",
+    lines: 1, fixed: ['', '^^^^^^^^^^^^', "Titre de l'habitude", ''],
+    initial: h ? h.titre : '',
+    onDone: text => {
+      const titre = text.trim();
+      if (!titre) return;
+      openSign({
+        book: true, noBullets: true, title: titre,
+        lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
+        initial: h ? h.description : '',
+        onDone: desc => onSave(titre, cleanDesc(desc)),
+        onCancel: () => onSave(titre, h ? h.description : ''),   // Échap : garde au moins le titre
+      });
+    },
+  });
+}
+function addHabit() {
+  editHabitText(null, (titre, description) => {
+    habits.push({ titre, description, date: formatDate(new Date()) });
+    saveHabits();
+    refreshHabits();
+  });
+}
+// Page d'une habitude : l'habitude en haut, le name tag pour la modifier, le bloc rouge en bas à gauche pour la supprimer.
+function habitPage(h) {
+  const update = change => { change(); saveHabits(); refreshHabits(); };
+  return {
+    title: fitText(h.titre || 'Habitude', 160),
+    slots: {
+      '1,4': { ...habitCell(h, habits.indexOf(h) + 1), action: null, tooltip: () => habitCell(h, 1).tooltip().slice(0, -2) },
+      '2,4': { item: 'name_tag', tooltip: ['§aModifier', "§7Modifie le titre et la description", "§7de l'habitude.", '', '§eClique pour modifier !'],
+        action: () => editHabitText(h, (titre, description) => { update(() => Object.assign(h, { titre, description })); PAGES.habitude = habitPage(h); location.hash = 'habitude'; renderGui(); }) },
+      '4,0': { image: 'journee/rouge', tooltip: ["§cSupprimer l'habitude ?", "§7L'habitude est retirée de la liste.", '', '§eClique pour supprimer !'],
+        action: () => openConfirm({
+          question: "Supprimer cette habitude ?", detail: [h.titre], noLabel: 'Retour', yesLabel: '§cSupprimer',
+          onYes: () => { update(() => { const i = habits.indexOf(h); if (i >= 0) habits.splice(i, 1); }); location.hash = 'habitudes'; },
+        }) },
+      ...navSlots('habitudes'),
+    },
+  };
+}
+function openHabitPage(h) {
+  PAGES.habitude = habitPage(h);
+  location.hash = 'habitude';
 }
 
 // --- Agenda de la journée ---
@@ -926,7 +1016,7 @@ let da = 'test';
 try { localStorage.setItem(DA_KEY, da); } catch {}
 document.documentElement.dataset.da = da;
 const playJukebox = () => window.open('https://www.youtube.com/watch?v=x3bBQasjbfs', '_blank', 'noopener');
-const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Racines', progression: 'Arbre de progression' };
+const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', habitudes: "Liste d'Habitude", serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Racines', progression: 'Arbre de progression' };
 const PAGES = {
   main: {
     title: PAGE_TITLES.main,
@@ -945,6 +1035,10 @@ const PAGES = {
         ],
       },
       '2,6': { item: 'clock_00', tooltip: ['§aAgenda de la journée', ...LORE], open: 'agenda' },
+      '3,5': {   // sous Liste de choses à faire
+        image: 'elytres', open: 'habitudes',
+        tooltip: () => ["§aListe d'Habitude", '§7Les habitudes que je veux garder.', '', `§7Habitudes : §e${habits.length}`, '', '§eClique pour voir !'],
+      },
       '5,8': { item: 'ender_pearl', tooltip: () => accountTooltip(), action: () => openAccount() },
       '5,0': { image: 'jukebox', tooltip: ['§aJukebox', '§7Lance la musique.', '', '§eClique pour écouter !'], action: playJukebox },
     },
@@ -975,6 +1069,10 @@ const PAGES = {
   'todo-finies': {
     title: PAGE_TITLES['todo-finies'],
     slots: doneTodoSlots(),
+  },
+  habitudes: {
+    title: PAGE_TITLES.habitudes,
+    slots: habitSlots(),   // reconstruit à chaque changement (refreshHabits)
   },
   arbres: { title: PAGE_TITLES.arbres, slots: {} },   // rempli par refreshArbres
   progression: { title: PAGE_TITLES.progression, slots: {} },   // écran à part : voir « Arbre de progression » plus bas
@@ -1724,7 +1822,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune', 'fantome'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'bloc_rouge', 'bloc_vert', 'bloc_jaune', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune', 'fantome'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'bloc_rouge', 'bloc_vert', 'bloc_jaune', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'elytres', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -2043,7 +2141,7 @@ const placesId = id => /^arbre-\d+$/.test(id) ? 'arbre' : /^etape-/.test(id) ? '
 const MOBILE_LABELS = {
   main: {
     '2,4': { color: '#1A2F80', gradient: ['#3456C8', '#0A1650'], text: '#FFFF55' },   // Pilliers Temporels : bleu foncé, texte jaune
-    '2,1': '#397E49', '3,1': '#88B253', '2,5': '#EEC14C', '2,6': '#E25D33',
+    '2,1': '#397E49', '3,1': '#88B253', '2,5': '#EEC14C', '2,6': '#E25D33', '3,5': '#7C86C6',
   },
 };
 const slotDesc = slot => {   // 2e ligne de l'overlay (description), sans ses couleurs
@@ -2057,7 +2155,7 @@ const slotTitle = slot => {
 // D.A test : places et blocs de titre propres à cette D.A (remplacent ceux du dessus pour la page).
 const MOBILE_PLACES_DA2 = {
   // Profil : les 5 lignes ; cadre, tête, jukebox et perle de l'Ender passent dans le menu de la tête (en haut à gauche)
-  main: { '2,4': '1,0', '2,1': '3,0', '3,1': '5,0', '2,5': '7,0', '2,6': '9,0' },
+  main: { '2,4': '1,0', '2,1': '3,0', '3,1': '5,0', '2,5': '7,0', '2,6': '9,0', '3,5': '11,0' },   // (Profil jamais affiché sur téléphone)
   // Les Pilliers Temporels : un serment par ligne (livre à gauche, titre et description à droite), sans les vitres
   serments: { '0,2': '2,0', '0,4': '4,0', '0,6': '6,0' },
 };
@@ -2072,7 +2170,7 @@ const mobileCache = { minecraft: new WeakMap(), test: new WeakMap() };   // une 
 const PC_PLACES_DA2 = {
   // Profil : Pilliers Temporels en haut au centre, puis Arbres / Liste de choses à faire / Agenda côte à côte (blocs étroits)
   // Racines sous Arbre de progression (tout remonte d'une rangée pour leur laisser la place)
-  main: { '1,4': '0,10', '2,4': '0,3', '2,1': { to: '2,0', narrow: true }, '3,1': { to: '4,0', narrow: true }, '2,5': { to: '2,4', narrow: true }, '2,6': { to: '2,8', narrow: true } },
+  main: { '1,4': '0,10', '2,4': '0,3', '2,1': { to: '2,0', narrow: true }, '3,1': { to: '4,0', narrow: true }, '2,5': { to: '2,4', narrow: true }, '2,6': { to: '2,8', narrow: true }, '3,5': { to: '4,4', narrow: true } },
   serments: { '0,2': '1,0', '0,4': '1,6', '0,6': '3,0' },
 };
 // Ordinateur : cases décrites en 9 x 6 replacées dans le coffre de 11 x 7 : bords gauche / droit aux bords
@@ -2888,7 +2986,8 @@ function showPageFromHash() {
   headMenu.open = false;
   hideTooltip();
   if (state.page.startsWith('todo')) refreshTodo();   // retire les actions terminées depuis 30 jours
-  if (state.page.startsWith('agenda')) refreshAgenda();   // les agendas de plus de 7 jours changent de page
+  if (state.page.startsWith('agenda')) refreshAgenda();
+  if (state.page === 'habitudes') refreshHabits();   // les agendas de plus de 7 jours changent de page
   renderGui();
 }
 
@@ -5036,7 +5135,7 @@ addEventListener('keydown', ev => {
 // sa version et on recharge la page. Seule la clé publiable est ici : chaque compte ne voit que sa ligne (RLS).
 const SUPABASE_URL = 'https://hzgtnstmmbmmubvzxhas.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_HhqBiNcmR0j0doZ_esJrbA_znOLL7Nw';
-const SYNC_KEYS = [PROG_KEY, DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
+const SYNC_KEYS = [PROG_KEY, DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, HABIT_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
 let markAppReady;
 const appReady = new Promise(res => { markAppReady = res; });   // textures et police chargées
 
