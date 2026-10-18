@@ -1015,6 +1015,20 @@ const openedDesc = { item: null, has(d) { return this.item === d; } };
 let da = 'test';
 try { localStorage.setItem(DA_KEY, da); } catch {}
 document.documentElement.dataset.da = da;
+// Deuxième D.A (en cours de création) : choix gardé sur l'appareil, <html data-style="1|2"> ; pour l'instant
+// identique à la première, ses différences s'ajoutent en testant isDa2().
+const STYLE_KEY = 'da-style';
+let daStyle = (() => { try { return localStorage.getItem(STYLE_KEY) === '2' ? 2 : 1; } catch { return 1; } })();
+const isDa2 = () => daStyle === 2;
+document.documentElement.dataset.style = daStyle;
+function toggleDaStyle() {
+  daStyle = isDa2() ? 1 : 2;
+  try { localStorage.setItem(STYLE_KEY, String(daStyle)); } catch {}
+  document.documentElement.dataset.style = daStyle;
+  showToast({ title: `D.A ${daStyle}`, text: daStyle === 2 ? 'Deuxième D.A activée' : 'Première D.A activée', duration: 2500 });
+  showPageFromHash();   // redessine la page avec la D.A choisie
+}
+const daStyleTooltip = () => ['§aChanger de D.A', `§7D.A actuelle : §e${daStyle}`, '', `§eClique pour passer à la D.A ${isDa2() ? 1 : 2} !`];
 const playJukebox = () => window.open('https://www.youtube.com/watch?v=x3bBQasjbfs', '_blank', 'noopener');
 const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', habitudes: "Liste d'Habitude", serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Racines', progression: 'Arbre de progression' };
 const PAGES = {
@@ -1041,6 +1055,7 @@ const PAGES = {
       },
       '5,8': { item: 'ender_pearl', tooltip: () => accountTooltip(), action: () => openAccount() },
       '5,0': { image: 'jukebox', tooltip: ['§aJukebox', '§7Lance la musique.', '', '§eClique pour écouter !'], action: playJukebox },
+      '0,0': { image: 'cadre_da', tooltip: daStyleTooltip, action: toggleDaStyle },   // en haut à gauche (téléphone : menu de la tête)
     },
   },
   serments: {
@@ -2368,6 +2383,7 @@ const headMenu = { open: false, hover: -1 };
 const headMenuItems = () => [
   { head: 'steve', label: 'Modifier le profil', action: editProfile },
   { image: 'jukebox', label: 'Jukebox', action: playJukebox },
+  { image: 'cadre_da', label: `Passer à la D.A ${isDa2() ? 1 : 2}`, action: toggleDaStyle },
   { item: 'ender_pearl', label: session ? 'Compte' : 'Connexion', action: openAccount },
 ];
 function headMenuRect(S = state.S * guiRatio()) {
