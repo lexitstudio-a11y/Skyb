@@ -223,6 +223,8 @@
   #da2Home .tbb .h { flex: 0 0 auto; font-size: 12px; opacity: 0.9; }
   #da2Home .tbb.past { opacity: 0.4; }
   #da2Home .tbb.now { box-shadow: 0 0 0 2px var(--vert); }
+  #da2Home .box.tree { padding: 8px; cursor: default; }
+  #miniTree.inHome { position: static; display: block; touch-action: pan-y; }   /* glisser à l'horizontale : l'arbre ; à la verticale : la page */
   #da2Home .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   #da2Home .grid button { margin: 0; width: 100%; min-height: 48px; }
   canvas {
@@ -5113,20 +5115,22 @@ function progTip(hit, ev, force) {
 const miniCanvas = document.getElementById('miniTree');
 const miniTree = { pan: { x: 0, y: 0 }, hover: null, selected: null, view: null, drag: null, layout: null, S: 2, w: 0, h: 0, framed: false };
 const MINI_W = 54;   // largeur du panneau (pixels GUI) : une colonne d'étapes, sans titre
-const miniShown = () => (state.page === 'main' || state.page === 'agenda') && !!prog.etapes.length && !da2HomeActive();   // Profil et Agenda
+const miniShown = () => (state.page === 'main' || state.page === 'agenda') && !!prog.etapes.length;   // Profil et Agenda (D.A 2 : dans l'accueil)
+const miniInHome = () => da2HomeActive() && !!document.getElementById('da2Tree');
 // Ordinateur : colonne à droite (étapes de haut en bas) ; téléphone : bande en haut (étapes de gauche à droite)
 const miniScale = () => isMobileLayout() ? Math.max(1, Math.min(3, Math.floor(viewW() / 180))) : Math.max(1, Math.min(3, Math.floor(viewH() / 300)));
 // Place réservée (px CSS) à droite (ordinateur) ou en haut (téléphone) : le coffre se centre dans le reste de l'écran
-const miniReserve = () => miniShown() && !isMobileLayout() ? Math.round(MINI_W * miniScale() + 16) : 0;
-const miniReserveTop = () => miniShown() && isMobileLayout() ? Math.round(MINI_W * miniScale() + 16) : 0;
+const miniReserve = () => miniShown() && !isMobileLayout() && !da2HomeActive() ? Math.round(MINI_W * miniScale() + 16) : 0;
+const miniReserveTop = () => miniShown() && isMobileLayout() && !da2HomeActive() ? Math.round(MINI_W * miniScale() + 16) : 0;
 function renderMiniTree() {
-  const show = miniShown(), horizontal = isMobileLayout();
-  document.body.style.paddingRight = show && !horizontal ? miniReserve() + 'px' : '';
-  document.body.style.paddingTop = show && horizontal ? miniReserveTop() + 'px' : '';
+  const home = miniInHome(), show = miniShown() && (home || !da2HomeActive()), horizontal = isMobileLayout();
+  document.body.style.paddingRight = show && !horizontal && !home ? miniReserve() + 'px' : '';
+  document.body.style.paddingTop = show && horizontal && !home ? miniReserveTop() + 'px' : '';
   miniCanvas.hidden = !show;
   if (!show) { miniTree.framed = false; return; }
   const S = miniScale();
-  Object.assign(miniTree, { S, horizontal, w: horizontal ? viewW() - 16 : MINI_W * S, h: horizontal ? MINI_W * S : viewH() - 16 });
+  const homeW = home ? Math.floor(document.getElementById('da2Tree').clientWidth - 16) : 0;   // accueil D.A 2 : largeur de la carte
+  Object.assign(miniTree, { S, horizontal, home, w: home ? homeW : horizontal ? viewW() - 16 : MINI_W * S, h: horizontal ? MINI_W * S : viewH() - 16 });
   Object.assign(miniCanvas.style, { width: miniTree.w + 'px', height: miniTree.h + 'px', left: horizontal ? '8px' : '', right: horizontal ? '' : '8px' });
   if (!miniTree.framed) {   // à l'affichage : cadrage sur la prochaine étape à faire, en haut (à gauche sur téléphone)
     const next = nextEtape();
@@ -5165,7 +5169,8 @@ miniCanvas.addEventListener('pointermove', ev => {
   if (d) {
     const dx = ev.clientX - d.x0, dy = ev.clientY - d.y0;
     if (Math.hypot(dx, dy) > 4) d.moved = true;
-    if (d.moved) { miniTree.pan = { x: d.pan0.x + Math.round(dx / miniTree.S), y: d.pan0.y + Math.round(dy / miniTree.S) }; miniTip(null, ev); renderProg(miniTree); }
+    // accueil D.A 2 : défilement horizontal seulement
+    if (d.moved) { miniTree.pan = { x: d.pan0.x + Math.round(dx / miniTree.S), y: miniTree.home ? d.pan0.y : d.pan0.y + Math.round(dy / miniTree.S) }; miniTip(null, ev); renderProg(miniTree); }
     return;
   }
   const hit = miniHit(ev), hover = hit ? hit.etape.id : null;
@@ -5184,10 +5189,12 @@ miniCanvas.addEventListener('pointerup', ev => {
   pg.selected = hit.etape.id;
   location.hash = `etape-${hit.etape.id}`;
 });
+miniCanvas.addEventListener('pointercancel', () => { miniTree.drag = null; });   // la page a pris le geste (défilement vertical)
 miniCanvas.addEventListener('pointerleave', ev => { miniTip(null, ev); if (miniTree.hover) { miniTree.hover = null; renderProg(miniTree); } });
 miniCanvas.addEventListener('wheel', ev => {
+  if (miniTree.home && Math.abs(ev.deltaX) <= Math.abs(ev.deltaY)) return;   // accueil D.A 2 : la molette verticale fait défiler la page
   ev.preventDefault();
-  miniTree.pan = { x: miniTree.pan.x - Math.round(ev.deltaX / miniTree.S / 2), y: miniTree.pan.y - Math.round(ev.deltaY / miniTree.S / 2) };
+  miniTree.pan = { x: miniTree.pan.x - Math.round(ev.deltaX / miniTree.S / 2), y: miniTree.home ? miniTree.pan.y : miniTree.pan.y - Math.round(ev.deltaY / miniTree.S / 2) };
   miniTip(null, ev);
   renderProg(miniTree);
 }, { passive: false });
@@ -5315,7 +5322,6 @@ function renderDa2Home() {
   // Agenda du Jour : les blocs du Timeblock d'aujourd'hui (couleur, titre, horaires ; le bloc en cours mis en avant)
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
   const blocks = (timeblocks[formatDate(now)] || []).map((b, i) => ({ b, color: blockColor(b, i) })).sort((x, y) => x.b.debut - y.b.debut);
-  const next = prog.etapes.length ? nextEtape() : null;
   da2Home.innerHTML = `
     <h1 class="hello mc">Bonjour <span>${escHtml(name)}</span></h1>
     <div class="swipe" id="da2Serments">${[1, 2, 3].map(k => {
@@ -5330,11 +5336,14 @@ function renderDa2Home() {
       ? blocks.map(({ b, color }) => `<div class="tbb${b.debut <= nowMin && nowMin < b.fin ? ' now' : ''}${b.fin <= nowMin ? ' past' : ''}" style="--c:${color}">
           <span class="t mc">${escHtml(b.titre)}</span><span class="h">${fmtMin(b.debut)} - ${fmtMin(b.fin)}${b.deepWork ? ' · DW' : ''}</span></div>`).join('')
       : '<p class="muted">Pas encore de Timeblock aujourd\'hui : touche pour l\'organiser.</p>'}</div></section>
-    <section><h3 class="mc">Arbre</h3><div class="box" data-open="progression">${next
-      ? `<p class="muted">Prochaine étape (${next.niveau})</p><p class="mc">${escHtml(next.titre)}</p>` : '<p class="muted">Ouvrir l\'Arbre de progression</p>'}</div></section>
+    <section><h3 class="mc" data-open="progression">Arbre</h3>${prog.etapes.length
+      ? '<div class="box tree" id="da2Tree"></div>'   // le panneau de l'arbre en cours (même logique que la D.A 1), défilement horizontal
+      : '<div class="box" data-open="progression"><p class="muted">Crée ton Arbre de progression : touche pour commencer.</p></div>'}</section>
     <section><h3 class="mc">Boutons</h3><div class="grid">
       ${[['arbres', 'Racines'], ['serments', 'Serments'], ['todo', 'Choses à faire'], ['habitudes', 'Habitudes'], ['agenda', 'Agendas']].map(([pg, t]) => `<button class="btn mc" data-open="${pg}">${t}</button>`).join('')}
       <button class="btn mc" data-da>D.A 1</button></div></section>`;
+  const treeSlot = da2Home.querySelector('#da2Tree');
+  if (treeSlot) { treeSlot.append(miniCanvas); miniCanvas.classList.add('inHome'); }
   const serments = da2Home.querySelector('#da2Serments'), periods = da2Home.querySelector('#da2Periods');
   serments.scrollLeft = da2.serment * serments.clientWidth;
   periods.scrollLeft = da2.period * periods.clientWidth;
@@ -5369,6 +5378,7 @@ function updateDa2Home() {
     canvas.hidden = true;
     if (!covered) renderDa2Home();
   } else if (was && !covered) canvas.hidden = false;
+  if (!active && miniCanvas.classList.contains('inHome')) { miniCanvas.classList.remove('inHome'); document.body.append(miniCanvas); miniTree.framed = false; }
   return active;
 }
 const da2Watch = new MutationObserver(() => updateDa2Home());   // un écran s'ouvre / se ferme par-dessus
