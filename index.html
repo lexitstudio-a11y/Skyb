@@ -213,6 +213,16 @@
   #da2Home .box { padding: 14px 18px; background: var(--gris); border-radius: 14px; font-size: 14px; line-height: 1.45; cursor: pointer; }
   #da2Home .box p { margin: 0 0 6px; }
   #da2Home .box .muted { color: #979797; }
+  #da2Home .box.tb { display: flex; flex-direction: column; gap: 6px; padding: 12px; }
+  #da2Home .tbb {   /* un bloc du Timeblock : sa couleur, titre à gauche, horaires à droite */
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 9px 12px; border-radius: 8px; background: var(--c); color: #FFFFFF;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  }
+  #da2Home .tbb .t { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #da2Home .tbb .h { flex: 0 0 auto; font-size: 12px; opacity: 0.9; }
+  #da2Home .tbb.past { opacity: 0.4; }
+  #da2Home .tbb.now { box-shadow: 0 0 0 2px var(--vert); }
   #da2Home .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   #da2Home .grid button { margin: 0; width: 100%; min-height: 48px; }
   canvas {
@@ -5302,8 +5312,9 @@ function renderDa2Home() {
   const keep = { top: da2Home.scrollTop };
   const m = sermentMonth(), n = da2.serment + 1;
   const name = profile.title && profile.title !== 'Ton profil' ? profile.title : 'Joueur';
-  const today = agendas.find(a => a.date === formatDate(new Date()));
-  const lines = today ? today.texte.split('\n').map(l => l.trim()).filter(Boolean) : [];
+  // Agenda du Jour : les blocs du Timeblock d'aujourd'hui (couleur, titre, horaires ; le bloc en cours mis en avant)
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const blocks = (timeblocks[formatDate(now)] || []).map((b, i) => ({ b, color: blockColor(b, i) })).sort((x, y) => x.b.debut - y.b.debut);
   const next = prog.etapes.length ? nextEtape() : null;
   da2Home.innerHTML = `
     <h1 class="hello mc">Bonjour <span>${escHtml(name)}</span></h1>
@@ -5315,8 +5326,10 @@ function renderDa2Home() {
     }).join('')}</div>
     <div class="dots">${[0, 1, 2].map(i => `<i class="${i === da2.serment ? 'on' : ''}"></i>`).join('')}</div>
     <div class="swipe" id="da2Periods">${da2PeriodHtml(n, 'round', m)}${da2PeriodHtml(n, 'saison', Math.ceil(m / 3))}</div>
-    <section><h3 class="mc">Agenda du Jour</h3><div class="box" data-agenda>${lines.length
-      ? lines.map(l => `<p>• ${escHtml(l)}</p>`).join('') : '<p class="muted">Pas encore d\'agenda aujourd\'hui : touche pour l\'écrire.</p>'}</div></section>
+    <section><h3 class="mc">Agenda du Jour</h3><div class="box tb" data-agenda>${blocks.length
+      ? blocks.map(({ b, color }) => `<div class="tbb${b.debut <= nowMin && nowMin < b.fin ? ' now' : ''}${b.fin <= nowMin ? ' past' : ''}" style="--c:${color}">
+          <span class="t mc">${escHtml(b.titre)}</span><span class="h">${fmtMin(b.debut)} - ${fmtMin(b.fin)}${b.deepWork ? ' · DW' : ''}</span></div>`).join('')
+      : '<p class="muted">Pas encore de Timeblock aujourd\'hui : touche pour l\'organiser.</p>'}</div></section>
     <section><h3 class="mc">Arbre</h3><div class="box" data-open="progression">${next
       ? `<p class="muted">Prochaine étape (${next.niveau})</p><p class="mc">${escHtml(next.titre)}</p>` : '<p class="muted">Ouvrir l\'Arbre de progression</p>'}</div></section>
     <section><h3 class="mc">Boutons</h3><div class="grid">
@@ -5342,7 +5355,7 @@ da2Home.addEventListener('click', ev => {
   if (t.dataset.check != null) { const a = arbres[+t.dataset.check]; setArbreFait(a, !a.fait); if (a.fait) playSound(doneSound); renderDa2Home(); return; }
   if (t.dataset.more != null) { da2.expanded = !da2.expanded; renderDa2Home(); return; }
   if (t.dataset.da != null) { toggleDaStyle(); return; }
-  if (t.dataset.agenda != null) { editAgenda(formatDate(new Date())); return; }
+  if (t.dataset.agenda != null) { openTimeblock(formatDate(new Date()), null); return; }
   if (t.dataset.serment) { const k = +t.dataset.serment; if (sermentSuffix(k)) location.hash = `serment${k}`; else editSerment(k, renderGui); return; }
   if (t.dataset.open) location.hash = t.dataset.open;
 });
