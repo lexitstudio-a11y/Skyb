@@ -7,6 +7,9 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">   <!-- icône de l'écran d'accueil (iPhone) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500&display=swap">   <!-- D.A 2 : Inter Medium -->
 <style>
   html {
     background: #000;
@@ -127,6 +130,91 @@
     z-index: 40;
     cursor: pointer;
   }
+  /* --- D.A 2 (téléphone) : page d'accueil plein écran, sans fond ni panneau Minecraft --- */
+  @font-face {
+    font-family: 'Minecraft';
+    src: url('assets/fonts/Minecraft.ttf') format('truetype');
+    font-weight: 500;
+    font-display: swap;
+  }
+  #da2Home {
+    --vert: #76FC01; --violet: #5E01D9; --gris: #303030; --noir: #050505;
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: var(--noir);
+    color: #FFFFFF;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 500;
+    padding: max(env(safe-area-inset-top), 28px) 0 max(env(safe-area-inset-bottom), 28px);
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #da2Home[hidden] { display: none; }
+  #da2Home .mc { font-family: 'Minecraft', monospace; font-weight: 500; letter-spacing: 0; }
+  #da2Home .hello { margin: 12px 25px 16px; font-size: 32px; line-height: 1.1; }
+  #da2Home .hello span { color: var(--vert); }
+  #da2Home .swipe {   /* glisser à gauche / à droite : une page à la fois (défilement aimanté) */
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  #da2Home .swipe::-webkit-scrollbar { display: none; }
+  #da2Home .swipe > * { flex: 0 0 100%; scroll-snap-align: center; box-sizing: border-box; padding: 0 27px; }
+  #da2Home .card {
+    position: relative;
+    height: 180px;
+    background: var(--gris);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  #da2Home .card .sheet { position: absolute; bottom: -2px; width: 95px; height: 125px; }
+  #da2Home .card .sheet.a { left: 30px; background: #D9D9D9; transform: rotate(-9deg); transform-origin: bottom left; z-index: 1; }
+  #da2Home .card .sheet.b { left: 75px; width: 70px; height: 112px; background: #8A8A8A; }
+  #da2Home .card .text { position: absolute; left: 50%; right: 14px; top: 30px; }
+  #da2Home .card .name { font-size: 22px; line-height: 1.15; overflow-wrap: anywhere; }
+  #da2Home .card .desc { margin-top: 4px; font-size: 12px; color: #979797; line-height: 1.3; }
+  #da2Home .dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0 0; }
+  #da2Home .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--gris); }
+  #da2Home .dots i.on { background: var(--vert); }
+  #da2Home .period h2 { margin: 22px 0 8px; font-size: 22px; font-weight: 500; }
+  #da2Home .period h2 small { font-size: 12px; color: #686868; font-family: 'Inter', sans-serif; margin-left: 8px; }
+  #da2Home .goal {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 40px;
+    margin-bottom: 6px;
+    padding: 0 22px;
+    background: var(--gris);
+    border-radius: 12px;
+  }
+  #da2Home .goal.fixe { width: fit-content; max-width: 100%; box-sizing: border-box; }
+  #da2Home .goal .label { flex: 0 1 auto; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #da2Home .goal .bar { flex: 1 0 70px; height: 4px; background: #414141; border-radius: 2px; overflow: hidden; }
+  #da2Home .goal .bar b { display: block; height: 100%; background: var(--vert); }
+  #da2Home .goal .pct { font-size: 11px; color: #979797; min-width: 30px; text-align: right; }
+  #da2Home .goal .check {
+    flex: 0 0 auto; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 3px;
+    background: #414141; box-shadow: inset 0 0 0 4px #414141, inset 0 0 0 11px #686868; cursor: pointer;
+  }
+  #da2Home .goal .check.on { box-shadow: inset 0 0 0 4px #414141, inset 0 0 0 11px var(--vert); }
+  #da2Home .empty { margin: 0 0 6px; padding: 12px 22px; background: var(--gris); border-radius: 12px; font-size: 13px; color: #979797; }
+  #da2Home .btn {
+    display: block; margin: 10px auto 0; padding: 10px 26px; border: 0; border-radius: 12px;
+    background: var(--gris); color: #FFFFFF; font-size: 15px; cursor: pointer;
+  }
+  #da2Home section { margin: 34px 25px 0; }
+  #da2Home section h3 { margin: 0 0 8px; font-size: 18px; font-weight: 500; }
+  #da2Home .box { padding: 14px 18px; background: var(--gris); border-radius: 14px; font-size: 14px; line-height: 1.45; cursor: pointer; }
+  #da2Home .box p { margin: 0 0 6px; }
+  #da2Home .box .muted { color: #979797; }
+  #da2Home .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #da2Home .grid button { margin: 0; width: 100%; min-height: 48px; }
   canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -164,6 +252,7 @@
   <input id="headInput" class="loginInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Commande de la tête">
 </div>
 <div id="toasts"></div>
+<div id="da2Home" hidden></div>
 <div id="dialogScreen" class="screen" hidden>
   <canvas id="dialogCanvas"></canvas>
 </div>
@@ -1348,13 +1437,26 @@ function saveArbres() {
 // Progression en % (entier, arrondi à l'inférieur) : part du chemin parcouru entre la valeur de départ et la
 // valeur ciblée (marche dans les deux sens : croissant ou décroissant).
 const arbreProgress = a => Math.floor(Math.max(0, Math.min(100, a.progression || 0)));
+// Progression « Fixe » : pas de valeurs, l'objectif est fait (100 %) ou pas fait (0 %) — case à cocher.
+const isFixe = a => a.sens === 'fixe';
+function setArbreFait(a, fait) {
+  if (fait) a.fait = true; else delete a.fait;
+  const today = formatDate(new Date());
+  a.historique = (a.historique || []).filter(h => h.date !== today);
+  a.historique.push({ date: today, valeur: fait ? 1 : 0 });
+  a.progression = fait ? 100 : 0;
+  saveArbres();
+  refreshArbres();
+}
 function computeProgress(a) {
+  if (isFixe(a)) return a.fait ? 100 : 0;
   if (a.valeur == null || a.depart == null || a.cible == null || a.cible === a.depart) return 0;
   return (a.valeur - a.depart) / (a.cible - a.depart) * 100;
 }
 // Livre « Configuration » : nouvelle valeur actuelle (panneau) ; gardée dans l'historique avec sa date.
 // Tant que le départ et la cible ne sont pas choisis, il ouvre la configuration.
 function addArbreValue(a, n) {
+  if (isFixe(a)) { setArbreFait(a, !a.fait); return; }
   if (a.depart == null || a.cible == null) { location.hash = `arbre-${n}-type`; return; }
   openSign({
     title: 'Nouvelle valeur',
@@ -1409,10 +1511,11 @@ function randomArbreIcon() {
 // « Progression : 40% - 12/30J » : valeur actuelle (ou de départ) / valeur ciblée, colorée selon la progression
 // (0-9 % rouge, 10-49 % orange, 50-99 % jaune, 100 % vert + « Complété »).
 // Arbre configuré = toutes ses infos remplies (type, unité, départ, cible) ; sinon « N/A » en rouge au lieu du %.
-const arbreConfigured = a => !!a.sens && !!a.unite && a.depart != null && a.cible != null;
+const arbreConfigured = a => isFixe(a) || (!!a.sens && !!a.unite && a.depart != null && a.cible != null);
 const pctText = (a, pct) => arbreConfigured(a) ? `§e${pct}%` : '§cN/A';
 function progressLine(a, pct, valeur = a.valeur ?? a.depart) {
   let line = `§7Progression : ${pctText(a, pct)}`;
+  if (isFixe(a)) return line + (pct >= 100 ? ' §a§lComplété' : ' §7- §cPas fait');
   if (valeur != null && a.cible != null) {
     const color = pct >= 100 ? '§2' : pct >= 50 ? '§e' : pct >= 10 ? '§6' : '§c';
     const num = v => String(v).replace('.', ',');
@@ -1449,6 +1552,7 @@ function addArbre(onCreated) {
 const SENS = {
   croissant: { head: 'tete_plus_verte', label: '§aProgression croissante', lore: ['§7La valeur doit augmenter', '§7pour atteindre la cible.'] },
   decroissant: { head: 'tete_plus_rouge', label: '§cProgression décroissante', lore: ['§7La valeur doit diminuer', '§7pour atteindre la cible.'] },
+  fixe: { head: 'tete_valider', label: '§bProgression fixe', lore: ['§7Objectif fait ou pas fait,', '§7comme une case à cocher.'] },
 };
 const fmtNumber = (v, unit) => v == null ? '§cnon définie' : '§e' + String(v).replace('.', ',') + (unit || '');   // collée au nombre : 20J
 // Unité de mesure d'un arbre (kg, km, pages…), affichée après ses valeurs.
@@ -1590,7 +1694,12 @@ function buildArbrePages(a, n) {
       ...Object.fromEntries(Object.entries(SENS).map(([sens, cfg], j) => [`2,${3 + 2 * j}`, {
         image: cfg.head,
         tooltip: () => [cfg.label, ...cfg.lore, ...(a.sens === sens ? ['', '§aChoix actuel'] : []), '', '§eClique pour choisir !'],
-        action: () => { a.sens = sens; saveArbres(); location.hash = `arbre-${n}-valeurs`; },
+        action: () => {
+          a.sens = sens;
+          if (sens === 'fixe') { a.progression = a.fait ? 100 : 0; saveArbres(); refreshArbres(); location.hash = `arbre-${n}`; return; }   // pas de valeurs à choisir
+          a.progression = computeProgress(a);
+          saveArbres(); refreshArbres(); location.hash = `arbre-${n}-valeurs`;
+        },
       }])),
       ...navSlots(`arbre-${n}`),
     },
@@ -1617,21 +1726,25 @@ function buildArbrePages(a, n) {
     '0,4': { item: 'name_tag', tooltip: ['§aRenommer', "§7Modifie le titre et la description", "§7de l'arbre.", '', '§eClique pour modifier !'], action: () => renameArbre(a) },
     '1,4': {
       item: 'writable_book', action: () => addArbreValue(a, n),
-      tooltip: () => ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
+      tooltip: () => isFixe(a) ? ['§aConfiguration', SENS.fixe.label, `§7Progression : ${pctText(a, arbreProgress(a))}`, '', a.fait ? '§eClique pour le remettre à pas fait !' : '§eClique pour le marquer comme fait !'] : ['§aConfiguration', ...(a.sens ? [SENS[a.sens].label] : ['§7Type de progression : §cnon défini']),
         `§7Unité de mesure : ${a.unite ? '§e' + a.unite : '§cnon définie'}`,
         `§7Départ : ${fmtNumber(a.depart, a.unite)}`, `§7Cible : ${fmtNumber(a.cible, a.unite)}`,
         `§7Valeur actuelle : ${fmtNumber(a.valeur, a.unite)}`, `§7Progression : ${pctText(a, arbreProgress(a))}`, '',
         a.depart != null && a.cible != null ? '§eClique pour ajouter une valeur !' : '§eClique pour configurer !'],
     },
     // au-dessus du papier (une case vide entre) : rouge (recule d'1), vert (avance d'1), jaune (avance de 5)
-    ...Object.fromEntries([['3,8', 'bloc_rouge', -1, '§c'], ['2,8', 'bloc_vert', 1, '§a'], ['1,8', 'bloc_jaune', 5, '§e']].map(([key, image, steps, c]) => [key, {
+    // progression fixe : vert = fait, rouge = pas fait (pas de jaune)
+    ...(isFixe(a) ? {
+      '2,8': { image: 'bloc_vert', action: () => setArbreFait(a, true), tooltip: () => ['§aFait', "§7Marque l'objectif comme fait.", ...(a.fait ? ['', '§7Déjà fait'] : ['', '§eClique pour valider !'])] },
+      '3,8': { image: 'bloc_rouge', action: () => setArbreFait(a, false), tooltip: () => ['§cPas fait', "§7Remet l'objectif à pas fait.", ...(!a.fait ? ['', '§7Pas encore fait'] : ['', '§eClique pour le remettre !'])] },
+    } : Object.fromEntries([['3,8', 'bloc_rouge', -1, '§c'], ['2,8', 'bloc_vert', 1, '§a'], ['1,8', 'bloc_jaune', 5, '§e']].map(([key, image, steps, c]) => [key, {
       image, action: () => stepArbreValue(a, n, steps),
       tooltip: () => {
         const d = steps * (a.sens === 'decroissant' ? -1 : 1);
         return [`${c}${d > 0 ? '+' : ''}${d}${a.unite ? ' ' + a.unite : ''}`, `§7Valeur actuelle : ${fmtNumber(a.valeur ?? a.depart, a.unite)}`,
           `§7Après : ${fmtNumber((a.valeur ?? a.depart ?? 0) + d, a.unite)}`, '', '§eClique pour changer la valeur !'];
       },
-    }])),
+    }]))),
     '5,8': {
       item: 'paper', open: `arbre-${n}-historique`,
       tooltip: () => ['§aHistorique', `§7${(a.historique || []).length} valeur${(a.historique || []).length > 1 ? 's' : ''} enregistrée${(a.historique || []).length > 1 ? 's' : ''}`, '', '§eClique pour voir !'],
@@ -1682,7 +1795,7 @@ function buildArbrePages(a, n) {
     };
     if (k < histoPages) histoSlots['5,8'] = { item: 'arrow', tooltip: ['§aPage suivante', `§7Page ${k + 1}`], open: histoId(k + 1) };
     histo.slice((k - 1) * 4, k * 4).forEach((h, j) => {
-      const p = a.depart != null && a.cible != null && a.cible !== a.depart
+      const p = isFixe(a) ? (h.valeur ? 100 : 0) : a.depart != null && a.cible != null && a.cible !== a.depart
         ? Math.floor(Math.max(0, Math.min(100, (h.valeur - a.depart) / (a.cible - a.depart) * 100))) : 0;
       const row = 1 + j;
       histoSlots[`${row},2`] = {
@@ -2282,6 +2395,7 @@ function setGuiSize(L) {
 }
 let lastReserve = 0;
 function renderGui() {
+  if (updateDa2Home()) { renderMiniTree(); return; }   // D.A 2 sur téléphone : page d'accueil à part (HTML)
   // panneau de l'arbre en cours (Profil, ordinateur) affiché ou retiré : le coffre se redimensionne pour la place restante
   if (miniReserve() + 10000 * miniReserveTop() !== lastReserve) { lastReserve = miniReserve() + 10000 * miniReserveTop(); sizeGui(); }
   const S = state.S * guiRatio();
@@ -2346,7 +2460,7 @@ const TABS = [
 const daTabs = () => da === 'test' && isMobileLayout();
 const isTabPage = id => daTabs() && TABS.some(t => t.page === id);
 function defaultPage(id) {
-  if (!daTabs() || id !== 'main') return id;
+  if (!daTabs() || id !== 'main' || isDa2()) return id;   // D.A 2 : le Profil devient la page d'accueil
   history.replaceState(null, '', '#arbres');
   return 'arbres';
 }
@@ -2382,6 +2496,7 @@ const HEAD_BTN = { x: 6, y: 3, w: 13 };
 const headMenu = { open: false, hover: -1 };
 const headMenuItems = () => [
   { head: 'steve', label: 'Modifier le profil', action: editProfile },
+  ...(isDa2() ? [{ image: 'arbre_logo', label: 'Accueil', action: () => { location.hash = 'main'; } }] : []),
   { image: 'jukebox', label: 'Jukebox', action: playJukebox },
   { image: 'cadre_da', label: `Passer à la D.A ${isDa2() ? 1 : 2}`, action: toggleDaStyle },
   { item: 'ender_pearl', label: session ? 'Compte' : 'Connexion', action: openAccount },
@@ -4988,7 +5103,7 @@ function progTip(hit, ev, force) {
 const miniCanvas = document.getElementById('miniTree');
 const miniTree = { pan: { x: 0, y: 0 }, hover: null, selected: null, view: null, drag: null, layout: null, S: 2, w: 0, h: 0, framed: false };
 const MINI_W = 54;   // largeur du panneau (pixels GUI) : une colonne d'étapes, sans titre
-const miniShown = () => (state.page === 'main' || state.page === 'agenda') && !!prog.etapes.length;   // Profil et Agenda
+const miniShown = () => (state.page === 'main' || state.page === 'agenda') && !!prog.etapes.length && !da2HomeActive();   // Profil et Agenda
 // Ordinateur : colonne à droite (étapes de haut en bas) ; téléphone : bande en haut (étapes de gauche à droite)
 const miniScale = () => isMobileLayout() ? Math.max(1, Math.min(3, Math.floor(viewW() / 180))) : Math.max(1, Math.min(3, Math.floor(viewH() / 300)));
 // Place réservée (px CSS) à droite (ordinateur) ou en haut (téléphone) : le coffre se centre dans le reste de l'écran
@@ -5151,6 +5266,101 @@ addEventListener('keydown', ev => {
 // sa version et on recharge la page. Seule la clé publiable est ici : chaque compte ne voit que sa ligne (RLS).
 const SUPABASE_URL = 'https://hzgtnstmmbmmubvzxhas.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_HhqBiNcmR0j0doZ_esJrbA_znOLL7Nw';
+// --- D.A 2 sur téléphone : page d'accueil (HTML, plein écran) ---
+// « Bonjour Nom », puis la carte du Serment (glisser : Serment 1 → 2 → 3) ; dessous, les objectifs du round en cours
+// de ce Serment (glisser vers la droite : ceux de la saison). Les objectifs = les arbres créés depuis les objectifs de
+// Résultat / Action / Identité de ce round ou de cette saison : barre verte (croissant, décroissant), case (fixe).
+const da2Home = document.getElementById('da2Home');
+const da2 = { serment: 0, period: 0, expanded: false };
+const DA2_GOALS = 3;   // objectifs montrés avant « Plus d'Objectif »
+const OTHER_SCREENS = ['signScreen', 'dialogScreen', 'timeblockScreen', 'progScreen', 'photoScreen', 'loginScreen', 'headScreen'].map(id => document.getElementById(id));
+function da2HomeActive() { return isDa2() && isMobileLayout() && state.page === 'main'; }
+const escHtml = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+// Mois en cours du serment (1 à 12) depuis la date d'entrée ; 1 tant qu'elle n'est pas choisie ou pas atteinte.
+function sermentMonth() {
+  if (!dates.start) return 1;
+  for (let m = 1; m <= 12; m++) if (periodCurrent(m, m)) return m;
+  return periodDone(12) ? 12 : 1;
+}
+const periodTrees = id => arbres.filter(a => a.source === `${id}-resultat` || a.groupe === `${id}-action` || a.groupe === `${id}-identite`);
+function da2GoalHtml(a) {
+  const i = arbres.indexOf(a), pct = arbreProgress(a);
+  const label = `<span class="label mc" data-open="arbre-${i + 1}">${escHtml(a.titre)}</span>`;
+  if (isFixe(a)) return `<div class="goal fixe">${label}<button class="check${a.fait ? ' on' : ''}" data-check="${i}" aria-label="${a.fait ? 'Fait' : 'Pas fait'}"></button></div>`;
+  const w = arbreConfigured(a) ? pct : 0;
+  return `<div class="goal" data-open="arbre-${i + 1}">${label}<span class="bar"><b style="width:${w}%"></b></span><span class="pct">${arbreConfigured(a) ? pct + '%' : 'N/A'}</span></div>`;
+}
+function da2PeriodHtml(n, kind, k) {
+  const id = `freres-${n}-${kind}${k}`, trees = periodTrees(id);
+  const shown = da2.expanded ? trees : trees.slice(0, DA2_GOALS);
+  const title = kind === 'round' ? `Round ${k}` : `Saison ${k}`;
+  return `<div class="period"><h2 class="mc">${title}<small>${kind === 'round' ? 'glisse → saison' : '← round'}</small></h2>
+    ${shown.length ? shown.map(da2GoalHtml).join('') : `<div class="empty" data-open="${id}">Aucun objectif pour ce ${kind === 'round' ? 'round' : 'cette saison'} : touche pour en créer.</div>`}
+    ${trees.length > DA2_GOALS ? `<button class="btn mc" data-more>${da2.expanded ? "Moins d'Objectif" : "Plus d'Objectif"}</button>` : ''}</div>`;
+}
+function renderDa2Home() {
+  const keep = { top: da2Home.scrollTop };
+  const m = sermentMonth(), n = da2.serment + 1;
+  const name = profile.title && profile.title !== 'Ton profil' ? profile.title : 'Joueur';
+  const today = agendas.find(a => a.date === formatDate(new Date()));
+  const lines = today ? today.texte.split('\n').map(l => l.trim()).filter(Boolean) : [];
+  const next = prog.etapes.length ? nextEtape() : null;
+  da2Home.innerHTML = `
+    <h1 class="hello mc">Bonjour <span>${escHtml(name)}</span></h1>
+    <div class="swipe" id="da2Serments">${[1, 2, 3].map(k => {
+      const info = sermentInfo[k] || {}, desc = (info.description || '').split('\n')[0];
+      return `<div><div class="card" data-serment="${k}"><i class="sheet a"></i><i class="sheet b"></i>
+        <div class="text"><div class="name mc">${escHtml(sermentSuffix(k) || `Serment ${k}`)}</div>
+        <div class="desc">${escHtml(sermentSuffix(k) ? desc || sermentPrefix(k) : 'Serment vide : touche pour lui donner un nom.')}</div></div></div></div>`;
+    }).join('')}</div>
+    <div class="dots">${[0, 1, 2].map(i => `<i class="${i === da2.serment ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="swipe" id="da2Periods">${da2PeriodHtml(n, 'round', m)}${da2PeriodHtml(n, 'saison', Math.ceil(m / 3))}</div>
+    <section><h3 class="mc">Agenda du Jour</h3><div class="box" data-agenda>${lines.length
+      ? lines.map(l => `<p>• ${escHtml(l)}</p>`).join('') : '<p class="muted">Pas encore d\'agenda aujourd\'hui : touche pour l\'écrire.</p>'}</div></section>
+    <section><h3 class="mc">Arbre</h3><div class="box" data-open="progression">${next
+      ? `<p class="muted">Prochaine étape (${next.niveau})</p><p class="mc">${escHtml(next.titre)}</p>` : '<p class="muted">Ouvrir l\'Arbre de progression</p>'}</div></section>
+    <section><h3 class="mc">Boutons</h3><div class="grid">
+      ${[['arbres', 'Racines'], ['serments', 'Serments'], ['todo', 'Choses à faire'], ['habitudes', 'Habitudes'], ['agenda', 'Agendas']].map(([pg, t]) => `<button class="btn mc" data-open="${pg}">${t}</button>`).join('')}
+      <button class="btn mc" data-da>D.A 1</button></div></section>`;
+  const serments = da2Home.querySelector('#da2Serments'), periods = da2Home.querySelector('#da2Periods');
+  serments.scrollLeft = da2.serment * serments.clientWidth;
+  periods.scrollLeft = da2.period * periods.clientWidth;
+  da2Home.scrollTop = keep.top;
+  serments.addEventListener('scroll', () => {
+    const i = Math.round(serments.scrollLeft / serments.clientWidth);
+    if (i === da2.serment || i < 0 || i > 2) return;
+    da2.serment = i;
+    da2.expanded = false;
+    clearTimeout(serments.wait);
+    serments.wait = setTimeout(renderDa2Home, 120);   // une fois le glissement posé : le round / la saison de ce Serment
+  });
+  periods.addEventListener('scroll', () => { da2.period = Math.round(periods.scrollLeft / periods.clientWidth); });
+}
+da2Home.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-check],[data-open],[data-serment],[data-agenda],[data-more],[data-da]');
+  if (!t) return;
+  if (t.dataset.check != null) { const a = arbres[+t.dataset.check]; setArbreFait(a, !a.fait); if (a.fait) playSound(doneSound); renderDa2Home(); return; }
+  if (t.dataset.more != null) { da2.expanded = !da2.expanded; renderDa2Home(); return; }
+  if (t.dataset.da != null) { toggleDaStyle(); return; }
+  if (t.dataset.agenda != null) { editAgenda(formatDate(new Date())); return; }
+  if (t.dataset.serment) { const k = +t.dataset.serment; if (sermentSuffix(k)) location.hash = `serment${k}`; else editSerment(k, renderGui); return; }
+  if (t.dataset.open) location.hash = t.dataset.open;
+});
+// Affiche / cache la page d'accueil (cachée sous un panneau, un livre, une question… ouverts par-dessus) ; true si elle est
+// affichée à la place du coffre.
+function updateDa2Home() {
+  const active = da2HomeActive(), covered = OTHER_SCREENS.some(el => el && !el.hidden);
+  const was = !da2Home.hidden;
+  da2Home.hidden = !active || covered;
+  if (active) {
+    canvas.hidden = true;
+    if (!covered) renderDa2Home();
+  } else if (was && !covered) canvas.hidden = false;
+  return active;
+}
+const da2Watch = new MutationObserver(() => updateDa2Home());   // un écran s'ouvre / se ferme par-dessus
+OTHER_SCREENS.forEach(el => el && da2Watch.observe(el, { attributes: true, attributeFilter: ['hidden'] }));
+
 const SYNC_KEYS = [PROG_KEY, DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, HABIT_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
 let markAppReady;
 const appReady = new Promise(res => { markAppReady = res; });   // textures et police chargées
