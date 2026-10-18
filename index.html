@@ -5142,7 +5142,16 @@ function renderMiniTree() {
     miniTree.pan = !next ? { x: 0, y: 0 } : horizontal ? { x: -next.y * PROG_PITCH, y: -next.x * PROG_PITCH } : { x: -next.x * PROG_PITCH, y: -next.y * PROG_PITCH };
     miniTree.framed = true;
   }
+  clampMiniPan();
   renderProg(miniTree);
+}
+// Bande horizontale (téléphone) : on ne fait pas défiler au-delà de la première / dernière étape
+// (première étape au bord gauche au plus, dernière au bord droit au moins).
+function clampMiniPan() {
+  if (!miniTree.horizontal || !prog.etapes.length) return;
+  const ys = prog.etapes.map(e => e.y), areaW = Math.floor(miniTree.w / miniTree.S) - 10;
+  const max = -Math.min(...ys) * PROG_PITCH, min = Math.min(max, areaW - 52 - Math.max(...ys) * PROG_PITCH);
+  miniTree.pan.x = Math.max(min, Math.min(max, miniTree.pan.x));
 }
 const miniPoint = ev => { const r = miniCanvas.getBoundingClientRect(); return { x: (ev.clientX - r.left) / miniTree.S, y: (ev.clientY - r.top) / miniTree.S }; };
 const miniHit = ev => {
@@ -5175,7 +5184,7 @@ miniCanvas.addEventListener('pointermove', ev => {
     const dx = ev.clientX - d.x0, dy = ev.clientY - d.y0;
     if (Math.hypot(dx, dy) > 4) d.moved = true;
     // accueil D.A 2 : défilement horizontal seulement
-    if (d.moved) { miniTree.pan = { x: d.pan0.x + Math.round(dx / miniTree.S), y: miniTree.home ? d.pan0.y : d.pan0.y + Math.round(dy / miniTree.S) }; miniTip(null, ev); renderProg(miniTree); }
+    if (d.moved) { miniTree.pan = { x: d.pan0.x + Math.round(dx / miniTree.S), y: miniTree.home ? d.pan0.y : d.pan0.y + Math.round(dy / miniTree.S) }; clampMiniPan(); miniTip(null, ev); renderProg(miniTree); }
     return;
   }
   const hit = miniHit(ev), hover = hit ? hit.etape.id : null;
@@ -5200,6 +5209,7 @@ miniCanvas.addEventListener('wheel', ev => {
   if (miniTree.home && Math.abs(ev.deltaX) <= Math.abs(ev.deltaY)) return;   // accueil D.A 2 : la molette verticale fait défiler la page
   ev.preventDefault();
   miniTree.pan = { x: miniTree.pan.x - Math.round(ev.deltaX / miniTree.S / 2), y: miniTree.home ? miniTree.pan.y : miniTree.pan.y - Math.round(ev.deltaY / miniTree.S / 2) };
+  clampMiniPan();
   miniTip(null, ev);
   renderProg(miniTree);
 }, { passive: false });
