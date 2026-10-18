@@ -5330,9 +5330,21 @@ function da2PeriodHtml(n, kind, k) {
     ${shown.length ? shown.map(da2GoalHtml).join('') : `<div class="empty" data-open="${id}">Aucun objectif pour ce ${kind === 'round' ? 'round' : 'cette saison'} : touche pour en créer.</div>`}
     ${trees.length > DA2_GOALS ? `<button class="btn mc" data-more>${da2.expanded ? "Moins d'Objectif" : "Plus d'Objectif"}</button>` : ''}</div>`;
 }
-function renderDa2Home() {
-  const keep = { top: da2Home.scrollTop };
+// Points sous la carte + round / saison du Serment affiché : reconstruits seuls quand on change de Serment
+// (la carte qu'on fait glisser n'est pas recréée, sinon le glissement suivant ne répond plus).
+function renderDa2Periods() {
+  const wrap = document.getElementById('da2PeriodsWrap');
+  if (!wrap) return;
   const m = sermentMonth(), n = da2.serment + 1;
+  wrap.innerHTML = `<div class="dots">${[0, 1, 2].map(i => `<i class="${i === da2.serment ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="swipe" id="da2Periods">${da2PeriodHtml(n, 'round', m)}${da2PeriodHtml(n, 'saison', Math.ceil(m / 3))}</div>`;
+  const periods = wrap.querySelector('#da2Periods');
+  periods.scrollLeft = da2.period * periods.clientWidth;
+  periods.addEventListener('scroll', () => { da2.period = Math.round(periods.scrollLeft / periods.clientWidth); });
+}
+function renderDa2Home() {
+  if (da2.touching) { da2.pending = true; return; }   // pas pendant un glissement : à la fin du geste
+  const keep = { top: da2Home.scrollTop };
   const name = profile.title && profile.title !== 'Ton profil' ? profile.title : 'Joueur';
   // Agenda du Jour : les blocs du Timeblock d'aujourd'hui (couleur, titre, horaires ; le bloc en cours mis en avant)
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
@@ -5345,8 +5357,7 @@ function renderDa2Home() {
         <div class="text"><div class="name mc">${escHtml(sermentSuffix(k) || `Serment ${k}`)}</div>
         <div class="desc">${escHtml(sermentSuffix(k) ? desc || sermentPrefix(k) : 'Serment vide : touche pour lui donner un nom.')}</div></div></div></div>`;
     }).join('')}</div>
-    <div class="dots">${[0, 1, 2].map(i => `<i class="${i === da2.serment ? 'on' : ''}"></i>`).join('')}</div>
-    <div class="swipe" id="da2Periods">${da2PeriodHtml(n, 'round', m)}${da2PeriodHtml(n, 'saison', Math.ceil(m / 3))}</div>
+    <div id="da2PeriodsWrap"></div>
     <section><h3 class="mc">Agenda du Jour</h3><div class="box tb" data-agenda>${blocks.length
       ? blocks.map(({ b, color }) => `<div class="tbb${b.debut <= nowMin && nowMin < b.fin ? ' now' : ''}${b.fin <= nowMin ? ' past' : ''}" style="--c:${color}">
           <span class="t mc">${escHtml(b.titre)}</span><span class="h">${fmtMin(b.debut)} - ${fmtMin(b.fin)}${b.deepWork ? ' · DW' : ''}</span></div>`).join('')
@@ -5359,25 +5370,31 @@ function renderDa2Home() {
       <button class="btn mc" data-da>D.A 1</button></div></section>`;
   const treeSlot = da2Home.querySelector('#da2Tree');
   if (treeSlot) { treeSlot.append(miniCanvas); miniCanvas.classList.add('inHome'); }
-  const serments = da2Home.querySelector('#da2Serments'), periods = da2Home.querySelector('#da2Periods');
+  const serments = da2Home.querySelector('#da2Serments');
   serments.scrollLeft = da2.serment * serments.clientWidth;
-  periods.scrollLeft = da2.period * periods.clientWidth;
+  renderDa2Periods();
   da2Home.scrollTop = keep.top;
   serments.addEventListener('scroll', () => {
     const i = Math.round(serments.scrollLeft / serments.clientWidth);
     if (i === da2.serment || i < 0 || i > 2) return;
     da2.serment = i;
     da2.expanded = false;
-    clearTimeout(serments.wait);
-    serments.wait = setTimeout(renderDa2Home, 120);   // une fois le glissement posé : le round / la saison de ce Serment
+    renderDa2Periods();   // le round / la saison de ce Serment
   });
-  periods.addEventListener('scroll', () => { da2.period = Math.round(periods.scrollLeft / periods.clientWidth); });
 }
+// Doigt posé sur la page : les rafraîchissements attendent la fin du geste (et de l'élan du défilement)
+da2Home.addEventListener('touchstart', () => { da2.touching = true; clearTimeout(da2.release); }, { passive: true });
+const da2TouchEnd = () => {
+  clearTimeout(da2.release);
+  da2.release = setTimeout(() => { da2.touching = false; if (da2.pending) { da2.pending = false; if (!da2Home.hidden) renderDa2Home(); } }, 600);
+};
+da2Home.addEventListener('touchend', da2TouchEnd, { passive: true });
+da2Home.addEventListener('touchcancel', da2TouchEnd, { passive: true });
 da2Home.addEventListener('click', ev => {
   const t = ev.target.closest('[data-check],[data-open],[data-serment],[data-agenda],[data-more],[data-da]');
   if (!t) return;
-  if (t.dataset.check != null) { const a = arbres[+t.dataset.check]; setArbreFait(a, !a.fait); if (a.fait) playSound(doneSound); renderDa2Home(); return; }
-  if (t.dataset.more != null) { da2.expanded = !da2.expanded; renderDa2Home(); return; }
+  if (t.dataset.check != null) { const a = arbres[+t.dataset.check]; setArbreFait(a, !a.fait); if (a.fait) playSound(doneSound); renderDa2Periods(); return; }
+  if (t.dataset.more != null) { da2.expanded = !da2.expanded; renderDa2Periods(); return; }
   if (t.dataset.da != null) { toggleDaStyle(); return; }
   if (t.dataset.agenda != null) { openTimeblock(formatDate(new Date()), null); return; }
   if (t.dataset.serment) { const k = +t.dataset.serment; if (sermentSuffix(k)) location.hash = `serment${k}`; else editSerment(k, renderGui); return; }
