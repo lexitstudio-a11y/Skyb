@@ -139,6 +139,7 @@
   }
   #da2Home {
     --vert: #76FC01; --violet: #5E01D9; --gris: #303030; --noir: #050505;
+    --u: calc(100vw / 1179);   /* 1 px de la maquette (1179 px de large), à l'échelle de l'écran */
     position: fixed;
     inset: 0;
     z-index: 10;
@@ -148,13 +149,14 @@
     color: #FFFFFF;
     font-family: 'Inter', system-ui, sans-serif;
     font-weight: 500;
-    padding: max(env(safe-area-inset-top), 28px) 0 max(env(safe-area-inset-bottom), 28px);
+    padding: max(env(safe-area-inset-top), calc(130 * var(--u))) 0 max(env(safe-area-inset-bottom), 28px);
     box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
   }
   #da2Home[hidden] { display: none; }
   #da2Home .mc { font-family: 'Minecraft', monospace; font-weight: 500; letter-spacing: 0; }
-  #da2Home .hello { margin: 12px 25px 16px; font-size: 32px; line-height: 1.1; }
+  /* tailles reprises de la maquette (1179 px de large) : 1 --u = 1 px de la maquette, à l'échelle de l'écran */
+  #da2Home .hello { margin: 0 calc(97 * var(--u)) calc(56 * var(--u)); font-size: calc(75 * var(--u)); line-height: 1; }
   #da2Home .hello span { color: var(--vert); }
   #da2Home .swipe {   /* glisser à gauche / à droite : une page à la fois (défilement aimanté) */
     display: flex;
@@ -164,51 +166,54 @@
     overscroll-behavior-x: contain;
   }
   #da2Home .swipe::-webkit-scrollbar { display: none; }
-  #da2Home .swipe > * { flex: 0 0 100%; scroll-snap-align: center; box-sizing: border-box; padding: 0 27px; }
-  #da2Home .card {
+  #da2Home .swipe > * { flex: 0 0 100%; scroll-snap-align: center; box-sizing: border-box; padding: 0 calc(107 * var(--u)); }
+  #da2Home .card {   /* 965 x 353, coins de 30 */
     position: relative;
-    height: 180px;
+    height: calc(353 * var(--u));
     background: var(--gris);
-    border-radius: 14px;
+    border-radius: calc(30 * var(--u));
     overflow: hidden;
   }
-  #da2Home .card .sheet { position: absolute; bottom: -2px; width: 95px; height: 125px; }
-  #da2Home .card .sheet.a { left: 30px; background: #D9D9D9; transform: rotate(-9deg); transform-origin: bottom left; z-index: 1; }
-  #da2Home .card .sheet.b { left: 75px; width: 70px; height: 112px; background: #8A8A8A; }
-  #da2Home .card .text { position: absolute; left: 50%; right: 14px; top: 30px; }
-  #da2Home .card .name { font-size: 22px; line-height: 1.15; overflow-wrap: anywhere; }
-  #da2Home .card .desc { margin-top: 4px; font-size: 12px; color: #979797; line-height: 1.3; }
-  #da2Home .dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0 0; }
-  #da2Home .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--gris); }
+  #da2Home .card .sheet { position: absolute; width: calc(190 * var(--u)); height: calc(273 * var(--u)); transform-origin: top left; }
+  #da2Home .card .sheet.b { left: calc(187 * var(--u)); top: calc(131 * var(--u)); background: #8A8A8A; transform: rotate(1.04deg); }
+  #da2Home .card .sheet.a { left: calc(47 * var(--u)); top: calc(140 * var(--u)); background: #D9D9D9; transform: rotate(-9.56deg); z-index: 1; }
+  #da2Home .card .text { position: absolute; left: calc(492 * var(--u)); right: calc(30 * var(--u)); top: calc(62 * var(--u)); }
+  #da2Home .card .name { font-size: calc(59 * var(--u)); line-height: 1.05; overflow-wrap: anywhere; }
+  #da2Home .card .desc { margin-top: calc(8 * var(--u)); font-size: calc(30 * var(--u)); color: #8A8A8A; line-height: 1.25; }
+  #da2Home .dots { display: flex; justify-content: center; gap: calc(18 * var(--u)); margin: calc(30 * var(--u)) 0 0; }
+  #da2Home .dots i { width: calc(18 * var(--u)); height: calc(18 * var(--u)); border-radius: 50%; background: var(--gris); }
   #da2Home .dots i.on { background: var(--vert); }
-  #da2Home .period h2 { margin: 22px 0 8px; font-size: 22px; font-weight: 500; }
-  #da2Home .period h2 small { font-size: 12px; color: #686868; font-family: 'Inter', sans-serif; margin-left: 8px; }
-  #da2Home .goal {
+  #da2Home .period h2 { margin: calc(50 * var(--u)) 0 calc(24 * var(--u)); font-size: calc(54 * var(--u)); font-weight: 500; line-height: 1; }
+  #da2Home .period h2 small { font-size: calc(30 * var(--u)); color: #686868; font-family: 'Inter', sans-serif; margin-left: calc(20 * var(--u)); }
+  #da2Home .goal {   /* pilule 935 x 79, coins de 23, texte à 63 du bord, barre à partir de 268 */
     display: flex;
     align-items: center;
-    gap: 14px;
-    min-height: 40px;
-    margin-bottom: 6px;
-    padding: 0 22px;
+    gap: calc(20 * var(--u));
+    width: calc(935 * var(--u));
+    max-width: 100%;
+    height: calc(79 * var(--u));
+    margin-bottom: calc(10 * var(--u));
+    padding: 0 calc(45 * var(--u)) 0 calc(63 * var(--u));
+    box-sizing: border-box;
     background: var(--gris);
-    border-radius: 12px;
+    border-radius: calc(23 * var(--u));
   }
-  #da2Home .goal.fixe { width: fit-content; max-width: 100%; box-sizing: border-box; }
-  #da2Home .goal .label { flex: 0 1 auto; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #da2Home .goal .bar { flex: 1 0 70px; height: 4px; background: #414141; border-radius: 2px; overflow: hidden; }
+  #da2Home .goal.fixe { width: fit-content; min-width: calc(339 * var(--u)); padding-right: calc(42 * var(--u)); justify-content: space-between; }
+  #da2Home .goal .label { flex: 0 0 auto; min-width: calc(185 * var(--u)); max-width: 60%; font-size: calc(35 * var(--u)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #da2Home .goal.fixe .label { max-width: calc(600 * var(--u)); }
+  #da2Home .goal .bar { flex: 1 1 auto; height: calc(8 * var(--u)); background: #414141; overflow: hidden; }
   #da2Home .goal .bar b { display: block; height: 100%; background: var(--vert); }
-  #da2Home .goal .pct { font-size: 11px; color: #979797; min-width: 30px; text-align: right; }
-  #da2Home .goal .check {
-    flex: 0 0 auto; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 3px;
-    background: #414141; box-shadow: inset 0 0 0 4px #414141, inset 0 0 0 11px #686868; cursor: pointer;
+  #da2Home .goal .check {   /* case 36 x 36, bord de 6 */
+    flex: 0 0 auto; width: calc(36 * var(--u)); height: calc(36 * var(--u)); padding: 0; border: calc(6 * var(--u)) solid #3C3C3C;
+    box-sizing: content-box; border-radius: 0; background: #686868; cursor: pointer;
   }
-  #da2Home .goal .check.on { box-shadow: inset 0 0 0 4px #414141, inset 0 0 0 11px var(--vert); }
-  #da2Home .empty { margin: 0 0 6px; padding: 12px 22px; background: var(--gris); border-radius: 12px; font-size: 13px; color: #979797; }
-  #da2Home .btn {
-    display: block; margin: 10px auto 0; padding: 10px 26px; border: 0; border-radius: 12px;
-    background: var(--gris); color: #FFFFFF; font-size: 15px; cursor: pointer;
+  #da2Home .goal .check.on { background: var(--vert); }
+  #da2Home .empty { margin: 0 0 calc(10 * var(--u)); padding: calc(26 * var(--u)) calc(63 * var(--u)); background: var(--gris); border-radius: calc(23 * var(--u)); font-size: calc(36 * var(--u)); color: #979797; }
+  #da2Home .btn {   /* « Plus d'Objectif » : 311 x 79 */
+    display: block; margin: calc(20 * var(--u)) auto 0; min-width: calc(311 * var(--u)); height: calc(79 * var(--u)); padding: 0 calc(40 * var(--u)); border: 0;
+    border-radius: calc(23 * var(--u)); background: var(--gris); color: #FFFFFF; font-size: calc(35 * var(--u)); cursor: pointer;
   }
-  #da2Home section { margin: 34px 25px 0; }
+  #da2Home section { margin: calc(70 * var(--u)) calc(97 * var(--u)) 0; }
   #da2Home section h3 { margin: 0 0 8px; font-size: 18px; font-weight: 500; }
   #da2Home .box { padding: 14px 18px; background: var(--gris); border-radius: 14px; font-size: 14px; line-height: 1.45; cursor: pointer; }
   #da2Home .box p { margin: 0 0 6px; }
@@ -5320,7 +5325,7 @@ function da2GoalHtml(a) {
   const label = `<span class="label mc" data-open="arbre-${i + 1}">${escHtml(a.titre)}</span>`;
   if (isFixe(a)) return `<div class="goal fixe">${label}<button class="check${a.fait ? ' on' : ''}" data-check="${i}" aria-label="${a.fait ? 'Fait' : 'Pas fait'}"></button></div>`;
   const w = arbreConfigured(a) ? pct : 0;
-  return `<div class="goal" data-open="arbre-${i + 1}">${label}<span class="bar"><b style="width:${w}%"></b></span><span class="pct">${arbreConfigured(a) ? pct + '%' : 'N/A'}</span></div>`;
+  return `<div class="goal" data-open="arbre-${i + 1}">${label}<span class="bar"><b style="width:${w}%"></b></span></div>`;
 }
 function da2PeriodHtml(n, kind, k) {
   const id = `freres-${n}-${kind}${k}`, trees = periodTrees(id);
