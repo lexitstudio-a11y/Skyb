@@ -1132,6 +1132,8 @@ function toggleDaStyle() {
   try { localStorage.setItem(STYLE_KEY, String(daStyle)); } catch {}
   document.documentElement.dataset.style = daStyle;
   showToast({ title: `D.A ${daStyle}`, text: daStyle === 2 ? 'Deuxième D.A activée' : 'Première D.A activée', duration: 2500 });
+  // téléphone, passage à la D.A 2 : on arrive sur sa page d'accueil (les autres pages ne changent pas encore)
+  if (isDa2() && isMobileLayout() && location.hash !== '#main') { location.hash = 'main'; return; }
   showPageFromHash();   // redessine la page avec la D.A choisie
 }
 const daStyleTooltip = () => ['§aChanger de D.A', `§7D.A actuelle : §e${daStyle}`, '', `§eClique pour passer à la D.A ${isDa2() ? 1 : 2} !`];
@@ -5372,7 +5374,7 @@ function renderDa2Home() {
       : '<div class="box" data-open="progression"><p class="muted">Crée ton Arbre de progression : touche pour commencer.</p></div>'}</section>
     <section><h3 class="mc">Boutons</h3><div class="grid">
       ${[['arbres', 'Racines'], ['serments', 'Serments'], ['todo', 'Choses à faire'], ['habitudes', 'Habitudes'], ['agenda', 'Agendas']].map(([pg, t]) => `<button class="btn mc" data-open="${pg}">${t}</button>`).join('')}
-      <button class="btn mc" data-da>D.A 1</button></div></section>`;
+      <button class="btn mc" data-switch-da>D.A 1</button></div></section>`;
   const treeSlot = da2Home.querySelector('#da2Tree');
   if (treeSlot) { treeSlot.append(miniCanvas); miniCanvas.classList.add('inHome'); }
   const serments = da2Home.querySelector('#da2Serments');
@@ -5396,11 +5398,12 @@ const da2TouchEnd = () => {
 da2Home.addEventListener('touchend', da2TouchEnd, { passive: true });
 da2Home.addEventListener('touchcancel', da2TouchEnd, { passive: true });
 da2Home.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-check],[data-open],[data-serment],[data-agenda],[data-more],[data-da]');
-  if (!t) return;
+  // (attribut « data-switch-da » : <html> porte déjà data-da, que closest() trouverait pour n'importe quel toucher)
+  const t = ev.target.closest('[data-check],[data-open],[data-serment],[data-agenda],[data-more],[data-switch-da]');
+  if (!t || !da2Home.contains(t)) return;
   if (t.dataset.check != null) { const a = arbres[+t.dataset.check]; setArbreFait(a, !a.fait); if (a.fait) playSound(doneSound); renderDa2Periods(); return; }
   if (t.dataset.more != null) { da2.expanded = !da2.expanded; renderDa2Periods(); return; }
-  if (t.dataset.da != null) { toggleDaStyle(); return; }
+  if (t.dataset.switchDa != null) { toggleDaStyle(); return; }
   if (t.dataset.agenda != null) { openTimeblock(formatDate(new Date()), null); return; }
   if (t.dataset.serment) { const k = +t.dataset.serment; if (sermentSuffix(k)) location.hash = `serment${k}`; else editSerment(k, renderGui); return; }
   if (t.dataset.open) location.hash = t.dataset.open;
