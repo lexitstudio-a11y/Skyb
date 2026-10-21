@@ -1156,17 +1156,20 @@ document.documentElement.dataset.da = da;
 const STYLE_KEY = 'da-style';
 let daStyle = (() => { try { return localStorage.getItem(STYLE_KEY) === '2' ? 2 : 1; } catch { return 1; } })();
 const isDa2 = () => daStyle === 2;
+// Numéro affiché : la D.A sombre (gris / noir / vert, daStyle 2) s'appelle « D.A 1 », la D.A Minecraft (avec le fond)
+// « D.A 2 » (le stockage interne, lui, ne change pas : les choix déjà faits sont gardés).
+const daLabel = (style = daStyle) => style === 2 ? 1 : 2;
 document.documentElement.dataset.style = daStyle;
 function toggleDaStyle() {
   daStyle = isDa2() ? 1 : 2;
   try { localStorage.setItem(STYLE_KEY, String(daStyle)); } catch {}
   document.documentElement.dataset.style = daStyle;
-  showToast({ title: `D.A ${daStyle}`, text: daStyle === 2 ? 'Deuxième D.A activée' : 'Première D.A activée', duration: 2500 });
+  showToast({ title: `D.A ${daLabel()}`, text: `D.A ${daLabel()} activée`, duration: 2500 });
   // téléphone, passage à la D.A 2 : on arrive sur sa page d'accueil (les autres pages ne changent pas encore)
   if (isDa2() && isMobileLayout() && location.hash !== '#main') { location.hash = 'main'; return; }
   showPageFromHash();   // redessine la page avec la D.A choisie
 }
-const daStyleTooltip = () => ['§aChanger de D.A', `§7D.A actuelle : §e${daStyle}`, '', `§eClique pour passer à la D.A ${isDa2() ? 1 : 2} !`];
+const daStyleTooltip = () => ['§aChanger de D.A', `§7D.A actuelle : §e${daLabel()}`, '', `§eClique pour passer à la D.A ${daLabel(isDa2() ? 1 : 2)} !`];
 const playJukebox = () => window.open('https://www.youtube.com/watch?v=x3bBQasjbfs', '_blank', 'noopener');
 const PAGE_TITLES = { main: 'Profil Joueur', agenda: 'Agenda de la journée', 'agenda-autres': 'Autres Journées', todo: 'Liste de choses à faire', 'todo-finies': 'Actions terminées', habitudes: "Liste d'Habitude", serments: 'Les Pilliers Temporels', duree: 'Durée des Serments', arbres: 'Racines', progression: 'Arbre de progression' };
 const PAGES = {
@@ -2547,7 +2550,7 @@ const headMenuItems = () => [
   { head: 'steve', label: 'Modifier le profil', action: editProfile },
   ...(isDa2() ? [{ image: 'arbre_logo', label: 'Accueil', action: () => { location.hash = 'main'; } }] : []),
   { image: 'jukebox', label: 'Jukebox', action: playJukebox },
-  { image: 'cadre_da', label: `Passer à la D.A ${isDa2() ? 1 : 2}`, action: toggleDaStyle },
+  { image: 'cadre_da', label: `Passer à la D.A ${daLabel(isDa2() ? 1 : 2)}`, action: toggleDaStyle },
   { item: 'ender_pearl', label: session ? 'Compte' : 'Connexion', action: openAccount },
 ];
 function headMenuRect(S = state.S * guiRatio()) {
@@ -5463,7 +5466,7 @@ function renderDa2Home() {
       : '<div class="box" data-open="progression"><p class="muted">Crée ton Arbre de progression : touche pour commencer.</p></div>'}</section>
     <section><h3 class="mc">Boutons</h3><div class="grid">
       ${[['arbres', 'Racines'], ['serments', 'Serments'], ['todo', 'Choses à faire'], ['habitudes', 'Habitudes'], ['agenda', 'Agendas']].map(([pg, t]) => `<button class="btn mc" data-open="${pg}">${t}</button>`).join('')}
-      <button class="btn mc" data-switch-da>D.A 1</button></div></section>`;
+      <button class="btn mc" data-switch-da>D.A 2</button></div></section>`;
   const treeSlot = da2Home.querySelector('#da2Tree');
   if (treeSlot) { treeSlot.append(miniCanvas); miniCanvas.classList.add('inHome'); }
   const serments = da2Home.querySelector('#da2Serments');
