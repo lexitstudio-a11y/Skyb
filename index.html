@@ -3803,7 +3803,7 @@ addEventListener('keydown', ev => {
 // sa durée ; clic sur un bloc = renommer / supprimer. Molette = défiler dans la journée.
 const TB_KEY = 'timeblocks';
 const timeblocks = (() => { try { return JSON.parse(localStorage.getItem(TB_KEY)) || {}; } catch { return {}; } })();
-const TB_START = 6 * 60, TB_END = 24 * 60, TB_HOUR = 24, TB_SNAP = 15;   // de 6h à minuit, 24 px GUI par heure
+const TB_START = 5 * 60, TB_END = 24 * 60, TB_HOUR = 24, TB_SNAP = 15;   // de 5h à minuit, 24 px GUI par heure
 const TB_CONTENT = (TB_END - TB_START) * TB_HOUR / 60;
 const timeblockScreen = document.getElementById('timeblockScreen');
 const timeblockCanvas = document.getElementById('timeblockCanvas');
