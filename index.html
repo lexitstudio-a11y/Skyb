@@ -3493,6 +3493,24 @@ signInput.addEventListener('input', () => {
 document.addEventListener('selectionchange', () => { if (sign.cfg) { sign.blinkOn = true; renderSign(); } });
 signInput.addEventListener('keydown', ev => {
   if (ev.key === 'Escape') { ev.preventDefault(); const cfg = sign.cfg; closeSign(); if (cfg.onCancel) cfg.onCancel(); return; }
+  // Livre : flèches haut / bas = ligne affichée au-dessus / en dessous (les objectifs longs passent sur plusieurs
+  // lignes dans le livre, pas dans le champ caché), à la même position horizontale.
+  if (sign.cfg.book && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') && !ev.shiftKey) {
+    const rows = bookRows(signInput.value), caret = signInput.selectionStart;
+    let cur = 0;
+    rows.forEach((r, i) => { if (r.start <= caret) cur = i; });
+    const target = rows[cur + (ev.key === 'ArrowDown' ? 1 : -1)];
+    ev.preventDefault();
+    if (!target) return;
+    const x = textWidth(font, rows[cur].text.slice(0, caret - rows[cur].start));
+    const len = target.text.replace(/ $/, '').length;   // pas après l'espace qui coupe la ligne (ce serait la suivante)
+    let best = 0;
+    for (let c = 0; c <= len; c++) if (Math.abs(textWidth(font, target.text.slice(0, c)) - x) < Math.abs(textWidth(font, target.text.slice(0, best)) - x)) best = c;
+    signInput.setSelectionRange(target.start + best, target.start + best);
+    sign.blinkOn = true;
+    renderSign();
+    return;
+  }
   if (ev.key !== 'Enter') return;
   // Livre : Maj + Entrée saute toujours une ligne (jamais « Terminé »), s'il reste de la place sur la page.
   if (sign.cfg.book && ev.shiftKey) {
