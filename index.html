@@ -933,7 +933,9 @@ function agendaSlot(agenda, n, image) {
     tooltip: () => {
       const t = agenda.arbre && treeById(agenda.arbre);
       // une ligne vide entre deux objectifs (tirets), pour les distinguer quand ils passent sur plusieurs lignes
-      return ['§aAgenda ' + agenda.date, ...(lines.length ? lines.flatMap((l, i) => i ? ['', '§g- ' + l] : ['§g- ' + l]) : ['§7Aucun objectif.']), ...(t ? ['', `§7Arbre lié : §e${t.name}`] : []), '', '§eClique pour voir !'];
+      // objectif à case cochée : en vert, sans les crochets
+      const goal = l => { const c = checkLine(l); return c ? (c.checked ? '§a☑ ' : '§g☐ ') + c.text : '§g- ' + l; };
+      return ['§aAgenda ' + agenda.date, ...(lines.length ? lines.flatMap((l, i) => i ? ['', goal(l)] : [goal(l)]) : ['§7Aucun objectif.']), ...(t ? ['', `§7Arbre lié : §e${t.name}`] : []), '', '§eClique pour voir !'];
     },
     action: () => editAgenda(agenda.date),
   };
@@ -973,12 +975,30 @@ function reviewDay(agenda) {
       onDone: text => { agenda.bilan.texte = text.trim(); saveAgendas(); refreshAgenda(); },
     });
   };
-  openConfirm({
+  const ask = () => openConfirm({
     question: "Comment s'est passé ta journée ?",
     detail: ['Agenda ' + agenda.date],
     buttonWidth: 110,
     noLabel: '§cMauvaise journée', yesLabel: '§aBonne journée', editLabel: '§eTrès bonne journée',
     onNo: () => pick('mauvaise'), onYes: () => pick('bonne'), onEdit: () => pick('tres_bonne'),
+  });
+  // Agenda avec des cases à cocher ([] en début de ligne) : d'abord les cocher, « Valider » mène aux 3 boutons
+  const lines = () => agenda.texte.split('\n');
+  const boxes = () => lines().map((l, i) => ({ c: checkLine(l), i })).filter(x => x.c);
+  if (!boxes().length) { ask(); return; }
+  openConfirm({
+    question: 'Objectifs de la journée', detail: ['Agenda ' + agenda.date],
+    checks: {
+      items: () => boxes().map(({ c }) => ({ label: c.text, checked: c.checked })),
+      onToggle: k => {
+        const all = lines(), { c, i } = boxes()[k];
+        all[i] = (c.checked ? '[] ' : '[x] ') + c.text;
+        agenda.texte = all.join('\n');
+        saveAgendas();
+        refreshAgenda();
+      },
+    },
+    noLabel: 'Retour', yesLabel: '§aValider', onYes: ask,
   });
 }
 // Place les agendas (le premier en haut à gauche) dans la zone verte, avec leur bilan juste en dessous :
@@ -1067,14 +1087,15 @@ const agendaLinks = {};
 function editAgenda(date, text) {
   const existing = agendas.find(a => a.date === date);
   openSign({
-    book: true, title: 'Objectifs de la journée',
+    book: true, title: 'Objectifs de la journée', checkboxes: true,   // « [] » en début de ligne : case à cocher
     lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
     initial: text != null ? text : existing ? existing.texte : '',
     onExtra: typed => openTimeblock(date, () => editAgenda(date, typed)),
     extra2Label: 'Lier à un arbre',
     onExtra2: typed => linkAgendaTree(date, typed),
     onDone: text => {
-      const clean = text.split('\n').filter(l => l.trim()).join('\n');
+      // cases à cocher écrites [ ] / [X] : remises en [] / [x]
+      const clean = text.split('\n').filter(l => l.trim()).map(l => { const c = checkLine(l); return c ? (c.checked ? '[x] ' : '[] ') + c.text : l; }).join('\n');
       const i = agendas.findIndex(a => a.date === date);
       if (!clean) { if (i >= 0) agendas.splice(i, 1); }   // livre vide : pas d'agenda
       else if (i >= 0) agendas[i].texte = clean;
@@ -3342,12 +3363,26 @@ function renderBook() {
   rows.forEach((row, i) => {
     if (!onPage(i)) return;
     const y = rowY(i);
-    if (row.bullet && !cfg.noBullets) {   // gros point à gauche de chaque objectif
+    // « [] » (ou « [x] ») en début d'objectif : une case à cocher à la place du point, dessinée sur la place de
+    // ces caractères (le curseur reste au bon endroit)
+    const box = row.bullet && cfg.checkboxes ? checkLine(row.text) : null;
+    if (row.bullet && !cfg.noBullets && !box) {   // gros point à gauche de chaque objectif
       ctx.fillStyle = '#000000';
       ctx.fillRect((tx - 7) * S, (y + 2) * S, 3 * S, 3 * S);
     }
     const shown = row.text.replace(/ $/, '');
-    drawText(ctx, font, shown, tx, y, '#000000', S);
+    if (box) {
+      const bx = tx - 1;   // à la place des caractères « [] »
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(bx * S, (y - 1) * S, 8 * S, 8 * S);
+      ctx.fillStyle = '#FFFDF5';
+      ctx.fillRect((bx + 1) * S, y * S, 6 * S, 6 * S);
+      if (box.checked) {   // coche noire
+        ctx.fillStyle = '#000000';
+        for (const [dx, dy] of [[1, 3], [2, 4], [3, 3], [4, 2], [5, 1]]) ctx.fillRect((bx + dx) * S, (y + dy) * S, S, S);
+      }
+      drawText(ctx, font, shown.slice(box.prefix.length), tx + textWidth(font, row.text.slice(0, box.prefix.length)), y, box.checked ? '#707070' : '#000000', S);
+    } else drawText(ctx, font, shown, tx, y, '#000000', S);
     if (i === active && sign.blinkOn) {
       const col = caret - row.start;
       if (col >= shown.length) drawText(ctx, font, '_', tx + textWidth(font, row.text.slice(0, col)), y, '#000000', S);
@@ -3548,6 +3583,28 @@ function openDateSign(field) {
   });
 }
 
+// Case à cocher façon Minecraft (11 x 11) : emplacement creusé gris, coche blanche pixelisée si cochée ; bord blanc au survol.
+function drawCheckbox(ctx, x, y, checked, hover, S, box = 11) {
+  ctx.fillStyle = hover ? '#FFFFFF' : '#000000';
+  ctx.fillRect(x * S, y * S, box * S, box * S);
+  ctx.fillStyle = '#8B8B8B';
+  ctx.fillRect((x + 1) * S, (y + 1) * S, (box - 2) * S, (box - 2) * S);
+  ctx.fillStyle = '#373737';   // creux façon emplacement Minecraft : ombre en haut à gauche
+  ctx.fillRect((x + 1) * S, (y + 1) * S, (box - 2) * S, S);
+  ctx.fillRect((x + 1) * S, (y + 1) * S, S, (box - 2) * S);
+  if (!checked) return;
+  const px = [[0, 4], [1, 5], [2, 6], [3, 5], [4, 4], [5, 3], [6, 2], [6, 1]];   // coche blanche, avec ombre
+  for (const [dx, dy] of px) {
+    ctx.fillStyle = '#3F3F3F'; ctx.fillRect((x + 2 + dx + 1) * S, (y + 1 + dy + 1) * S, S, S);
+    ctx.fillStyle = '#FFFFFF'; ctx.fillRect((x + 2 + dx) * S, (y + 1 + dy) * S, S, S);
+  }
+}
+// Ligne d'agenda « case à cocher » : commence par [] (ou [ ]) ; cochée : [x]. Renvoie { prefix, checked, text } ou null.
+function checkLine(line) {
+  const m = /^\[( ?|x|X)\]\s?/.exec(line);
+  return m ? { prefix: m[0], checked: /x/i.test(m[1]), text: line.slice(m[0].length) } : null;
+}
+
 // --- Question oui / non (comme l'écran de confirmation de Minecraft) ---
 const dialogScreen = document.getElementById('dialogScreen');
 const dialogCanvas = document.getElementById('dialogCanvas');
@@ -3562,7 +3619,7 @@ function renderConfirm() {
   const question = fit(dialog.cfg.question), lines = (dialog.cfg.detail || []).flatMap(l => l ? fit(l) : ['']);
   // Hauteur totale (question, détails, nuancier, boutons) pour centrer le tout verticalement
   const total = 6 + question.length * 10 + lines.length * 10 + (dialog.cfg.colors ? 36 : 0) + 14 + 20
-    + (dialog.cfg.check ? 19 : 0) + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
+    + (dialog.cfg.check ? 19 : 0) + (dialog.cfg.checks ? 6 + dialog.cfg.checks.items().length * 14 : 0) + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
   const bw0 = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2));
   // libellés trop larges pour deux boutons côte à côte (téléphone) : Non puis Oui, l'un sous l'autre
   const stacked = !dialog.cfg.choicesFirst && Math.max(textWidth(font, dialog.cfg.noLabel || 'Non'), textWidth(font, dialog.cfg.yesLabel || 'Oui')) > bw0 - 6;
@@ -3606,22 +3663,26 @@ function renderConfirm() {
     const x = Math.floor(W / 2 - w / 2), cy = y + 8;
     check = [x, cy, w, box];
     const hov = dialog.hover === 'check';
-    ctx.fillStyle = hov ? '#FFFFFF' : '#000000';
-    ctx.fillRect(x * S, cy * S, box * S, box * S);
-    ctx.fillStyle = '#8B8B8B';
-    ctx.fillRect((x + 1) * S, (cy + 1) * S, (box - 2) * S, (box - 2) * S);
-    ctx.fillStyle = '#373737';   // creux façon emplacement Minecraft : ombre en haut à gauche
-    ctx.fillRect((x + 1) * S, (cy + 1) * S, (box - 2) * S, S);
-    ctx.fillRect((x + 1) * S, (cy + 1) * S, S, (box - 2) * S);
-    if (dialog.cfg.check.checked()) {   // coche blanche pixelisée, avec ombre
-      const px = [[0, 4], [1, 5], [2, 6], [3, 5], [4, 4], [5, 3], [6, 2], [6, 1]];
-      for (const [dx, dy] of px) {
-        ctx.fillStyle = '#3F3F3F'; ctx.fillRect((x + 2 + dx + 1) * S, (cy + 1 + dy + 1) * S, S, S);
-        ctx.fillStyle = '#FFFFFF'; ctx.fillRect((x + 2 + dx) * S, (cy + 1 + dy) * S, S, S);
-      }
-    }
+    drawCheckbox(ctx, x, cy, dialog.cfg.check.checked(), hov, S);
     drawText(ctx, font, label, x + box + 4, cy + 2, hov ? '#FFFFA0' : '#FFFFFF', S, true);
     y = cy + box;
+  }
+  // Liste de cases à cocher (cfg.checks = { items() -> [{ label, checked }], onToggle(i) }) : une par ligne, alignées
+  // à gauche dans un bloc centré ; un clic coche / décoche (la fenêtre reste ouverte).
+  let checkRows = null;
+  if (dialog.cfg.checks) {
+    const items = dialog.cfg.checks.items(), maxW = W - 30;
+    const labels = items.map(it => fitText(it.label, maxW - 15));
+    const blockW = Math.min(maxW, 15 + Math.max(0, ...labels.map(l => textWidth(font, l))));
+    const x = Math.floor(W / 2 - blockW / 2);
+    y += 6;
+    checkRows = items.map((it, i) => {
+      const r = [x, y + i * 14, blockW, 11], hov = dialog.hover === 'cl' + i;
+      drawCheckbox(ctx, x, r[1], it.checked, hov, S);
+      drawText(ctx, font, labels[i], x + 15, r[1] + 2, it.checked ? '#55FF55' : hov ? '#FFFFA0' : '#FFFFFF', S, true);
+      return r;
+    });
+    y += items.length * 14;
   }
   let bw = bw0, by = y + 14, no, yes;
   if (dialog.cfg.choicesFirst) {   // les choix d'abord (pleine largeur), puis un seul bouton « Non » en bas
@@ -3635,7 +3696,7 @@ function renderConfirm() {
     if (r.prio) drawButton(ctx, ...r.prio.slice(0, 3), dialog.cfg.priorityLabel, dialog.hover === 'prio', S);
     if (r.del) drawButton(ctx, ...r.del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
     drawButton(ctx, ...no.slice(0, 3), dialog.cfg.noLabel || 'Non', dialog.hover === 'no', S);
-    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb, tree, check };
+    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb, tree, check, checkRows };
     return;
   }
   if (stacked) {
@@ -3659,7 +3720,7 @@ function renderConfirm() {
   if (edit) drawButton(ctx, ...edit.slice(0, 3), dialog.cfg.editLabel || 'Modifier le titre', dialog.hover === 'edit', S);
   if (prio) drawButton(ctx, ...prio.slice(0, 3), dialog.cfg.priorityLabel || 'Priorité', dialog.hover === 'prio', S);
   if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
-  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb, tree, check };
+  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb, tree, check, checkRows };
 }
 function openConfirm(cfg) {
   dialog.cfg = cfg;
@@ -3676,16 +3737,19 @@ function closeConfirm() {
   renderGui();
 }
 dialogCanvas.addEventListener('mousemove', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb, tree, check } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows } = dialog.layout;
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
-  const hover = check && inRect(ev, check, S) ? 'check' : orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
+  const cl = checkRows ? checkRows.findIndex(r => inRect(ev, r, S)) : -1;
+  const hover = cl >= 0 ? 'cl' + cl : check && inRect(ev, check, S) ? 'check' : orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
     : prio && inRect(ev, prio, S) ? 'prio' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
 });
 dialogCanvas.addEventListener('click', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb, tree, check } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows } = dialog.layout;
   const cfg = dialog.cfg;
+  const cl = checkRows ? checkRows.findIndex(r => inRect(ev, r, S)) : -1;
+  if (cl >= 0) { playClick(); cfg.checks.onToggle(cl); renderConfirm(); return; }   // la fenêtre reste ouverte
   if (check && inRect(ev, check, S)) { playClick(); cfg.check.onToggle(); renderConfirm(); return; }   // la fenêtre reste ouverte
   if (orb && inRect(ev, orb, S)) { playClick(); closeConfirm(); cfg.colors.onOrb(); return; }
   if (tree && inRect(ev, tree, S)) { playClick(); closeConfirm(); cfg.colors.onTree(); return; }
