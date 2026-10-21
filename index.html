@@ -4011,7 +4011,11 @@ function loadPhotoBackground() {
 // sans fuseau, certains agendas (Notion Calendar) les lisaient comme de l'UTC et décalaient tout de 1 à 2 h.
 function exportTimeblockIcs() {
   const blocks = tbBlocks();
-  if (!blocks.length) { showToast({ title: 'Aucun bloc', text: `Rien à exporter pour le ${tb.date}`, color: '#FF5555', duration: 3000 }); return; }
+  // Objectifs (cases à cocher) de l'agenda de ce jour : exportés comme tâches de la journée (événements « toute la
+  // journée », ☐ à faire / ☑ fait) — les agendas (Apple, Google, Notion) n'importent pas les vraies tâches (VTODO).
+  const agenda = agendas.find(a => a.date === tb.date);
+  const tasks = agenda ? agenda.texte.split('\n').map(l => l.trim()).filter(Boolean).map(l => checkLine(l) || { checked: false, text: l }) : [];
+  if (!blocks.length && !tasks.length) { showToast({ title: 'Aucun bloc', text: `Rien à exporter pour le ${tb.date}`, color: '#FF5555', duration: 3000 }); return; }
   const [d, m, y] = tb.date.split('/'), day = `${y}${m}${d}`;
   const at = min => new Date(+y, m - 1, +d, 0, min).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const esc = t => String(t || 'Bloc').replace(/[\\;,]/g, c => '\\' + c).replace(/\n/g, '\\n');
@@ -4023,6 +4027,11 @@ function exportTimeblockIcs() {
     // agendas synchronisés (iCloud, Google → Notion Calendar) au lieu d'être ignoré
     'BEGIN:VEVENT', `UID:skyblock-${day}-${b.debut}-${i}@skyblock-menu`, `DTSTAMP:${stamp}`, `LAST-MODIFIED:${stamp}`, `SEQUENCE:${seq}`,
     `DTSTART:${at(b.debut)}`, `DTEND:${at(b.fin)}`, `SUMMARY:${esc(b.titre)}`, 'END:VEVENT'));
+  const next = new Date(+y, m - 1, +d + 1), dayAfter = `${next.getFullYear()}${pad2(next.getMonth() + 1)}${pad2(next.getDate())}`;
+  tasks.forEach((t, k) => lines.push(
+    'BEGIN:VEVENT', `UID:skyblock-tache-${day}-${k}@skyblock-menu`, `DTSTAMP:${stamp}`, `LAST-MODIFIED:${stamp}`, `SEQUENCE:${seq}`,
+    `DTSTART;VALUE=DATE:${day}`, `DTEND;VALUE=DATE:${dayAfter}`, `SUMMARY:${esc((t.checked ? '☑ ' : '☐ ') + t.text)}`,
+    'TRANSP:TRANSPARENT', 'CATEGORIES:Tâche', 'END:VEVENT'));
   lines.push('END:VCALENDAR');
   const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
   const a = document.createElement('a');
@@ -4032,7 +4041,8 @@ function exportTimeblockIcs() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-  showToast({ title: 'Timeblock exporté', text: `${blocks.length} bloc${blocks.length > 1 ? 's' : ''} : ouvre le fichier pour l'ajouter`, duration: 4000 });
+  const parts = [blocks.length && `${blocks.length} bloc${blocks.length > 1 ? 's' : ''}`, tasks.length && `${tasks.length} tâche${tasks.length > 1 ? 's' : ''}`].filter(Boolean);
+  showToast({ title: 'Timeblock exporté', text: `${parts.join(' + ')} : ouvre le fichier pour l'ajouter`, duration: 4000 });
 }
 // « Photo » -> aperçu de l'image en fond d'écran d'iPhone -> « Télécharger l'image » -> choix du dossier.
 async function timeblockPhoto() {
