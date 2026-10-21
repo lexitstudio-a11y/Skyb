@@ -1051,12 +1051,16 @@ function agendaSlots() {
 // Balise (en haut à droite de l'agenda) : part et nombre de mauvaises / bonnes / très bonnes journées
 // parmi tous les agendas qui ont un bilan.
 function bilanStats() {
-  const notes = agendas.map(a => a.bilan && a.bilan.note).filter(n => BILANS[n]);
+  // journées fantômes (sans agenda, entre deux journées écrites) comptées avec les journées notées
+  const { recent, older } = splitAgendas(), ghosts = [...recent, ...older].filter(a => a.ghost).length;
+  const notes = agendas.map(a => a.bilan && a.bilan.note).filter(n => BILANS[n]), total = notes.length + ghosts;
+  const pct = n => total ? Math.round(n / total * 100) : 0;
   const rows = [['mauvaise', 'MJ'], ['bonne', 'BJ'], ['tres_bonne', 'TBJ']].map(([note, short]) => {
-    const n = notes.filter(x => x === note).length, pct = notes.length ? Math.round(n / notes.length * 100) : 0;
-    return `${BILANS[note].label} §7: §f${pct}% §8(${n} ${short})`;
+    const n = notes.filter(x => x === note).length;
+    return `${BILANS[note].label} §7: §f${pct(n)}% §8(${n} ${short})`;
   });
-  return ['§bBilan des journées', ...rows, '', `§7${notes.length} journée${notes.length > 1 ? 's' : ''} notée${notes.length > 1 ? 's' : ''}`];
+  rows.push(`§7Journée Fantôme : §f${pct(ghosts)}% §8(${ghosts} JF)`);
+  return ['§bBilan des journées', ...rows, '', `§7${total} journée${total > 1 ? 's' : ''} comptée${total > 1 ? 's' : ''}`];
 }
 const agendaToWrite = () => { const today = formatDate(new Date()); return agendas.some(a => a.date === today) ? tomorrow() : today; };
 // « Autres Journées » : tous les anciens agendas (aucun n'est supprimé), 14 par page (15 sur téléphone) ; flèche en bas à droite
