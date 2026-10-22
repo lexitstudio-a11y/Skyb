@@ -3739,7 +3739,12 @@ function renderConfirm() {
   }
   // cfg.corner = { label, action } : bouton en haut à gauche de l'écran (ex. « Journée de Repos »)
   const corner = dialog.cfg.corner ? [6, 6, textWidth(font, dialog.cfg.corner.label) + 20, 20] : null;
-  if (corner) drawButton(ctx, corner[0], corner[1], corner[2], dialog.cfg.corner.label, dialog.hover === 'corner', S);
+  if (corner) {   // discret : opacité 30 %
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    drawButton(ctx, corner[0], corner[1], corner[2], dialog.cfg.corner.label, dialog.hover === 'corner', S);
+    ctx.restore();
+  }
   let bw = bw0, by = y + 14, no, yes;
   if (dialog.cfg.choicesFirst) {   // les choix d'abord (pleine largeur), puis un seul bouton « Non » en bas
     const full = Math.min(Math.floor((W - 20) / 2), Math.max(bw, 90));
