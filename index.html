@@ -5678,14 +5678,17 @@ function renderBilanGraph() {
   }
   const X = i => g.x + 1 + (n === 1 ? Math.floor((g.w - 3) / 2) : Math.round(i / (n - 1) * (g.w - 3)));
   const Y = v => g.y + g.h - 2 - Math.round(v / max * (g.h - 3));
-  series.forEach((ser, k) => {   // escaliers de 2 px ; type estompé : 5 % d'opacité
+  // Courbes : d'un jour au suivant, une ligne droite (même en biais) tracée avec des carrés de 2 x 2 (l'épaisseur
+  // du trait), comme un trait pixelisé ; type estompé : 5 % d'opacité.
+  const seg = (x0, y0, x1, y1, c) => {
+    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+    for (let t = 0; t <= steps; t++) fr(Math.round(x0 + (x1 - x0) * t / steps), Math.round(y0 + (y1 - y0) * t / steps), 2, 2, c);
+  };
+  series.forEach((ser, k) => {
     const c = STATS_TYPES[k].color;
     ctx.globalAlpha = stats.dim.has(STATS_TYPES[k].key) ? 0.05 : 1;
-    for (let i = 0; i < n; i++) {
-      const x0 = X(i), y0 = Y(ser[i]);
-      if (i > 0) { const yp = Y(ser[i - 1]); fr(X(i - 1), yp, x0 - X(i - 1) + 2, 2, c); fr(x0, Math.min(yp, y0), 2, Math.abs(yp - y0) + 2, c); }
-      else fr(x0, y0, 2, 2, c);
-    }
+    if (n === 1) fr(X(0), Y(ser[0]), 2, 2, c);
+    for (let i = 1; i < n; i++) seg(X(i - 1), Y(ser[i - 1]), X(i), Y(ser[i]), c);
     ctx.globalAlpha = 1;
   });
   // dates sous l'axe
