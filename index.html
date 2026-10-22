@@ -5626,9 +5626,21 @@ function pickStatsDates() {
 }
 function renderBilanGraph() {
   const S = tbScale(), { ctx, W, H } = prepareScreen(statsCanvas, S);
-  const narrow = W < 260;
-  const pw = Math.min(W - 6, 380), ph = Math.min(H - 8, isMobileLayout() ? 320 : 250);   // téléphone : graphique plus haut
-  const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph) / 2));
+  // légende en bas de l'écran (hors du panneau) : couleur + nom complet + total, sur une ou plusieurs lignes centrées
+  const legendLabel = (t, total) => `${BILANS[t.key] ? BILANS[t.key].label.slice(2) : 'Journée Fantôme'} : ${total}`;
+  const legendRows = [];
+  {
+    let row = [], w = 0;
+    for (const t of STATS_TYPES) {
+      const iw = 9 + textWidth(font, legendLabel(t, 999)) + 10;
+      if (row.length && w + iw > W - 8) { legendRows.push(row); row = []; w = 0; }
+      row.push(t); w += iw;
+    }
+    legendRows.push(row);
+  }
+  const legendH = legendRows.length * 11 + 6;
+  const pw = Math.min(W - 6, 380), ph = Math.min(H - 8 - legendH, isMobileLayout() ? 320 : 250);   // téléphone : graphique plus haut
+  const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - legendH - ph) / 2));
   const fr = (x, y, w, h, c) => { if (w > 0 && h > 0) { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); } };
   drawPanel(ctx, px, py, pw, ph, S);
   drawText(ctx, font, 'Évolution des journées', px + 8, py + 6, '#404040', S);
@@ -5651,8 +5663,8 @@ function renderBilanGraph() {
   });
   const max = Math.max(1, ...series.map(s => s[n - 1]));
   // zone du graphique (creusée), axe des nombres à gauche
-  const legendH = narrow ? 22 : 12, back = [px + Math.floor(pw / 2) - 40, py + ph - 26, 80, 20];
-  const g = { x: px + 22, y: py + 46, w: pw - 22 - 10, h: ph - 46 - 12 - legendH - 28 };
+  const back = [px + Math.floor(pw / 2) - 40, py + ph - 26, 80, 20];
+  const g = { x: px + 22, y: py + 46, w: pw - 22 - 10, h: ph - 46 - 12 - 32 };
   fr(g.x - 1, g.y - 1, g.w + 2, g.h + 2, '#FFFFFF');
   fr(g.x - 1, g.y - 1, g.w + 1, g.h + 1, '#373737');
   fr(g.x, g.y, g.w, g.h, '#2B2B2B');
@@ -5678,14 +5690,17 @@ function renderBilanGraph() {
   drawText(ctx, font, dd(from), g.x, g.y + g.h + 3, '#404040', S);
   if (n > 1) { const t = dd(to); drawText(ctx, font, t, g.x + g.w - textWidth(font, t), g.y + g.h + 3, '#404040', S); }
   if (n > 2) { const mid = new Date(from.getTime() + Math.round((n - 1) / 2) * 864e5), t = dd(mid); drawText(ctx, font, t, g.x + Math.floor(g.w / 2 - textWidth(font, t) / 2), g.y + g.h + 3, '#404040', S); }
-  // légende : couleur + abréviation + total sur la période
-  const items = STATS_TYPES.map((t, k) => `${t.short} ${series[k][n - 1]}`);
-  const per = narrow ? 3 : 5, colW = Math.floor((pw - 16) / per);
-  items.forEach((t, k) => {
-    const lx = px + 8 + (k % per) * colW, ly = g.y + g.h + 14 + Math.floor(k / per) * 10;
-    fr(lx, ly + 1, 6, 6, STATS_TYPES[k].color);
-    fr(lx, ly + 1, 6, 1, 'rgba(0,0,0,0.25)');
-    drawText(ctx, font, t, lx + 9, ly, '#404040', S);
+  // légende en bas de l'écran : total de chaque type sur la période
+  legendRows.forEach((row, r) => {
+    const labels = row.map(t => legendLabel(t, series[STATS_TYPES.indexOf(t)][n - 1]));
+    const rowW = labels.reduce((w, l) => w + 9 + textWidth(font, l) + 10, -10);
+    let lx = Math.floor(W / 2 - rowW / 2);
+    const ly = H - legendH + 3 + r * 11;
+    row.forEach((t, j) => {
+      fr(lx, ly + 1, 6, 6, t.color);
+      drawText(ctx, font, labels[j], lx + 9, ly, '#FFFFFF', S, true);
+      lx += 9 + textWidth(font, labels[j]) + 10;
+    });
   });
   drawButton(ctx, back[0], back[1], back[2], 'Retour', stats.hover === 'back', S);
   // survol / appui sur le graphique : trait du jour et bulle avec la date et les nombres
