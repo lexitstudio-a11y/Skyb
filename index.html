@@ -3310,7 +3310,15 @@ function renderSign() {
   const btnX = Math.floor(W / 2) - Math.floor(btnW / 2), btnY = Math.min(H - 24, by + 48 + 56 + 16);
   drawButton(ctx, btnX, btnY, btnW, 'Terminé', sign.hoverDone, S);
 
-  sign.layout = { S, board: [bx, by, 96, 48], button: [btnX, btnY, btnW, 20] };
+  // cfg.topCheck : case à cocher en haut à gauche de l'écran (ex. « Deep Work ? » d'un bloc du Timeblock)
+  let topCheck = null;
+  if (cfg.topCheck) {
+    const label = cfg.topCheck.label;
+    topCheck = [6, 6, 15 + textWidth(font, label), 11];
+    drawCheckbox(ctx, 6, 6, cfg.topCheck.checked(), sign.hoverTop, S);
+    drawText(ctx, font, label, 21, 8, sign.hoverTop ? '#FFFFA0' : '#FFFFFF', S, true);
+  }
+  sign.layout = { S, board: [bx, by, 96, 48], button: [btnX, btnY, btnW, 20], topCheck };
   Object.assign(signInput.style, { left: bx * S + 'px', top: by * S + 'px', width: 96 * S + 'px', height: 48 * S + 'px' });
 }
 
@@ -4343,6 +4351,8 @@ function editBlockTitle(block, isNew) {
   hideTimeblock();
   openSign({
     title: isNew ? 'Nouveau bloc' : 'Renommer le bloc',
+    // Deep Work : directement sur le panneau (nouveau bloc : enregistré avec lui à « Terminé »)
+    topCheck: { label: 'Deep Work ?', checked: () => !!block.deepWork, onToggle: () => { if (block.deepWork) delete block.deepWork; else block.deepWork = true; if (!isNew) saveTimeblocks(); } },
     lines: 2, fixed: ['', '', '^^^^^^^^^^^^', `${fmtMin(block.debut)} - ${fmtMin(block.fin)}`],
     initial: isNew ? '' : block.titre,
     onDone: text => {
