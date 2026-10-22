@@ -270,6 +270,9 @@
 </div>
 <div id="toasts"></div>
 <div id="da2Home" hidden></div>
+<div id="statsScreen" class="screen" hidden>
+  <canvas id="statsCanvas"></canvas>
+</div>
 <div id="dialogScreen" class="screen" hidden>
   <canvas id="dialogCanvas"></canvas>
 </div>
@@ -1043,7 +1046,7 @@ function agendaGrid(list, slots, numbered) {
 function agendaSlots() {
   return agendaGrid(splitAgendas().recent, {
     '5,0': { image: 'bouton_pierre', tooltip: ['§aAutres Journées', '§7Les agendas de plus de 7 jours.', '', '§eClique pour voir !'], open: 'agenda-autres' },
-    [daRows() ? (isMobileLayout() ? 'v0,2' : 'v0,10') : '0,8']: { image: 'beacon', tooltip: bilanStats },   // D.A test : dans la liste qui défile
+    [daRows() ? (isMobileLayout() ? 'v0,2' : 'v0,10') : '0,8']: { image: 'beacon', tooltip: bilanStats, action: () => openBilanGraph() },   // D.A test : dans la liste qui défile
     // Tant que l'agenda d'aujourd'hui n'est pas écrit, la tête propose celui d'aujourd'hui (puis celui de demain).
     '5,8': {
       image: 'tete_plus_bleue', action: () => editAgenda(agendaToWrite()),
@@ -1067,7 +1070,7 @@ function bilanStats() {
     return `${BILANS[note].label} §7: §f${pct(n)}% §8(${n} ${short})`;
   });
   rows.push(`§7Journée Fantôme : §f${pct(ghosts)}% §8(${ghosts} JF)`);
-  return ['§bBilan des journées', ...rows, '', `§7${total} journée${total > 1 ? 's' : ''} comptée${total > 1 ? 's' : ''}`];
+  return ['§bBilan des journées', ...rows, '', `§7${total} journée${total > 1 ? 's' : ''} comptée${total > 1 ? 's' : ''}`, '', "§eClique pour voir l'évolution !"];
 }
 const agendaToWrite = () => { const today = formatDate(new Date()); return agendas.some(a => a.date === today) ? tomorrow() : today; };
 // « Autres Journées » : tous les anciens agendas (aucun n'est supprimé), 14 par page (15 sur téléphone) ; flèche en bas à droite
@@ -5458,7 +5461,7 @@ const SUPABASE_KEY = 'sb_publishable_HhqBiNcmR0j0doZ_esJrbA_znOLL7Nw';
 const da2Home = document.getElementById('da2Home');
 const da2 = { serment: 0, period: 0, expanded: false };
 const DA2_GOALS = 3;   // objectifs montrés avant « Plus d'Objectif »
-const OTHER_SCREENS = ['signScreen', 'dialogScreen', 'timeblockScreen', 'progScreen', 'photoScreen', 'loginScreen', 'headScreen'].map(id => document.getElementById(id));
+const OTHER_SCREENS = ['signScreen', 'dialogScreen', 'statsScreen', 'timeblockScreen', 'progScreen', 'photoScreen', 'loginScreen', 'headScreen'].map(id => document.getElementById(id));
 function da2HomeActive() { return isDa2() && isMobileLayout() && state.page === 'main'; }
 const escHtml = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // Mois en cours du serment (1 à 12) depuis la date d'entrée ; 1 tant qu'elle n'est pas choisie ou pas atteinte.
@@ -5569,6 +5572,162 @@ function updateDa2Home() {
 }
 const da2Watch = new MutationObserver(() => updateDa2Home());   // un écran s'ouvre / se ferme par-dessus
 OTHER_SCREENS.forEach(el => el && da2Watch.observe(el, { attributes: true, attributeFilter: ['hidden'] }));
+
+// --- Évolution des journées (clic sur la balise de l'agenda) : graphique du nombre de journées de chaque type,
+// cumulé jour après jour sur la période choisie (Depuis le début / 1 Mois / 1 Semaine / Custom : dates de début et de fin).
+const statsScreen = document.getElementById('statsScreen'), statsCanvas = document.getElementById('statsCanvas');
+const STATS_TYPES = [
+  { key: 'mauvaise', short: 'MJ', color: '#FF5555' }, { key: 'bonne', short: 'BJ', color: '#55FF55' },
+  { key: 'tres_bonne', short: 'TBJ', color: '#FFFF55' }, { key: 'repos', short: 'JR', color: '#FF55FF' },
+  { key: 'ghost', short: 'JF', color: '#AAAAAA' },
+];
+const STATS_RANGES = [['all', 'Depuis le début', 'Tout'], ['month', '1 Mois', '1 Mois'], ['week', '1 Semaine', '1 Sem.'], ['custom', 'Custom', 'Custom']];
+const stats = { range: 'all', from: null, to: null, hover: null, day: null, layout: null };
+const dayStart = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+// Journées « typées » : bilan noté (mauvaise / bonne / très bonne / repos) ou journée fantôme
+function statsDays() {
+  const { recent, older } = splitAgendas();
+  return [...recent, ...older].map(a => ({ date: toDate(a.date), type: a.ghost ? 'ghost' : a.bilan && BILANS[a.bilan.note] ? a.bilan.note : null })).filter(d => d.type);
+}
+function statsPeriod(days) {
+  const today = dayStart(new Date());
+  if (stats.range === 'week') return [new Date(today.getTime() - 6 * 864e5), today];
+  if (stats.range === 'month') { const f = new Date(today); f.setMonth(f.getMonth() - 1); return [f, today]; }
+  if (stats.range === 'custom' && stats.from && stats.to) return [toDate(stats.from), toDate(stats.to)];
+  const first = days.length ? new Date(Math.min(...days.map(d => d.date))) : today;
+  return [first, today > first ? today : first];
+}
+function openBilanGraph() {
+  hideTooltip();
+  canvas.hidden = true;
+  statsScreen.hidden = false;
+  stats.hover = null;
+  stats.day = null;
+  renderBilanGraph();
+}
+function closeBilanGraph() {
+  statsScreen.hidden = true;
+  canvas.hidden = false;
+  renderGui();
+}
+// Custom : date de début puis date de fin (panneaux JJ/MM/AAAA), puis retour au graphique
+function pickStatsDates() {
+  statsScreen.hidden = true;
+  const ask = (title, label, initial, then) => openSign({
+    title, lines: 1, fixed: ['', '^^^^^^^^^^^^', label, 'JJ/MM/AAAA'], numeric: true, initial: initial || '',
+    transform: t => formatDigits(onlyDigits(t)), validate: t => isValidDate(onlyDigits(t)),
+    onDone: t => then(formatDigits(onlyDigits(t))), onCancel: () => openBilanGraph(),
+  });
+  ask('Début de la période', 'Date de début', stats.from, from => ask('Fin de la période', 'Date de fin', stats.to || formatDate(new Date()), to => {
+    [stats.from, stats.to] = toDate(from) <= toDate(to) ? [from, to] : [to, from];
+    stats.range = 'custom';
+    openBilanGraph();
+  }));
+}
+function renderBilanGraph() {
+  const S = tbScale(), { ctx, W, H } = prepareScreen(statsCanvas, S);
+  const narrow = W < 260;
+  const pw = Math.min(W - 6, 380), ph = Math.min(H - 8, isMobileLayout() ? 320 : 250);   // téléphone : graphique plus haut
+  const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph) / 2));
+  const fr = (x, y, w, h, c) => { if (w > 0 && h > 0) { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); } };
+  drawPanel(ctx, px, py, pw, ph, S);
+  drawText(ctx, font, 'Évolution des journées', px + 8, py + 6, '#404040', S);
+  // période
+  const bw = Math.floor((pw - 16 - 9) / 4);
+  const ranges = STATS_RANGES.map(([key, long, short], i) => {
+    const r = [px + 8 + i * (bw + 3), py + 18, bw, 20], label = textWidth(font, long) <= bw - 6 ? long : short;
+    drawButton(ctx, r[0], r[1], r[2], (stats.range === key ? '§a' : '') + label, stats.hover === key, S);
+    return { key, r };
+  });
+  const days = statsDays(), [from, to] = statsPeriod(days);
+  const n = Math.max(1, Math.round((to - from) / 864e5) + 1);
+  const inRange = days.filter(d => d.date >= from && d.date <= to);
+  // séries cumulées : nombre de journées de chaque type jusqu'au jour i inclus
+  const series = STATS_TYPES.map(t => {
+    const per = new Array(n).fill(0);
+    for (const d of inRange) if (d.type === t.key) per[Math.round((d.date - from) / 864e5)]++;
+    let c = 0;
+    return per.map(v => (c += v));
+  });
+  const max = Math.max(1, ...series.map(s => s[n - 1]));
+  // zone du graphique (creusée), axe des nombres à gauche
+  const legendH = narrow ? 22 : 12, back = [px + Math.floor(pw / 2) - 40, py + ph - 26, 80, 20];
+  const g = { x: px + 22, y: py + 46, w: pw - 22 - 10, h: ph - 46 - 12 - legendH - 28 };
+  fr(g.x - 1, g.y - 1, g.w + 2, g.h + 2, '#FFFFFF');
+  fr(g.x - 1, g.y - 1, g.w + 1, g.h + 1, '#373737');
+  fr(g.x, g.y, g.w, g.h, '#2B2B2B');
+  const step = Math.max(1, Math.ceil(max / 5));
+  for (let v = 0; v <= max; v += step) {
+    const y = g.y + g.h - 1 - Math.round(v / max * (g.h - 3));
+    fr(g.x, y, g.w, 1, 'rgba(255,255,255,0.08)');
+    const t = String(v);
+    drawText(ctx, font, t, g.x - 3 - textWidth(font, t), y - 3, '#404040', S);
+  }
+  const X = i => g.x + 1 + (n === 1 ? Math.floor((g.w - 3) / 2) : Math.round(i / (n - 1) * (g.w - 3)));
+  const Y = v => g.y + g.h - 2 - Math.round(v / max * (g.h - 3));
+  series.forEach((ser, k) => {   // escaliers de 2 px
+    const c = STATS_TYPES[k].color;
+    for (let i = 0; i < n; i++) {
+      const x0 = X(i), y0 = Y(ser[i]);
+      if (i > 0) { const yp = Y(ser[i - 1]); fr(X(i - 1), yp, x0 - X(i - 1) + 2, 2, c); fr(x0, Math.min(yp, y0), 2, Math.abs(yp - y0) + 2, c); }
+      else fr(x0, y0, 2, 2, c);
+    }
+  });
+  // dates sous l'axe
+  const dd = d => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+  drawText(ctx, font, dd(from), g.x, g.y + g.h + 3, '#404040', S);
+  if (n > 1) { const t = dd(to); drawText(ctx, font, t, g.x + g.w - textWidth(font, t), g.y + g.h + 3, '#404040', S); }
+  if (n > 2) { const mid = new Date(from.getTime() + Math.round((n - 1) / 2) * 864e5), t = dd(mid); drawText(ctx, font, t, g.x + Math.floor(g.w / 2 - textWidth(font, t) / 2), g.y + g.h + 3, '#404040', S); }
+  // légende : couleur + abréviation + total sur la période
+  const items = STATS_TYPES.map((t, k) => `${t.short} ${series[k][n - 1]}`);
+  const per = narrow ? 3 : 5, colW = Math.floor((pw - 16) / per);
+  items.forEach((t, k) => {
+    const lx = px + 8 + (k % per) * colW, ly = g.y + g.h + 14 + Math.floor(k / per) * 10;
+    fr(lx, ly + 1, 6, 6, STATS_TYPES[k].color);
+    fr(lx, ly + 1, 6, 1, 'rgba(0,0,0,0.25)');
+    drawText(ctx, font, t, lx + 9, ly, '#404040', S);
+  });
+  drawButton(ctx, back[0], back[1], back[2], 'Retour', stats.hover === 'back', S);
+  // survol / appui sur le graphique : trait du jour et bulle avec la date et les nombres
+  if (stats.day != null && stats.day < n) {
+    const x = X(stats.day);
+    fr(x, g.y, 1, g.h, 'rgba(255,255,255,0.5)');
+    const date = new Date(from.getTime() + stats.day * 864e5);
+    const lines = [`§f${formatDate(date)}`, ...STATS_TYPES.map((t, k) => `§${{ mauvaise: 'c', bonne: 'a', tres_bonne: 'e', repos: 'd', ghost: '7' }[t.key]}${BILANS[t.key] ? BILANS[t.key].label.slice(2) : 'Journée Fantôme'} §7: §f${series[k][stats.day]}`)];
+    const tw = Math.max(...lines.map(l => textWidth(font, l.replace(/§./g, '')))) + 8, th = lines.length * 10 + 4;
+    const bx = Math.min(Math.max(g.x, x + 4), g.x + g.w - tw), by = g.y + 2;
+    fr(bx, by, tw, th, 'rgba(16, 0, 16, 0.92)');
+    lines.forEach((l, i) => drawText(ctx, font, l, bx + 4, by + 3 + i * 10, '#FFFFFF', S, true));
+  }
+  stats.layout = { S, ranges, back, g, n, X };
+}
+function statsHit(ev) {
+  const L = stats.layout;
+  if (!L) return {};
+  const r = L.ranges.find(r => inRect(ev, r.r, L.S));
+  if (r) return { key: r.key };
+  if (inRect(ev, L.back, L.S)) return { key: 'back' };
+  if (inRect(ev, [L.g.x, L.g.y, L.g.w, L.g.h], L.S)) {
+    const gx = evX(ev) / L.S - L.g.x - 1;
+    return { day: L.n === 1 ? 0 : Math.max(0, Math.min(L.n - 1, Math.round(gx / (L.g.w - 3) * (L.n - 1)))) };
+  }
+  return {};
+}
+statsCanvas.addEventListener('pointermove', ev => {
+  const h = statsHit(ev), hover = h.key || null, day = h.day ?? null;
+  statsCanvas.style.cursor = hover ? 'pointer' : '';
+  if (hover !== stats.hover || day !== stats.day) { stats.hover = hover; stats.day = day; renderBilanGraph(); }
+});
+statsCanvas.addEventListener('pointerleave', () => { if (stats.day != null || stats.hover) { stats.day = null; stats.hover = null; renderBilanGraph(); } });
+statsCanvas.addEventListener('click', ev => {
+  const h = statsHit(ev);
+  if (h.key === 'back') { playClick(); closeBilanGraph(); return; }
+  if (h.key === 'custom') { playClick(); pickStatsDates(); return; }
+  if (h.key) { playClick(); stats.range = h.key; stats.day = null; renderBilanGraph(); return; }
+  if (h.day != null) { stats.day = h.day; renderBilanGraph(); }   // téléphone : un appui montre le jour
+});
+addEventListener('keydown', ev => { if (ev.key === 'Escape' && !statsScreen.hidden && !sign.cfg) { ev.preventDefault(); closeBilanGraph(); } });
+addEventListener('resize', () => { if (!statsScreen.hidden) renderBilanGraph(); });
 
 const SYNC_KEYS = [PROG_KEY, DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, HABIT_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
 let markAppReady;
