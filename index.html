@@ -5655,14 +5655,26 @@ function renderBilanGraph() {
   const days = statsDays(), [from, to] = statsPeriod(days);
   const n = Math.max(1, Math.round((to - from) / 864e5) + 1);
   const inRange = days.filter(d => d.date >= from && d.date <= to);
-  // séries cumulées : nombre de journées de chaque type jusqu'au jour i inclus
-  const series = STATS_TYPES.map(t => {
-    const per = new Array(n).fill(0);
-    for (const d of inRange) if (d.type === t.key) per[Math.round((d.date - from) / 864e5)]++;
-    let c = 0;
-    return per.map(v => (c += v));
-  });
-  const max = Math.max(1, ...series.map(s => s[n - 1]));
+  // Graphique en bâtons : une barre par jour (période de 31 jours au plus), par semaine (6 mois au plus) ou par mois ;
+  // chaque barre empile les journées de chaque type (les types estompés en haut, à 5 %).
+  const dd = d => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+  const unit = n <= 31 ? 'day' : n <= 182 ? 'week' : 'month';
+  const buckets = [];
+  if (unit === 'month') {
+    for (let d = new Date(from.getFullYear(), from.getMonth(), 1); d <= to; d = new Date(d.getFullYear(), d.getMonth() + 1, 1))
+      buckets.push({ start: d < from ? from : d, end: new Date(Math.min(to, new Date(d.getFullYear(), d.getMonth() + 1, 0))), short: `${pad2(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}` });
+    buckets.forEach(b => { b.label = `Mois ${b.short.replace('/', '/20')}`; });
+  } else {
+    const len = unit === 'week' ? 7 : 1;
+    for (let i = 0; i < n; i += len) {
+      const st = new Date(from.getTime() + i * 864e5), en = new Date(Math.min(to, from.getTime() + (i + len - 1) * 864e5));
+      buckets.push({ start: st, end: en, short: dd(st), label: len === 1 ? formatDate(st) : `Du ${dd(st)} au ${dd(en)}` });
+    }
+  }
+  for (const b of buckets) b.counts = STATS_TYPES.map(t => inRange.filter(d => d.type === t.key && d.date >= dayStart(b.start) && d.date <= b.end).length);
+  const totals = STATS_TYPES.map((t, k) => buckets.reduce((s, b) => s + b.counts[k], 0));
+  const max = Math.max(1, ...buckets.map(b => b.counts.reduce((a, c) => a + c, 0)));
+  const nb = buckets.length;
   // zone du graphique (creusée), axe des nombres à gauche
   const back = [px + Math.floor(pw / 2) - 40, py + ph - 26, 80, 20];
   const g = { x: px + 22, y: py + 46, w: pw - 22 - 10, h: ph - 46 - 12 - 32 };
@@ -5670,39 +5682,49 @@ function renderBilanGraph() {
   fr(g.x - 1, g.y - 1, g.w + 1, g.h + 1, '#373737');
   fr(g.x, g.y, g.w, g.h, '#2B2B2B');
   const step = Math.max(1, Math.ceil(max / 5));
+  const Y = v => g.y + g.h - Math.round(v / max * (g.h - 4));
   for (let v = 0; v <= max; v += step) {
-    const y = g.y + g.h - 1 - Math.round(v / max * (g.h - 3));
-    fr(g.x, y, g.w, 1, 'rgba(255,255,255,0.08)');
+    const y = Y(v);
+    fr(g.x, y - 1, g.w, 1, 'rgba(255,255,255,0.08)');
     const t = String(v);
-    drawText(ctx, font, t, g.x - 3 - textWidth(font, t), y - 3, '#404040', S);
+    drawText(ctx, font, t, g.x - 3 - textWidth(font, t), y - 4, '#404040', S);
   }
-  const X = i => g.x + 1 + (n === 1 ? Math.floor((g.w - 3) / 2) : Math.round(i / (n - 1) * (g.w - 3)));
-  const Y = v => g.y + g.h - 2 - Math.round(v / max * (g.h - 3));
-  series.forEach((ser, k) => {   // escaliers de 2 px ; type estompé : 5 % d'opacité
-    const c = STATS_TYPES[k].color;
-    ctx.globalAlpha = stats.dim.has(STATS_TYPES[k].key) ? 0.05 : 1;
-    for (let i = 0; i < n; i++) {
-      const x0 = X(i), y0 = Y(ser[i]);
-      if (i > 0) { const yp = Y(ser[i - 1]); fr(X(i - 1), yp, x0 - X(i - 1) + 2, 2, c); fr(x0, Math.min(yp, y0), 2, Math.abs(yp - y0) + 2, c); }
-      else fr(x0, y0, 2, 2, c);
+  const slot = g.w / nb, barW = Math.max(2, Math.min(24, Math.floor(slot * 0.7)));
+  const X = i => g.x + Math.floor(i * slot + (slot - barW) / 2);
+  buckets.forEach((b, i) => {
+    if (stats.day === i) fr(g.x + Math.floor(i * slot), g.y, Math.max(1, Math.floor(slot)), g.h, 'rgba(255,255,255,0.07)');   // barre survolée
+    const order = [...STATS_TYPES.keys()].sort((a, c) => stats.dim.has(STATS_TYPES[a].key) - stats.dim.has(STATS_TYPES[c].key));
+    let acc = 0;
+    for (const k of order) {
+      const c = b.counts[k];
+      if (!c) continue;
+      const y1 = Y(acc + c), y0 = Y(acc);
+      ctx.globalAlpha = stats.dim.has(STATS_TYPES[k].key) ? 0.05 : 1;
+      fr(X(i), y1, barW, y0 - y1, STATS_TYPES[k].color);
+      if (y0 - y1 > 2) fr(X(i), y1, barW, 1, 'rgba(255,255,255,0.35)');   // petit reflet en haut de chaque morceau
+      ctx.globalAlpha = 1;
+      acc += c;
     }
-    ctx.globalAlpha = 1;
   });
   // dates sous l'axe
-  const dd = d => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
-  drawText(ctx, font, dd(from), g.x, g.y + g.h + 3, '#404040', S);
-  if (n > 1) { const t = dd(to); drawText(ctx, font, t, g.x + g.w - textWidth(font, t), g.y + g.h + 3, '#404040', S); }
-  if (n > 2) { const mid = new Date(from.getTime() + Math.round((n - 1) / 2) * 864e5), t = dd(mid); drawText(ctx, font, t, g.x + Math.floor(g.w / 2 - textWidth(font, t) / 2), g.y + g.h + 3, '#404040', S); }
+  const lab = (i, align) => {   // libellé sous la barre i
+    const t = buckets[i].short, cx = X(i) + Math.floor(barW / 2);
+    const x = align === 'left' ? Math.max(g.x, cx - Math.floor(textWidth(font, t) / 2)) : align === 'right' ? Math.min(g.x + g.w - textWidth(font, t), cx - Math.floor(textWidth(font, t) / 2)) : cx - Math.floor(textWidth(font, t) / 2);
+    drawText(ctx, font, t, x, g.y + g.h + 3, '#404040', S);
+  };
+  lab(0, 'left');
+  if (nb > 1) lab(nb - 1, 'right');
+  if (nb > 2) lab(Math.floor((nb - 1) / 2), 'mid');
   // légende en bas de l'écran : total de chaque type sur la période
   const legend = [];
   legendRows.forEach((row, r) => {
-    const labels = row.map(t => legendLabel(t, series[STATS_TYPES.indexOf(t)][n - 1]));
+    const labels = row.map(t => legendLabel(t, totals[STATS_TYPES.indexOf(t)]));
     const rowW = labels.reduce((w, l) => w + 9 + textWidth(font, l) + 10, -10);
     let lx = Math.floor(W / 2 - rowW / 2);
     const ly = H - legendH + 3 + r * 11;
     row.forEach((t, j) => {
       const w = 9 + textWidth(font, labels[j]);
-      ctx.globalAlpha = stats.dim.has(t.key) ? 0.35 : 1;   // légende d'une courbe estompée : plus pâle
+      ctx.globalAlpha = stats.dim.has(t.key) ? 0.35 : 1;   // légende d'un type estompé : plus pâle
       fr(lx, ly + 1, 6, 6, t.color);
       drawText(ctx, font, labels[j], lx + 9, ly, stats.hover === 'lg-' + t.key ? '#FFFFA0' : '#FFFFFF', S, true);
       ctx.globalAlpha = 1;
@@ -5711,18 +5733,16 @@ function renderBilanGraph() {
     });
   });
   drawButton(ctx, back[0], back[1], back[2], 'Retour', stats.hover === 'back', S);
-  // survol / appui sur le graphique : trait du jour et bulle avec la date et les nombres
-  if (stats.day != null && stats.day < n) {
-    const x = X(stats.day);
-    fr(x, g.y, 1, g.h, 'rgba(255,255,255,0.5)');
-    const date = new Date(from.getTime() + stats.day * 864e5);
-    const lines = [`§f${formatDate(date)}`, ...STATS_TYPES.map((t, k) => `§${{ mauvaise: 'c', bonne: 'a', tres_bonne: 'e', repos: 'd', ghost: '7' }[t.key]}${BILANS[t.key] ? BILANS[t.key].label.slice(2) : 'Journée Fantôme'} §7: §f${series[k][stats.day]}`)];
+  // survol / appui sur une barre : bulle avec la période et le nombre de journées de chaque type
+  if (stats.day != null && stats.day < nb) {
+    const b = buckets[stats.day], x = X(stats.day) + barW;
+    const lines = [`§f${b.label}`, ...STATS_TYPES.map((t, k) => `§${{ mauvaise: 'c', bonne: 'a', tres_bonne: 'e', repos: 'd', ghost: '7' }[t.key]}${BILANS[t.key] ? BILANS[t.key].label.slice(2) : 'Journée Fantôme'} §7: §f${b.counts[k]}`)];
     const tw = Math.max(...lines.map(l => textWidth(font, l.replace(/§./g, '')))) + 8, th = lines.length * 10 + 4;
-    const bx = Math.min(Math.max(g.x, x + 4), g.x + g.w - tw), by = g.y + 2;
+    const bx = x + 4 + tw <= g.x + g.w ? x + 4 : Math.max(g.x, X(stats.day) - 4 - tw), by = g.y + 2;
     fr(bx, by, tw, th, 'rgba(16, 0, 16, 0.92)');
     lines.forEach((l, i) => drawText(ctx, font, l, bx + 4, by + 3 + i * 10, '#FFFFFF', S, true));
   }
-  stats.layout = { S, ranges, back, g, n, X, legend };
+  stats.layout = { S, ranges, back, g, n: nb, slot, legend };
 }
 function statsHit(ev) {
   const L = stats.layout;
@@ -5733,8 +5753,8 @@ function statsHit(ev) {
   const lg = L.legend.find(l => inRect(ev, l.r, L.S));
   if (lg) return { key: 'lg-' + lg.key, type: lg.key };
   if (inRect(ev, [L.g.x, L.g.y, L.g.w, L.g.h], L.S)) {
-    const gx = evX(ev) / L.S - L.g.x - 1;
-    return { day: L.n === 1 ? 0 : Math.max(0, Math.min(L.n - 1, Math.round(gx / (L.g.w - 3) * (L.n - 1)))) };
+    const gx = evX(ev) / L.S - L.g.x;
+    return { day: Math.max(0, Math.min(L.n - 1, Math.floor(gx / L.slot))) };   // barre sous le pointeur
   }
   return {};
 }
