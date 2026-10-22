@@ -5678,11 +5678,21 @@ function renderBilanGraph() {
   }
   const X = i => g.x + 1 + (n === 1 ? Math.floor((g.w - 3) / 2) : Math.round(i / (n - 1) * (g.w - 3)));
   const Y = v => g.y + g.h - 2 - Math.round(v / max * (g.h - 3));
-  // Courbes : d'un jour au suivant, une ligne droite (même en biais) tracée avec des carrés de 2 x 2 (l'épaisseur
-  // du trait), comme un trait pixelisé ; type estompé : 5 % d'opacité.
-  const seg = (x0, y0, x1, y1, c) => {
-    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
-    for (let t = 0; t <= steps; t++) fr(Math.round(x0 + (x1 - x0) * t / steps), Math.round(y0 + (y1 - y0) * t / steps), 2, 2, c);
+  // Courbes : d'un jour au suivant, une ligne droite (même en biais) faite de carrés de 2 x 2 (l'épaisseur du trait)
+  // posés sur une grille de 2 : ils se touchent par les côtés ou par les coins, sans se chevaucher (trait pixelisé) ;
+  // type estompé : 5 % d'opacité.
+  const cell = (x, y) => [Math.floor((x - g.x) / 2), Math.floor((y - g.y) / 2)];
+  const seg = (xa, ya, xb, yb, c) => {   // tracé de Bresenham sur la grille de 2
+    let [x0, y0] = cell(xa, ya);
+    const [x1, y1] = cell(xb, yb), dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    for (;;) {
+      fr(g.x + x0 * 2, g.y + y0 * 2, 2, 2, c);
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
   };
   series.forEach((ser, k) => {
     const c = STATS_TYPES[k].color;
