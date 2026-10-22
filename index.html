@@ -5582,7 +5582,8 @@ const STATS_TYPES = [
   { key: 'ghost', short: 'JF', color: '#AAAAAA' },
 ];
 const STATS_RANGES = [['all', 'Depuis le début', 'Tout'], ['month', '1 Mois', '1 Mois'], ['week', '1 Semaine', '1 Sem.'], ['custom', 'Custom', 'Custom']];
-const stats = { range: 'all', from: null, to: null, hover: null, day: null, layout: null };
+// dim : types dont la courbe est estompée (clic sur la légende) ; beforeSolo : état avant un Maj + clic (pour le rétablir)
+const stats = { range: 'all', from: null, to: null, hover: null, day: null, layout: null, dim: new Set(), beforeSolo: null };
 const dayStart = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
 // Journées « typées » : bilan noté (mauvaise / bonne / très bonne / repos) ou journée fantôme
 function statsDays() {
@@ -5677,13 +5678,15 @@ function renderBilanGraph() {
   }
   const X = i => g.x + 1 + (n === 1 ? Math.floor((g.w - 3) / 2) : Math.round(i / (n - 1) * (g.w - 3)));
   const Y = v => g.y + g.h - 2 - Math.round(v / max * (g.h - 3));
-  series.forEach((ser, k) => {   // escaliers de 2 px
+  series.forEach((ser, k) => {   // escaliers de 2 px ; type estompé : 5 % d'opacité
     const c = STATS_TYPES[k].color;
+    ctx.globalAlpha = stats.dim.has(STATS_TYPES[k].key) ? 0.05 : 1;
     for (let i = 0; i < n; i++) {
       const x0 = X(i), y0 = Y(ser[i]);
       if (i > 0) { const yp = Y(ser[i - 1]); fr(X(i - 1), yp, x0 - X(i - 1) + 2, 2, c); fr(x0, Math.min(yp, y0), 2, Math.abs(yp - y0) + 2, c); }
       else fr(x0, y0, 2, 2, c);
     }
+    ctx.globalAlpha = 1;
   });
   // dates sous l'axe
   const dd = d => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
@@ -5691,15 +5694,20 @@ function renderBilanGraph() {
   if (n > 1) { const t = dd(to); drawText(ctx, font, t, g.x + g.w - textWidth(font, t), g.y + g.h + 3, '#404040', S); }
   if (n > 2) { const mid = new Date(from.getTime() + Math.round((n - 1) / 2) * 864e5), t = dd(mid); drawText(ctx, font, t, g.x + Math.floor(g.w / 2 - textWidth(font, t) / 2), g.y + g.h + 3, '#404040', S); }
   // légende en bas de l'écran : total de chaque type sur la période
+  const legend = [];
   legendRows.forEach((row, r) => {
     const labels = row.map(t => legendLabel(t, series[STATS_TYPES.indexOf(t)][n - 1]));
     const rowW = labels.reduce((w, l) => w + 9 + textWidth(font, l) + 10, -10);
     let lx = Math.floor(W / 2 - rowW / 2);
     const ly = H - legendH + 3 + r * 11;
     row.forEach((t, j) => {
+      const w = 9 + textWidth(font, labels[j]);
+      ctx.globalAlpha = stats.dim.has(t.key) ? 0.35 : 1;   // légende d'une courbe estompée : plus pâle
       fr(lx, ly + 1, 6, 6, t.color);
-      drawText(ctx, font, labels[j], lx + 9, ly, '#FFFFFF', S, true);
-      lx += 9 + textWidth(font, labels[j]) + 10;
+      drawText(ctx, font, labels[j], lx + 9, ly, stats.hover === 'lg-' + t.key ? '#FFFFA0' : '#FFFFFF', S, true);
+      ctx.globalAlpha = 1;
+      legend.push({ key: t.key, r: [lx - 2, ly - 2, w + 4, 11] });
+      lx += w + 10;
     });
   });
   drawButton(ctx, back[0], back[1], back[2], 'Retour', stats.hover === 'back', S);
@@ -5714,7 +5722,7 @@ function renderBilanGraph() {
     fr(bx, by, tw, th, 'rgba(16, 0, 16, 0.92)');
     lines.forEach((l, i) => drawText(ctx, font, l, bx + 4, by + 3 + i * 10, '#FFFFFF', S, true));
   }
-  stats.layout = { S, ranges, back, g, n, X };
+  stats.layout = { S, ranges, back, g, n, X, legend };
 }
 function statsHit(ev) {
   const L = stats.layout;
@@ -5722,6 +5730,8 @@ function statsHit(ev) {
   const r = L.ranges.find(r => inRect(ev, r.r, L.S));
   if (r) return { key: r.key };
   if (inRect(ev, L.back, L.S)) return { key: 'back' };
+  const lg = L.legend.find(l => inRect(ev, l.r, L.S));
+  if (lg) return { key: 'lg-' + lg.key, type: lg.key };
   if (inRect(ev, [L.g.x, L.g.y, L.g.w, L.g.h], L.S)) {
     const gx = evX(ev) / L.S - L.g.x - 1;
     return { day: L.n === 1 ? 0 : Math.max(0, Math.min(L.n - 1, Math.round(gx / (L.g.w - 3) * (L.n - 1)))) };
@@ -5738,6 +5748,20 @@ statsCanvas.addEventListener('click', ev => {
   const h = statsHit(ev);
   if (h.key === 'back') { playClick(); closeBilanGraph(); return; }
   if (h.key === 'custom') { playClick(); pickStatsDates(); return; }
+  if (h.type) {   // légende : clic = estompe / rétablit cette courbe ; Maj + clic = seulement elle (2e Maj + clic : état d'avant)
+    playClick();
+    const others = STATS_TYPES.map(t => t.key).filter(k => k !== h.type);
+    if (ev.shiftKey) {
+      const solo = !stats.dim.has(h.type) && others.every(k => stats.dim.has(k));
+      if (solo) { stats.dim = stats.beforeSolo || new Set(); stats.beforeSolo = null; }
+      else { stats.beforeSolo = new Set(stats.dim); stats.dim = new Set(others); }
+    } else {
+      if (stats.dim.has(h.type)) stats.dim.delete(h.type); else stats.dim.add(h.type);
+      stats.beforeSolo = null;
+    }
+    renderBilanGraph();
+    return;
+  }
   if (h.key) { playClick(); stats.range = h.key; stats.day = null; renderBilanGraph(); return; }
   if (h.day != null) { stats.day = h.day; renderBilanGraph(); }   // téléphone : un appui montre le jour
 });
