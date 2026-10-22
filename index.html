@@ -946,12 +946,14 @@ const BILANS = {
   mauvaise: { label: '§cMauvaise journée', image: 'journee/rouge', question: 'Pourquoi la journée a été mauvaise ?' },
   bonne: { label: '§aBonne journée', image: 'journee/verte', question: "Décris ce qui a marché aujourd'hui et ce que tu aurais pu mieux faire" },
   tres_bonne: { label: '§eTrès bonne journée', image: 'journee/jaune', question: "Les résultats d'une journée idéale" },
+  repos: { label: '§dJournée de Repos', image: 'journee/repos', question: "Comment t'es-tu reposé aujourd'hui ?" },   // 4e bouton, en haut à gauche
 };
+// Anciennes journées de repos (case du livre, agenda.repos) : deviennent un bilan « repos » (le texte écrit est gardé).
+if (agendas.some(a => a.repos)) {
+  for (const a of agendas) if (a.repos) { a.bilan = { note: 'repos', texte: (a.bilan && a.bilan.texte) || '' }; delete a.repos; }
+  try { localStorage.setItem(AGENDA_KEY, JSON.stringify(agendas)); } catch {}
+}
 function bilanSlot(agenda, n) {
-  if (agenda.repos) return {   // journée de repos : bloc de terre cuite magenta (le bilan reste possible au clic)
-    image: 'journee/repos', count: n, action: () => reviewDay(agenda),
-    tooltip: () => ['§dJournée de Repos', '§7Agenda ' + agenda.date, ...(agenda.bilan && BILANS[agenda.bilan.note] ? ['', BILANS[agenda.bilan.note].label] : []), '', '§eClique pour décrire ta journée !'],
-  };
   if (agenda.ghost) return { image: 'journee/fantome', count: n, tooltip: ['§7Journée Fantôme', `§8${agenda.date}`, '§7Pas de bilan sans agenda.'] };
   const b = agenda.bilan && BILANS[agenda.bilan.note];
   return {
@@ -985,6 +987,7 @@ function reviewDay(agenda) {
     buttonWidth: 110,
     noLabel: '§cMauvaise journée', yesLabel: '§aBonne journée', editLabel: '§eTrès bonne journée',
     onNo: () => pick('mauvaise'), onYes: () => pick('bonne'), onEdit: () => pick('tres_bonne'),
+    corner: { label: BILANS.repos.label, action: () => pick('repos') },   // 4e choix, en haut à gauche de l'écran
   });
   // Agenda avec des cases à cocher ([] en début de ligne) : d'abord les cocher, « Valider » mène aux 3 boutons
   const lines = () => agenda.texte.split('\n');
@@ -1007,8 +1010,7 @@ function reviewDay(agenda) {
 }
 // Place les agendas (le premier en haut à gauche) dans la zone verte, avec leur bilan juste en dessous :
 // agendas sur les rangées 1 et 3, bilans sur les rangées 2 et 4 (7 journées par paire de rangées).
-const REPOS_COLOR = '#955A6D';   // journée de repos (bloc magenta)
-const BILAN_COLORS = { mauvaise: '#C3291C', bonne: '#5EA83A', tres_bonne: '#E3A82B' };
+const BILAN_COLORS = { mauvaise: '#C3291C', bonne: '#5EA83A', tres_bonne: '#E3A82B', repos: '#955A6D' };   // repos : bloc magenta
 function agendaGrid(list, slots, numbered) {
   if (daRows()) {   // une journée par ligne : agenda et bilan à gauche, date et 1er objectif à droite
     // page principale sur téléphone : la balise est sur la rangée 0
@@ -1020,7 +1022,7 @@ function agendaGrid(list, slots, numbered) {
       return {
         icons: [[0, cell], [1, bilanSlot(a, n)]], data: a, refresh: refreshAgenda,
         span: {
-          inset: 2, label: a.ghost ? 'Journée Fantôme' : 'Agenda ' + a.date, color: a.repos ? REPOS_COLOR : BILAN_COLORS[a.bilan && a.bilan.note] || (a.ghost ? '#3A3A3A' : '#616161'),
+          inset: 2, label: a.ghost ? 'Journée Fantôme' : 'Agenda ' + a.date, color: BILAN_COLORS[a.bilan && a.bilan.note] || (a.ghost ? '#3A3A3A' : '#616161'),
           desc: a.ghost ? a.date : lines[0] || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
           descFull: () => a.ghost ? [a.date, '§7Aucun agenda écrit ce jour-là.'] : [...(boxes.length ? boxes.map(c => (c.checked ? '§a☑ ' : '☐ ') + c.text) : ['Aucun objectif.']),
             ...(a.bilan && BILANS[a.bilan.note] ? ['', BILANS[a.bilan.note].label, ...(a.bilan.texte ? a.bilan.texte.split('\n').map(l => '§7' + l) : [])] : [])],
@@ -1058,14 +1060,12 @@ function agendaSlots() {
 function bilanStats() {
   // journées fantômes (sans agenda, entre deux journées écrites) comptées avec les journées notées
   const { recent, older } = splitAgendas(), ghosts = [...recent, ...older].filter(a => a.ghost).length;
-  const repos = agendas.filter(a => a.repos).length;   // journées de repos : comptées à part (pas dans les bilans)
-  const notes = agendas.filter(a => !a.repos).map(a => a.bilan && a.bilan.note).filter(n => BILANS[n]), total = notes.length + ghosts + repos;
+  const notes = agendas.map(a => a.bilan && a.bilan.note).filter(n => BILANS[n]), total = notes.length + ghosts;
   const pct = n => total ? Math.round(n / total * 100) : 0;
-  const rows = [['mauvaise', 'MJ'], ['bonne', 'BJ'], ['tres_bonne', 'TBJ']].map(([note, short]) => {
+  const rows = [['mauvaise', 'MJ'], ['bonne', 'BJ'], ['tres_bonne', 'TBJ'], ['repos', 'JR']].map(([note, short]) => {
     const n = notes.filter(x => x === note).length;
     return `${BILANS[note].label} §7: §f${pct(n)}% §8(${n} ${short})`;
   });
-  rows.push(`§dJournée de Repos §7: §f${pct(repos)}% §8(${repos} JR)`);
   rows.push(`§7Journée Fantôme : §f${pct(ghosts)}% §8(${ghosts} JF)`);
   return ['§bBilan des journées', ...rows, '', `§7${total} journée${total > 1 ? 's' : ''} comptée${total > 1 ? 's' : ''}`];
 }
@@ -1096,7 +1096,6 @@ function refreshAgenda() {
 // « Lier à un arbre » : arbre de progression lié à l'agenda (agenda.arbre = son identifiant) ; pour un agenda pas encore
 // enregistré, le lien attend dans agendaLinks jusqu'à « Terminé ».
 const agendaLinks = {};
-const agendaRepos = {};   // case « Journée de Repos » du livre ouvert, par date
 function editAgenda(date, text) {
   const existing = agendas.find(a => a.date === date);
   // Chaque objectif (ligne) est une case à cocher : dans le livre on écrit le texte seul, la case est dessinée à la
@@ -1104,11 +1103,7 @@ function editAgenda(date, text) {
   const stored = (existing ? existing.texte : '').split('\n').map(l => checkLine(l) || { checked: false, text: l });
   const checked = new Set(stored.filter(c => c.checked).map(c => c.text.trim()));
   const plain = t => t.split('\n').map(l => (checkLine(l) || { text: l }).text).join('\n');
-  // « Journée de Repos » (case en haut à gauche) : gardée en attente jusqu'à « Terminé » (aussi après Timeblock / arbre)
-  if (!(date in agendaRepos)) agendaRepos[date] = !!(existing && existing.repos);
   openSign({
-    topCheck: { label: 'Journée de Repos', checked: () => agendaRepos[date], onToggle: () => { agendaRepos[date] = !agendaRepos[date]; } },
-    onCancel: () => { delete agendaRepos[date]; },   // Échap : la case revient à l'état enregistré
     book: true, title: 'Objectifs de la journée', checkboxes: checked,
     lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [],
     initial: text != null ? plain(text) : plain(existing ? existing.texte : ''),
@@ -1121,13 +1116,10 @@ function editAgenda(date, text) {
         const c = checkLine(l) || { checked: false, text: l };
         return (c.checked || checked.has(c.text.trim()) ? '[x] ' : '[] ') + c.text;
       }).join('\n');
-      const i = agendas.findIndex(a => a.date === date), repos = agendaRepos[date];
-      delete agendaRepos[date];
-      if (!clean && !repos) { if (i >= 0) agendas.splice(i, 1); }   // livre vide (et pas de repos) : pas d'agenda
+      const i = agendas.findIndex(a => a.date === date);
+      if (!clean) { if (i >= 0) agendas.splice(i, 1); }   // livre vide : pas d'agenda
       else if (i >= 0) agendas[i].texte = clean;
       else agendas.push({ date, texte: clean, ...(agendaLinks[date] ? { arbre: agendaLinks[date] } : {}) });
-      const a = agendas.find(x => x.date === date);
-      if (a) { if (repos) a.repos = true; else delete a.repos; }
       delete agendaLinks[date];
       saveAgendas();
       refreshAgenda();
@@ -3745,6 +3737,9 @@ function renderConfirm() {
     });
     y += items.length * 14;
   }
+  // cfg.corner = { label, action } : bouton en haut à gauche de l'écran (ex. « Journée de Repos »)
+  const corner = dialog.cfg.corner ? [6, 6, textWidth(font, dialog.cfg.corner.label) + 20, 20] : null;
+  if (corner) drawButton(ctx, corner[0], corner[1], corner[2], dialog.cfg.corner.label, dialog.hover === 'corner', S);
   let bw = bw0, by = y + 14, no, yes;
   if (dialog.cfg.choicesFirst) {   // les choix d'abord (pleine largeur), puis un seul bouton « Non » en bas
     const full = Math.min(Math.floor((W - 20) / 2), Math.max(bw, 90));
@@ -3757,7 +3752,7 @@ function renderConfirm() {
     if (r.prio) drawButton(ctx, ...r.prio.slice(0, 3), dialog.cfg.priorityLabel, dialog.hover === 'prio', S);
     if (r.del) drawButton(ctx, ...r.del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
     drawButton(ctx, ...no.slice(0, 3), dialog.cfg.noLabel || 'Non', dialog.hover === 'no', S);
-    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb, tree, check, checkRows };
+    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb, tree, check, checkRows, corner };
     return;
   }
   if (stacked) {
@@ -3781,7 +3776,7 @@ function renderConfirm() {
   if (edit) drawButton(ctx, ...edit.slice(0, 3), dialog.cfg.editLabel || 'Modifier le titre', dialog.hover === 'edit', S);
   if (prio) drawButton(ctx, ...prio.slice(0, 3), dialog.cfg.priorityLabel || 'Priorité', dialog.hover === 'prio', S);
   if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
-  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb, tree, check, checkRows };
+  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb, tree, check, checkRows, corner };
 }
 function openConfirm(cfg) {
   dialog.cfg = cfg;
@@ -3798,17 +3793,18 @@ function closeConfirm() {
   renderGui();
 }
 dialogCanvas.addEventListener('mousemove', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows, corner } = dialog.layout;
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
   const cl = checkRows ? checkRows.findIndex(r => inRect(ev, r, S)) : -1;
-  const hover = cl >= 0 ? 'cl' + cl : check && inRect(ev, check, S) ? 'check' : orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
+  const hover = corner && inRect(ev, corner, S) ? 'corner' : cl >= 0 ? 'cl' + cl : check && inRect(ev, check, S) ? 'check' : orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
     : prio && inRect(ev, prio, S) ? 'prio' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
 });
 dialogCanvas.addEventListener('click', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows, corner } = dialog.layout;
   const cfg = dialog.cfg;
+  if (corner && inRect(ev, corner, S)) { playClick(); closeConfirm(); cfg.corner.action(); return; }
   const cl = checkRows ? checkRows.findIndex(r => inRect(ev, r, S)) : -1;
   if (cl >= 0) { playClick(); cfg.checks.onToggle(cl); renderConfirm(); return; }   // la fenêtre reste ouverte
   if (check && inRect(ev, check, S)) { playClick(); cfg.check.onToggle(); renderConfirm(); return; }   // la fenêtre reste ouverte
