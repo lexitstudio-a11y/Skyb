@@ -5694,11 +5694,24 @@ function renderBilanGraph() {
       if (e2 <= dx) { err += dx; y0 += sy; }
     }
   };
+  // Montée d'un jour au suivant : forme « logarithmique » (monte vite puis s'arrondit vers le palier), échantillonnée
+  // colonne par colonne de la grille, chaque morceau relié par le tracé ci-dessus.
+  const LOG_K = 12, ease = t => Math.log1p(LOG_K * t) / Math.log1p(LOG_K);
+  const curve = (xa, ya, xb, yb, c) => {
+    if (ya === yb) { seg(xa, ya, xb, yb, c); return; }
+    const cols = Math.max(1, Math.round((xb - xa) / 2));
+    let px = xa, py = ya;
+    for (let j = 1; j <= cols; j++) {
+      const t = j / cols, nx = xa + (xb - xa) * t, ny = ya + (yb - ya) * ease(t);
+      seg(px, py, nx, ny, c);
+      px = nx; py = ny;
+    }
+  };
   series.forEach((ser, k) => {
     const c = STATS_TYPES[k].color;
     ctx.globalAlpha = stats.dim.has(STATS_TYPES[k].key) ? 0.05 : 1;
     if (n === 1) fr(X(0), Y(ser[0]), 2, 2, c);
-    for (let i = 1; i < n; i++) seg(X(i - 1), Y(ser[i - 1]), X(i), Y(ser[i]), c);
+    for (let i = 1; i < n; i++) curve(X(i - 1), Y(ser[i - 1]), X(i), Y(ser[i]), c);
     ctx.globalAlpha = 1;
   });
   // dates sous l'axe
