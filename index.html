@@ -3749,7 +3749,9 @@ function renderConfirm() {
     y += items.length * 14;
   }
   // cfg.corner = { label, action } : bouton en haut à gauche de l'écran (ex. « Journée de Repos »)
-  const corner = dialog.cfg.corner ? [6, 6, textWidth(font, dialog.cfg.corner.label) + 20, 20] : null;
+  // (téléphone : en bas au centre de l'écran)
+  const cw = dialog.cfg.corner ? textWidth(font, dialog.cfg.corner.label) + 20 : 0;
+  const corner = dialog.cfg.corner ? (isMobileLayout() ? [Math.floor(W / 2 - cw / 2), H - 30, cw, 20] : [6, 6, cw, 20]) : null;
   if (corner) {   // discret : opacité 30 %
     ctx.save();
     ctx.globalAlpha = 0.3;
