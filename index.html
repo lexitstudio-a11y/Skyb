@@ -1757,7 +1757,7 @@ function buildArbrePages(a, n) {
   PAGES[`arbre-${n}-type`] = {
     title: 'Type de progression',
     slots: {
-      ...Object.fromEntries(Object.entries(SENS).map(([sens, cfg], j) => [`2,${3 + 2 * j}`, {
+      ...Object.fromEntries(Object.entries(SENS).map(([sens, cfg], j) => [`2,${2 + 2 * j}`, {   // 3 types centrés (colonnes 2, 4, 6)
         image: cfg.head,
         tooltip: () => [cfg.label, ...cfg.lore, ...(a.sens === sens ? ['', '§aChoix actuel'] : []), '', '§eClique pour choisir !'],
         action: () => {
