@@ -1580,6 +1580,10 @@ function randomArbreIcon() {
 const arbreConfigured = a => isFixe(a) || (!!a.sens && !!a.unite && a.depart != null && a.cible != null);
 const pctText = (a, pct) => arbreConfigured(a) ? `§e${pct}%` : '§cN/A';
 function progressLine(a, pct, valeur = a.valeur ?? a.depart) {
+  if (a.termine && pct < 100) return progressLineRaw(a, pct, valeur) + ' §6Terminé';   // terminé quand même (incomplet)
+  return progressLineRaw(a, pct, valeur);
+}
+function progressLineRaw(a, pct, valeur) {
   let line = `§7Progression : ${pctText(a, pct)}`;
   if (isFixe(a)) return line + (pct >= 100 ? ' §a§lComplété' : ' §7- §cPas fait');
   if (valeur != null && a.cible != null) {
@@ -1679,10 +1683,10 @@ const groupTitle = groupe => groupe.endsWith('-action') ? "Arbres d'Action" : "A
 function arbreLists() {
   // arbres épinglés en tête de liste, objectifs complétés (100 %) tout en bas ; dans chaque groupe, le plus avancé
   // en haut (à progression égale : l'ordre de création)
-  const rank = a => a.epingle ? 0 : arbreProgress(a) >= 100 ? 2 : 1;
+  const rank = a => a.epingle ? 0 : arbreProgress(a) >= 100 || a.termine ? 2 : 1;
   const pinnedFirst = list => [...list].sort((x, y) => rank(x) - rank(y) || arbreProgress(y) - arbreProgress(x));
-  // Racines : seulement les arbres en cours ; les terminés (100 %) ont leur page « Racines terminées »
-  const done = a => arbreProgress(a) >= 100;
+  // Racines : seulement les arbres en cours ; les terminés (100 %, ou « Terminer quand même ») ont leur page « Racines terminées »
+  const done = a => arbreProgress(a) >= 100 || !!a.termine;
   const lists = [
     { trees: pinnedFirst(arbres.filter(a => !done(a))), pageId: arbresPageId, title: PAGE_TITLES.arbres, back: 'main', add: true },
     { trees: pinnedFirst(arbres.filter(done)), pageId: () => 'arbres-termines', title: 'Racines terminées', back: 'arbres' },
@@ -1788,6 +1792,23 @@ function buildArbrePages(a, n) {
   const xpRow = 3;   // rangée du bloc de l'arbre (icône, vitres ou barre d'expérience)
   const arbreSlots = {
     '0,0': { image: 'tete_x_rouge', tooltip: ['§cSupprimer', "§7Supprime cet arbre de progression.", '', '§eClique pour supprimer !'], action: () => deleteArbre(a) },
+    // 2 cases sous la tête rouge : terminer l'arbre même s'il n'est pas à 100 % (il passe dans les Racines terminées)
+    '2,0': {
+      image: 'terminer',
+      tooltip: () => a.termine
+        ? ['§6Arbre terminé (incomplet)', `§7Terminé le ${a.termine}`, progressLine(a, arbreProgress(a)), '', '§eClique pour le reprendre !']
+        : ['§6Terminer quand même ?', "§7Range l'arbre dans les Racines terminées,", "§7même s'il n'est pas à 100 %.", '', '§eClique pour le terminer !'],
+      action: () => {
+        const apply = () => {
+          if (a.termine) delete a.termine; else a.termine = formatDate(new Date());
+          saveArbres();
+          refreshArbres();
+          showToast({ title: a.termine ? 'Arbre terminé' : 'Arbre repris', text: fitText(a.titre, 150) });
+        };
+        if (a.termine) { apply(); return; }
+        openConfirm({ question: 'Terminer quand même ?', detail: [a.titre, `${arbreProgress(a)} % atteint`], noLabel: 'Annuler', yesLabel: '§6Terminer', onYes: apply });
+      },
+    },
     '1,5': { image: 'panneau', tooltip: () => ['§aUnité de mesure', `§7Unité : ${a.unite ? '§e' + a.unite : '§cnon définie'}`, '§7Affichée après les nombres (ex. 20J).', '', '§eClique pour modifier !'], action: () => editArbreUnit(a) },
     '0,4': { item: 'name_tag', tooltip: ['§aRenommer', "§7Modifie le titre et la description", "§7de l'arbre.", '', '§eClique pour modifier !'], action: () => renameArbre(a) },
     '1,4': {
@@ -2016,7 +2037,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune', 'fantome', 'repos'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'bloc_rouge', 'bloc_vert', 'bloc_jaune', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'elytres', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune', 'fantome', 'repos'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'bloc_rouge', 'bloc_vert', 'bloc_jaune', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'elytres', 'terminer', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -2324,7 +2345,7 @@ const MOBILE_PLACES = {
   main: { '1,4': '0,4', '2,4': '1,0', '2,1': '3,0', '3,1': '5,0', '2,5': '7,0', '2,6': '9,0' },   // 5 lignes (rangées 1 à 9)
   // page d'un arbre : bloc d'améthyste (épingler) juste au-dessus de l'orbe d'expérience ; à droite, une case vide
   // au-dessus du papier puis les blocs rouge, vert et jaune
-  arbre: { '4,0': '9,0', '3,8': '8,4', '2,8': '7,4', '1,8': '6,4' },
+  arbre: { '4,0': '9,0', '3,8': '8,4', '2,8': '7,4', '1,8': '6,4', '2,0': '2,0' },   // « Terminer quand même » : 2 cases sous la tête rouge
   etape: { '4,0': '9,0', '4,8': '9,4' },   // page d'une étape : livre au-dessus de l'étiquette, fil au-dessus de la bûche
 };
 // Pages construites pour chaque arbre (arbre-1, arbre-2…) : mêmes places à la main pour toutes.
