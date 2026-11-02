@@ -5689,80 +5689,53 @@ function renderBilanGraph() {
   const days = statsDays(), [from, to] = statsPeriod(days);
   const n = Math.max(1, Math.round((to - from) / 864e5) + 1);
   const inRange = days.filter(d => d.date >= from && d.date <= to);
-  // séries cumulées : nombre de journées de chaque type jusqu'au jour i inclus
-  const series = STATS_TYPES.map(t => {
-    const per = new Array(n).fill(0);
-    for (const d of inRange) if (d.type === t.key) per[Math.round((d.date - from) / 864e5)]++;
-    let c = 0;
-    return per.map(v => (c += v));
-  });
-  const max = Math.max(1, ...series.map(s => s[n - 1]));
-  // zone du graphique (creusée), axe des nombres à gauche
+  // Calendrier de carrés (façon GitHub) : 1 carré = 1 journée, une colonne par semaine (lundi en haut), couleur selon
+  // le type de la journée ; journée sans type : carré gris ; type estompé (légende) : 5 % d'opacité.
+  const typeOf = new Map(inRange.map(d => [Math.round((d.date - from) / 864e5), d.type]));
+  const totals = STATS_TYPES.map(t => inRange.filter(d => d.type === t.key).length);
   const back = [px + Math.floor(pw / 2) - 40, py + ph - 26, 80, 20];
-  const g = { x: px + 22, y: py + 46, w: pw - 22 - 10, h: ph - 46 - 12 - 32 };
+  const g = { x: px + 8, y: py + 44, w: pw - 16, h: ph - 44 - 42 };   // dessous : dates de la période, puis « Retour »
   fr(g.x - 1, g.y - 1, g.w + 2, g.h + 2, '#FFFFFF');
   fr(g.x - 1, g.y - 1, g.w + 1, g.h + 1, '#373737');
   fr(g.x, g.y, g.w, g.h, '#2B2B2B');
-  const step = Math.max(1, Math.ceil(max / 5));
-  for (let v = 0; v <= max; v += step) {
-    const y = g.y + g.h - 1 - Math.round(v / max * (g.h - 3));
-    fr(g.x, y, g.w, 1, 'rgba(255,255,255,0.08)');
-    const t = String(v);
-    drawText(ctx, font, t, g.x - 3 - textWidth(font, t), y - 3, '#404040', S);
-  }
-  const X = i => g.x + 1 + (n === 1 ? Math.floor((g.w - 3) / 2) : Math.round(i / (n - 1) * (g.w - 3)));
-  const Y = v => g.y + g.h - 2 - Math.round(v / max * (g.h - 3));
-  // Courbes : d'un jour au suivant, une ligne droite (même en biais) faite de carrés de 2 x 2 (l'épaisseur du trait)
-  // posés sur une grille de 2 : ils se touchent par les côtés ou par les coins, sans se chevaucher (trait pixelisé) ;
-  // type estompé : 5 % d'opacité.
-  const cell = (x, y) => [Math.floor((x - g.x) / 2), Math.floor((y - g.y) / 2)];
-  const seg = (xa, ya, xb, yb, c) => {   // tracé de Bresenham sur la grille de 2
-    let [x0, y0] = cell(xa, ya);
-    const [x1, y1] = cell(xb, yb), dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-    let err = dx + dy;
-    for (;;) {
-      fr(g.x + x0 * 2, g.y + y0 * 2, 2, 2, c);
-      if (x0 === x1 && y0 === y1) break;
-      const e2 = 2 * err;
-      if (e2 >= dy) { err += dy; x0 += sx; }
-      if (e2 <= dx) { err += dx; y0 += sy; }
+  const lead = (from.getDay() + 6) % 7;   // jours avant « from » dans sa semaine (lundi = 0)
+  const cols = Math.ceil((lead + n) / 7);
+  const labelW = 10, top = 10, gap = 1;   // jours de la semaine à gauche, mois au-dessus
+  const c = Math.max(2, Math.min(14, Math.floor((g.w - labelW - 4) / cols) - gap, Math.floor((g.h - top - 4) / 7) - gap));
+  const gridW = cols * (c + gap) - gap, gridH = 7 * (c + gap) - gap;
+  const ox = g.x + labelW + Math.max(2, Math.floor((g.w - labelW - gridW) / 2)), oy = g.y + top + Math.max(2, Math.floor((g.h - top - gridH) / 2));
+  const cellAt = i => { const k = lead + i; return [ox + Math.floor(k / 7) * (c + gap), oy + (k % 7) * (c + gap)]; };
+  if (c >= 6) ['L', '', 'M', '', 'V', '', 'D'].forEach((l, r) => { if (l) drawText(ctx, font, l, ox - 8, oy + r * (c + gap) + Math.floor((c - 8) / 2), '#8B8B8B', S); });
+  const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  let lastLabelEnd = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const date = new Date(from.getFullYear(), from.getMonth(), from.getDate() + i);
+    const [x, y] = cellAt(i), type = typeOf.get(i), t = type && STATS_TYPES.find(q => q.key === type);
+    if ((date.getDate() === 1 || i === 0) && x > lastLabelEnd) {   // nom du mois au-dessus de sa première colonne
+      const m = MOIS[date.getMonth()];
+      drawText(ctx, font, m, x, oy - 10, '#8B8B8B', S);
+      lastLabelEnd = x + textWidth(font, m) + 3;
     }
-  };
-  // Montée d'un jour au suivant : forme « logarithmique » (monte vite puis s'arrondit vers le palier), échantillonnée
-  // colonne par colonne de la grille, chaque morceau relié par le tracé ci-dessus.
-  const LOG_K = 12, ease = t => Math.log1p(LOG_K * t) / Math.log1p(LOG_K);
-  const curve = (xa, ya, xb, yb, c) => {
-    if (ya === yb) { seg(xa, ya, xb, yb, c); return; }
-    const cols = Math.max(1, Math.round((xb - xa) / 2));
-    let px = xa, py = ya;
-    for (let j = 1; j <= cols; j++) {
-      const t = j / cols, nx = xa + (xb - xa) * t, ny = ya + (yb - ya) * ease(t);
-      seg(px, py, nx, ny, c);
-      px = nx; py = ny;
-    }
-  };
-  series.forEach((ser, k) => {
-    const c = STATS_TYPES[k].color;
-    ctx.globalAlpha = stats.dim.has(STATS_TYPES[k].key) ? 0.05 : 1;
-    if (n === 1) fr(X(0), Y(ser[0]), 2, 2, c);
-    for (let i = 1; i < n; i++) curve(X(i - 1), Y(ser[i - 1]), X(i), Y(ser[i]), c);
+    ctx.globalAlpha = t && stats.dim.has(t.key) ? 0.05 : 1;
+    fr(x, y, c, c, t ? t.color : '#3D3D3D');
+    if (t && c >= 4) fr(x, y, c, 1, 'rgba(255,255,255,0.25)');   // léger relief en haut
     ctx.globalAlpha = 1;
-  });
-  // dates sous l'axe
-  const dd = d => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+    if (stats.day === i) { fr(x - 1, y - 1, c + 2, 1, '#FFFFFF'); fr(x - 1, y + c, c + 2, 1, '#FFFFFF'); fr(x - 1, y, 1, c, '#FFFFFF'); fr(x + c, y, 1, c, '#FFFFFF'); }
+  }
+  // dates de la période sous le calendrier
+  const dd = d => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
   drawText(ctx, font, dd(from), g.x, g.y + g.h + 3, '#404040', S);
-  if (n > 1) { const t = dd(to); drawText(ctx, font, t, g.x + g.w - textWidth(font, t), g.y + g.h + 3, '#404040', S); }
-  if (n > 2) { const mid = new Date(from.getTime() + Math.round((n - 1) / 2) * 864e5), t = dd(mid); drawText(ctx, font, t, g.x + Math.floor(g.w / 2 - textWidth(font, t) / 2), g.y + g.h + 3, '#404040', S); }
+  { const t = dd(to); drawText(ctx, font, t, g.x + g.w - textWidth(font, t), g.y + g.h + 3, '#404040', S); }
   // légende en bas de l'écran : total de chaque type sur la période
   const legend = [];
   legendRows.forEach((row, r) => {
-    const labels = row.map(t => legendLabel(t, series[STATS_TYPES.indexOf(t)][n - 1]));
+    const labels = row.map(t => legendLabel(t, totals[STATS_TYPES.indexOf(t)]));
     const rowW = labels.reduce((w, l) => w + 9 + textWidth(font, l) + 10, -10);
     let lx = Math.floor(W / 2 - rowW / 2);
     const ly = H - legendH + 3 + r * 11;
     row.forEach((t, j) => {
       const w = 9 + textWidth(font, labels[j]);
-      ctx.globalAlpha = stats.dim.has(t.key) ? 0.35 : 1;   // légende d'une courbe estompée : plus pâle
+      ctx.globalAlpha = stats.dim.has(t.key) ? 0.35 : 1;   // légende d'un type estompé : plus pâle
       fr(lx, ly + 1, 6, 6, t.color);
       drawText(ctx, font, labels[j], lx + 9, ly, stats.hover === 'lg-' + t.key ? '#FFFFA0' : '#FFFFFF', S, true);
       ctx.globalAlpha = 1;
@@ -5771,18 +5744,18 @@ function renderBilanGraph() {
     });
   });
   drawButton(ctx, back[0], back[1], back[2], 'Retour', stats.hover === 'back', S);
-  // survol / appui sur le graphique : trait du jour et bulle avec la date et les nombres
+  // survol / appui sur un carré : bulle avec la date et le type de la journée
   if (stats.day != null && stats.day < n) {
-    const x = X(stats.day);
-    fr(x, g.y, 1, g.h, 'rgba(255,255,255,0.5)');
-    const date = new Date(from.getTime() + stats.day * 864e5);
-    const lines = [`§f${formatDate(date)}`, ...STATS_TYPES.map((t, k) => `§${{ mauvaise: 'c', bonne: 'a', tres_bonne: 'e', repos: 'd', ghost: '7' }[t.key]}${BILANS[t.key] ? BILANS[t.key].label.slice(2) : 'Journée Fantôme'} §7: §f${series[k][stats.day]}`)];
+    const date = new Date(from.getFullYear(), from.getMonth(), from.getDate() + stats.day), type = typeOf.get(stats.day);
+    const name = type ? (BILANS[type] ? BILANS[type].label : '§7Journée Fantôme') : '§8Aucun bilan';
+    const lines = [`§f${formatDate(date)}`, name];
     const tw = Math.max(...lines.map(l => textWidth(font, l.replace(/§./g, '')))) + 8, th = lines.length * 10 + 4;
-    const bx = Math.min(Math.max(g.x, x + 4), g.x + g.w - tw), by = g.y + 2;
+    const [x, y] = cellAt(stats.day);
+    const bx = Math.min(Math.max(g.x, x + c + 3), g.x + g.w - tw), by = Math.max(g.y + 1, Math.min(y - 2, g.y + g.h - th - 1));
     fr(bx, by, tw, th, 'rgba(16, 0, 16, 0.92)');
-    lines.forEach((l, i) => drawText(ctx, font, l, bx + 4, by + 3 + i * 10, '#FFFFFF', S, true));
+    lines.forEach((l, k) => drawText(ctx, font, l, bx + 4, by + 3 + k * 10, '#FFFFFF', S, true));
   }
-  stats.layout = { S, ranges, back, g, n, X, legend };
+  stats.layout = { S, ranges, back, g, n, legend, cell: { ox, oy, c, gap, lead } };
 }
 function statsHit(ev) {
   const L = stats.layout;
@@ -5792,9 +5765,10 @@ function statsHit(ev) {
   if (inRect(ev, L.back, L.S)) return { key: 'back' };
   const lg = L.legend.find(l => inRect(ev, l.r, L.S));
   if (lg) return { key: 'lg-' + lg.key, type: lg.key };
-  if (inRect(ev, [L.g.x, L.g.y, L.g.w, L.g.h], L.S)) {
-    const gx = evX(ev) / L.S - L.g.x - 1;
-    return { day: L.n === 1 ? 0 : Math.max(0, Math.min(L.n - 1, Math.round(gx / (L.g.w - 3) * (L.n - 1)))) };
+  if (inRect(ev, [L.g.x, L.g.y, L.g.w, L.g.h], L.S)) {   // carré sous le pointeur (jour de la période)
+    const { ox, oy, c, gap, lead } = L.cell, gx = evX(ev) / L.S - ox, gy = evY(ev) / L.S - oy;
+    const col = Math.floor(gx / (c + gap)), row = Math.floor(gy / (c + gap)), i = col * 7 + row - lead;
+    return gx >= 0 && gy >= 0 && row < 7 && i >= 0 && i < L.n ? { day: i } : {};
   }
   return {};
 }
