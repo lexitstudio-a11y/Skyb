@@ -947,6 +947,7 @@ function agendaSlot(agenda, n, image) {
 // puis rouge / verte / jaune selon la journée) ; agenda.bilan = { note, texte }.
 const BILANS = {
   mauvaise: { label: '§cMauvaise journée', image: 'journee/rouge', question: 'Pourquoi la journée a été mauvaise ?' },
+  moyenne: { label: '§6Moyenne journée', image: 'journee/orange', question: "Qu'est-ce qui a manqué pour une bonne journée ?" },
   bonne: { label: '§aBonne journée', image: 'journee/verte', question: "Décris ce qui a marché aujourd'hui et ce que tu aurais pu mieux faire" },
   tres_bonne: { label: '§eTrès bonne journée', image: 'journee/jaune', question: "Les résultats d'une journée idéale" },
   repos: { label: '§dJournée de Repos', image: 'journee/repos', question: "Comment t'es-tu reposé aujourd'hui ?" },   // 4e bouton, en haut à gauche
@@ -988,8 +989,7 @@ function reviewDay(agenda) {
     question: "Comment s'est passé ta journée ?",
     detail: ['Agenda ' + agenda.date],
     buttonWidth: 110,
-    noLabel: '§cMauvaise journée', yesLabel: '§aBonne journée', editLabel: '§eTrès bonne journée',
-    onNo: () => pick('mauvaise'), onYes: () => pick('bonne'), onEdit: () => pick('tres_bonne'),
+    choices: ['mauvaise', 'moyenne', 'bonne', 'tres_bonne'].map(note => ({ label: BILANS[note].label, action: () => pick(note) })),
     corner: { label: BILANS.repos.label, action: () => pick('repos') },   // 4e choix, en haut à gauche de l'écran
   });
   // Agenda avec des cases à cocher ([] en début de ligne) : d'abord les cocher, « Valider » mène aux 3 boutons
@@ -1047,7 +1047,7 @@ function openDwNotes(agenda) {
 }
 // Place les agendas (le premier en haut à gauche) dans la zone verte, avec leur bilan juste en dessous :
 // agendas sur les rangées 1 et 3, bilans sur les rangées 2 et 4 (7 journées par paire de rangées).
-const BILAN_COLORS = { mauvaise: '#C3291C', bonne: '#5EA83A', tres_bonne: '#E3A82B', repos: '#955A6D' };   // repos : bloc magenta
+const BILAN_COLORS = { mauvaise: '#C3291C', moyenne: '#E07B2A', bonne: '#5EA83A', tres_bonne: '#E3A82B', repos: '#955A6D' };   // repos : bloc magenta
 function agendaGrid(list, slots, numbered) {
   if (daRows()) {   // une journée par ligne : agenda et bilan à gauche, date et 1er objectif à droite
     // page principale sur téléphone : la balise est sur la rangée 0
@@ -1099,7 +1099,7 @@ function bilanStats() {
   const { recent, older } = splitAgendas(), ghosts = [...recent, ...older].filter(a => a.ghost).length;
   const notes = agendas.map(a => a.bilan && a.bilan.note).filter(n => BILANS[n]), total = notes.length + ghosts;
   const pct = n => total ? Math.round(n / total * 100) : 0;
-  const rows = [['mauvaise', 'MJ'], ['bonne', 'BJ'], ['tres_bonne', 'TBJ'], ['repos', 'JR']].map(([note, short]) => {
+  const rows = [['mauvaise', 'MJ'], ['moyenne', 'MoJ'], ['bonne', 'BJ'], ['tres_bonne', 'TBJ'], ['repos', 'JR']].map(([note, short]) => {
     const n = notes.filter(x => x === note).length;
     return `${BILANS[note].label} §7: §f${pct(n)}% §8(${n} ${short})`;
   });
@@ -2071,7 +2071,7 @@ const FILES = [
   'generic_54', 'ascii', 'accented', 'black_stained_glass', 'normal',
   'diamond_sword', 'painting', 'book', 'writable_book', 'clock_00', 'bone',
   'name_tag', 'barrier', 'redstone_torch', 'cookie', 'paper',
-  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'verte', 'jaune', 'fantome', 'repos'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'bloc_rouge', 'bloc_vert', 'bloc_jaune', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'elytres', 'terminer', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
+  'arrow', 'tete_plus', 'tete_plus_bleue', 'bouton_bois', 'bouton_pierre', 'jukebox', 'cadre_da', 'arbres_progression', 'steve', 'ender_pearl', 'boussole', 'oeil_ender', 'lingot_netherite', 'minecart_tnt', 'laisse', 'carte_vide', 'papier_agenda', 'book_gui', 'page_forward', 'page_forward_highlighted', 'page_backward', 'page_backward_highlighted', ...['blanche', 'rouge', 'orange', 'verte', 'jaune', 'fantome', 'repos'].map(c => `journee/${c}`), ...[1, 2, 3, 4, 5].map(n => `actions/${n}`), 'gold_ingot', 'tnt_top', 'tnt_side', 'blue_terracotta', 'green_terracotta', 'black_terracotta', 'cyan_terracotta', 'oak', 'button', 'button_highlighted', 'green_dye', 'lime_dye', 'lime_stained_glass', 'yellow_stained_glass', 'orange_stained_glass', 'red_stained_glass', 'tete_plus_verte', 'tete_plus_rouge', 'tete_x_rouge', 'tete_valider', 'bloc_rouge', 'bloc_vert', 'bloc_jaune', 'arbre_fini', 'arbre_en_cours', 'etape_valider', 'etape_devalider', 'fil', 'bouleau', 'pierre_fond', 'arbre_logo', 'orbe_xp', 'epingle', 'elytres', 'terminer', 'panneau', 'pousse', 'beacon', 'tournesol', ...['toile', 'enclume', 'pot', 'pepite', 'bloc_commande', 'minecart_tnt'].map(n => `arbres/${n}`),
   'crafting_table_top', 'crafting_table_front', 'crafting_table_side',
   'barrel_top', 'barrel_side',
 ];
@@ -3738,6 +3738,7 @@ function renderConfirm() {
   const question = fit(dialog.cfg.question), lines = (dialog.cfg.detail || []).flatMap(l => l ? fit(l) : ['']);
   // Hauteur totale (question, détails, nuancier, boutons) pour centrer le tout verticalement
   const total = 6 + question.length * 10 + lines.length * 10 + (dialog.cfg.colors ? 36 : 0) + 14 + 20
+    + (dialog.cfg.choices ? (isMobileLayout() ? dialog.cfg.choices.length : Math.ceil(dialog.cfg.choices.length / 2)) * 24 - 24 : 0)
     + (dialog.cfg.check ? 19 : 0) + (dialog.cfg.checks ? 6 + dialog.cfg.checks.items().length * 14 : 0) + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
   const bw0 = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2));
   // libellés trop larges pour deux boutons côte à côte (téléphone) : Non puis Oui, l'un sous l'autre
@@ -3813,6 +3814,18 @@ function renderConfirm() {
     drawButton(ctx, corner[0], corner[1], corner[2], dialog.cfg.corner.label, dialog.hover === 'corner', S);
     ctx.restore();
   }
+  // cfg.choices = [{ label, action }] : choix en boutons, 2 par ligne (téléphone : 1 par ligne, toute la largeur)
+  if (dialog.cfg.choices) {
+    const per = isMobileLayout() ? 1 : 2, full = Math.min(Math.floor((W - 20) / 2), Math.max(bw0, 90));
+    const x0 = Math.floor(W / 2) - full - 4, cwid = per === 1 ? 2 * full + 8 : full;
+    const choices = dialog.cfg.choices.map((c, i) => {
+      const r = [x0 + (i % per) * (full + 8), y + 14 + Math.floor(i / per) * 24, cwid, 20];
+      drawButton(ctx, r[0], r[1], r[2], c.label, dialog.hover === 'ch' + i, S);
+      return r;
+    });
+    dialog.layout = { S, no: [-99, -99, 0, 0], yes: null, edit: null, prio: null, del: null, swatches, orb, tree, check, checkRows, corner, choices };
+    return;
+  }
   let bw = bw0, by = y + 14, no, yes;
   if (dialog.cfg.choicesFirst) {   // les choix d'abord (pleine largeur), puis un seul bouton « Non » en bas
     const full = Math.min(Math.floor((W - 20) / 2), Math.max(bw, 90));
@@ -3866,17 +3879,20 @@ function closeConfirm() {
   renderGui();
 }
 dialogCanvas.addEventListener('mousemove', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows, corner } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows, corner, choices } = dialog.layout;
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
   const cl = checkRows ? checkRows.findIndex(r => inRect(ev, r, S)) : -1;
-  const hover = corner && inRect(ev, corner, S) ? 'corner' : cl >= 0 ? 'cl' + cl : check && inRect(ev, check, S) ? 'check' : orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
+  const ch = choices ? choices.findIndex(r => inRect(ev, r, S)) : -1;
+  const hover = ch >= 0 ? 'ch' + ch : corner && inRect(ev, corner, S) ? 'corner' : cl >= 0 ? 'cl' + cl : check && inRect(ev, check, S) ? 'check' : orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
     : prio && inRect(ev, prio, S) ? 'prio' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
 });
 dialogCanvas.addEventListener('click', ev => {
-  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows, corner } = dialog.layout;
+  const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows, corner, choices } = dialog.layout;
   const cfg = dialog.cfg;
+  const ch = choices ? choices.findIndex(r => inRect(ev, r, S)) : -1;
+  if (ch >= 0) { playClick(); closeConfirm(); cfg.choices[ch].action(); return; }
   if (corner && inRect(ev, corner, S)) { playClick(); closeConfirm(); cfg.corner.action(); return; }
   const cl = checkRows ? checkRows.findIndex(r => inRect(ev, r, S)) : -1;
   if (cl >= 0) { playClick(); cfg.checks.onToggle(cl); renderConfirm(); return; }   // la fenêtre reste ouverte
@@ -5645,7 +5661,7 @@ OTHER_SCREENS.forEach(el => el && da2Watch.observe(el, { attributes: true, attri
 // cumulé jour après jour sur la période choisie (Depuis le début / 1 Mois / 1 Semaine / Custom : dates de début et de fin).
 const statsScreen = document.getElementById('statsScreen'), statsCanvas = document.getElementById('statsCanvas');
 const STATS_TYPES = [
-  { key: 'mauvaise', short: 'MJ', color: '#FF5555' }, { key: 'bonne', short: 'BJ', color: '#55FF55' },
+  { key: 'mauvaise', short: 'MJ', color: '#FF5555' }, { key: 'moyenne', short: 'MoJ', color: '#FFAA00' }, { key: 'bonne', short: 'BJ', color: '#55FF55' },
   { key: 'tres_bonne', short: 'TBJ', color: '#FFFF55' }, { key: 'repos', short: 'JR', color: '#FF55FF' },
   { key: 'ghost', short: 'JF', color: '#AAAAAA' },
 ];
