@@ -1009,7 +1009,41 @@ function reviewDay(agenda) {
       },
     },
     noLabel: 'Retour', yesLabel: '§aValider', onYes: ask,
+    editLabel: '§bNoter les DW', onEdit: () => openDwNotes(agenda),   // 3e bouton : notes des blocs Deep Work du jour
   });
+}
+// « Noter les DW » : page avec un bloc-notes par bloc « Deep Work » du Timeblock de la journée (titre et horaires) ;
+// un clic ouvre un livre pour écrire ce qui a été fait pendant ce bloc (enregistré dans le bloc : block.note).
+// Retour (flèche) : la liste des objectifs de la journée.
+function openDwNotes(agenda) {
+  const back = () => { location.hash = 'agenda'; setTimeout(() => reviewDay(agenda), 80); };   // après le changement de page
+  const build = () => {
+    const blocks = (timeblocks[agenda.date] || []).filter(b => b.deepWork).sort((x, y) => x.debut - y.debut);
+    const slots = {
+      '5,3': { item: 'arrow', tooltip: ['§aRetour', '§7Vers les objectifs de la journée'], action: back },
+      '5,4': { item: 'barrier', tooltip: ['§cFermer', '', "§eClique pour revenir à l'agenda !"], open: 'agenda' },
+    };
+    if (!blocks.length) slots['2,4'] = { item: 'paper', tooltip: ['§7Aucun bloc Deep Work', `§8Timeblock du ${agenda.date}`, '', '§7Coche « Deep Work ? » sur un bloc', '§7pour pouvoir le noter ici.'] };
+    const rows = placeLines(slots, isMobileLayout() ? 1 : 0, blocks.map(b => {
+      const hours = `${fmtMin(b.debut)} - ${fmtMin(b.fin)}`, first = (b.note || '').split('\n')[0].trim();
+      const write = () => openSign({
+        book: true, noBullets: true, title: `${b.titre} (${hours})`,
+        lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: b.note || '',
+        onDone: t => { const note = cleanDesc(t); if (note) b.note = note; else delete b.note; saveTimeblocks(); PAGES['dw-notes'] = build(); renderGui(); },
+      });
+      const cell = {
+        item: 'writable_book', action: write,
+        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.note ? ['', ...wrapText(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
+      };
+      return {
+        icons: [[0, cell]], data: b, refresh: () => { PAGES['dw-notes'] = build(); renderGui(); },
+        span: { label: `${b.titre} - ${hours}`, color: TB_DW_COLOR, desc: () => first || 'Clique pour écrire tes notes', descFull: () => b.note ? b.note.split('\n') : [], tooltip: cell.tooltip, action: write },
+      };
+    }));
+    return { title: isMobileLayout() ? `Notes DW ${agenda.date}` : `Notes Deep Work - ${agenda.date}`, slots: setRows(slots, rows) };   // téléphone : titre court (date visible)
+  };
+  PAGES['dw-notes'] = build();
+  location.hash = 'dw-notes';
 }
 // Place les agendas (le premier en haut à gauche) dans la zone verte, avec leur bilan juste en dessous :
 // agendas sur les rangées 1 et 3, bilans sur les rangées 2 et 4 (7 journées par paire de rangées).
