@@ -947,7 +947,7 @@ function agendaSlot(agenda, n, image) {
 // puis rouge / verte / jaune selon la journée) ; agenda.bilan = { note, texte }.
 const BILANS = {
   mauvaise: { label: '§cMauvaise journée', image: 'journee/rouge', question: 'Pourquoi la journée a été mauvaise ?' },
-  moyenne: { label: '§6Moyenne journée', image: 'journee/orange', question: "Qu'est-ce qui a manqué pour une bonne journée ?" },
+  moyenne: { label: '§6Journée Bof', image: 'journee/orange', question: "Qu'est-ce qui a manqué pour une bonne journée ?" },
   bonne: { label: '§aBonne journée', image: 'journee/verte', question: "Décris ce qui a marché aujourd'hui et ce que tu aurais pu mieux faire" },
   tres_bonne: { label: '§eTrès bonne journée', image: 'journee/jaune', question: "Les résultats d'une journée idéale" },
   repos: { label: '§dJournée de Repos', image: 'journee/repos', question: "Comment t'es-tu reposé aujourd'hui ?" },   // 4e bouton, en haut à gauche
@@ -989,7 +989,10 @@ function reviewDay(agenda) {
     question: "Comment s'est passé ta journée ?",
     detail: ['Agenda ' + agenda.date],
     buttonWidth: 110,
-    choices: ['mauvaise', 'moyenne', 'bonne', 'tres_bonne'].map(note => ({ label: BILANS[note].label, action: () => pick(note) })),
+    // de la meilleure à la pire ; « Très bonne journée » en dégradé jaune → doré
+    choices: ['tres_bonne', 'bonne', 'moyenne', 'mauvaise'].map(note => note === 'tres_bonne'
+      ? { label: BILANS[note].label.slice(2), gradient: ['#FFFF55', '#E8A317'], action: () => pick(note) }
+      : { label: BILANS[note].label, action: () => pick(note) }),
     corner: { label: BILANS.repos.label, action: () => pick('repos') },   // 4e choix, en haut à gauche de l'écran
   });
   // Agenda avec des cases à cocher ([] en début de ligne) : d'abord les cocher, « Valider » mène aux 3 boutons
@@ -1099,7 +1102,7 @@ function bilanStats() {
   const { recent, older } = splitAgendas(), ghosts = [...recent, ...older].filter(a => a.ghost).length;
   const notes = agendas.map(a => a.bilan && a.bilan.note).filter(n => BILANS[n]), total = notes.length + ghosts;
   const pct = n => total ? Math.round(n / total * 100) : 0;
-  const rows = [['mauvaise', 'MJ'], ['moyenne', 'MoJ'], ['bonne', 'BJ'], ['tres_bonne', 'TBJ'], ['repos', 'JR']].map(([note, short]) => {
+  const rows = [['mauvaise', 'MJ'], ['moyenne', 'JB'], ['bonne', 'BJ'], ['tres_bonne', 'TBJ'], ['repos', 'JR']].map(([note, short]) => {
     const n = notes.filter(x => x === note).length;
     return `${BILANS[note].label} §7: §f${pct(n)}% §8(${n} ${short})`;
   });
@@ -3738,7 +3741,7 @@ function renderConfirm() {
   const question = fit(dialog.cfg.question), lines = (dialog.cfg.detail || []).flatMap(l => l ? fit(l) : ['']);
   // Hauteur totale (question, détails, nuancier, boutons) pour centrer le tout verticalement
   const total = 6 + question.length * 10 + lines.length * 10 + (dialog.cfg.colors ? 36 : 0) + 14 + 20
-    + (dialog.cfg.choices ? (isMobileLayout() ? dialog.cfg.choices.length : Math.ceil(dialog.cfg.choices.length / 2)) * 24 - 24 : 0)
+    + (dialog.cfg.choices ? dialog.cfg.choices.length * 24 - 24 : 0)
     + (dialog.cfg.check ? 19 : 0) + (dialog.cfg.checks ? 6 + dialog.cfg.checks.items().length * 14 : 0) + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
   const bw0 = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2));
   // libellés trop larges pour deux boutons côte à côte (téléphone) : Non puis Oui, l'un sous l'autre
@@ -3814,13 +3817,22 @@ function renderConfirm() {
     drawButton(ctx, corner[0], corner[1], corner[2], dialog.cfg.corner.label, dialog.hover === 'corner', S);
     ctx.restore();
   }
-  // cfg.choices = [{ label, action }] : choix en boutons, 2 par ligne (téléphone : 1 par ligne, toute la largeur)
+  // cfg.choices = [{ label, action, gradient? }] : choix en boutons, l'un sous l'autre sur toute la largeur ;
+  // gradient = [couleur de gauche, couleur de droite] : texte en dégradé (lettre par lettre)
   if (dialog.cfg.choices) {
-    const per = isMobileLayout() ? 1 : 2, full = Math.min(Math.floor((W - 20) / 2), Math.max(bw0, 90));
+    const per = 1, full = Math.min(Math.floor((W - 20) / 2), Math.max(bw0, 90));
     const x0 = Math.floor(W / 2) - full - 4, cwid = per === 1 ? 2 * full + 8 : full;
     const choices = dialog.cfg.choices.map((c, i) => {
       const r = [x0 + (i % per) * (full + 8), y + 14 + Math.floor(i / per) * 24, cwid, 20];
-      drawButton(ctx, r[0], r[1], r[2], c.label, dialog.hover === 'ch' + i, S);
+      if (!c.gradient) { drawButton(ctx, r[0], r[1], r[2], c.label, dialog.hover === 'ch' + i, S); return r; }
+      drawButton(ctx, r[0], r[1], r[2], '', dialog.hover === 'ch' + i, S);
+      const tw = textWidth(font, c.label), [a, b] = c.gradient.map(h => [1, 3, 5].map(k => parseInt(h.slice(k, k + 2), 16)));
+      let tx = r[0] + Math.floor(r[2] / 2 - tw / 2);
+      for (const ch of c.label) {
+        const t = tw ? (tx - (r[0] + Math.floor(r[2] / 2 - tw / 2))) / tw : 0;
+        drawText(ctx, font, ch, tx, r[1] + 6, '#' + a.map((v, k) => Math.round(v + (b[k] - v) * t).toString(16).padStart(2, '0')).join(''), S, true);
+        tx += textWidth(font, ch);
+      }
       return r;
     });
     dialog.layout = { S, no: [-99, -99, 0, 0], yes: null, edit: null, prio: null, del: null, swatches, orb, tree, check, checkRows, corner, choices };
@@ -5661,7 +5673,7 @@ OTHER_SCREENS.forEach(el => el && da2Watch.observe(el, { attributes: true, attri
 // cumulé jour après jour sur la période choisie (Depuis le début / 1 Mois / 1 Semaine / Custom : dates de début et de fin).
 const statsScreen = document.getElementById('statsScreen'), statsCanvas = document.getElementById('statsCanvas');
 const STATS_TYPES = [
-  { key: 'mauvaise', short: 'MJ', color: '#FF5555' }, { key: 'moyenne', short: 'MoJ', color: '#FFAA00' }, { key: 'bonne', short: 'BJ', color: '#55FF55' },
+  { key: 'mauvaise', short: 'MJ', color: '#FF5555' }, { key: 'moyenne', short: 'JB', color: '#FFAA00' }, { key: 'bonne', short: 'BJ', color: '#55FF55' },
   { key: 'tres_bonne', short: 'TBJ', color: '#FFFF55' }, { key: 'repos', short: 'JR', color: '#FF55FF' },
   { key: 'ghost', short: 'JF', color: '#AAAAAA' },
 ];
