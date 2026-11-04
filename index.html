@@ -957,6 +957,13 @@ if (agendas.some(a => a.repos)) {
   for (const a of agendas) if (a.repos) { a.bilan = { note: 'repos', texte: (a.bilan && a.bilan.texte) || '' }; delete a.repos; }
   try { localStorage.setItem(AGENDA_KEY, JSON.stringify(agendas)); } catch {}
 }
+// Deep Work de la journée : réussis / total (blocs « Deep Work » du Timeblock ; réussi = noté « Deep Work réussi »)
+function dwScoreLines(date) {
+  const dw = (timeblocks[date] || []).filter(b => b.deepWork);
+  if (!dw.length) return [];
+  const ok = dw.filter(b => b.dwResult === 'ok').length;
+  return ['', `§7Deep Work réussis : ${ok === dw.length ? '§a' : ok ? '§e' : '§c'}${ok}§7/§f${dw.length}`];
+}
 function bilanSlot(agenda, n) {
   if (agenda.ghost) return { image: 'journee/fantome', count: n, tooltip: ['§7Journée Fantôme', `§8${agenda.date}`, '§7Pas de bilan sans agenda.'] };
   const b = agenda.bilan && BILANS[agenda.bilan.note];
@@ -965,6 +972,7 @@ function bilanSlot(agenda, n) {
     tooltip: () => [
       '§aDécris ta journée', '§7Agenda ' + agenda.date,
       ...(b ? ['', b.label, ...(agenda.bilan.texte ? wrapText(agenda.bilan.texte, 180).map(l => '§7' + l) : [])] : []),
+      ...dwScoreLines(agenda.date),
       '', b ? '§eClique pour modifier !' : '§eClique pour décrire !',
     ],
     action: () => reviewDay(agenda),
@@ -1033,15 +1041,28 @@ function openDwNotes(agenda, fromReview = false) {
       const write = () => openSign({
         book: true, noBullets: true, title: `${b.titre} (${hours})`,
         lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: b.note || '',
-        onDone: t => { const note = cleanDesc(t); if (note) b.note = note; else delete b.note; saveTimeblocks(); PAGES['dw-notes'] = build(); renderGui(); },
+        onDone: t => {
+          const note = cleanDesc(t);
+          if (note) b.note = note; else delete b.note;
+          saveTimeblocks();
+          PAGES['dw-notes'] = build();
+          renderGui();
+          // puis : le Deep Work est-il réussi ? (Échap : on ne change rien)
+          const set = r => { b.dwResult = r; saveTimeblocks(); PAGES['dw-notes'] = build(); renderGui(); };
+          openConfirm({
+            question: 'Comment s\'est passé ce Deep Work ?', detail: [`${b.titre} (${hours})`],
+            choices: [{ label: '§aDeep Work réussi', action: () => set('ok') }, { label: '§cDeep Work échoué', action: () => set('ko') }],
+          });
+        },
       });
       const cell = {
         item: 'writable_book', action: write,
-        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.note ? ['', ...wrapText(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
+        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.dwResult ? [b.dwResult === 'ok' ? '§aDeep Work réussi' : '§cDeep Work échoué'] : []), ...(b.note ? ['', ...wrapText(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
       };
       return {
         icons: [[0, cell]], data: b, refresh: () => { PAGES['dw-notes'] = build(); renderGui(); },
-        span: { label: `${b.titre} - ${hours}`, color: TB_DW_COLOR, desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? b.note.split('\n') : [], tooltip: cell.tooltip, action: write },
+        // bandeau : vert si réussi, rouge sombre si échoué, rouge Deep Work tant que ce n'est pas noté
+        span: { label: `${b.titre} - ${hours}`, color: b.dwResult === 'ok' ? '#3E8E2E' : b.dwResult === 'ko' ? '#6E1F18' : TB_DW_COLOR, desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? b.note.split('\n') : [], tooltip: cell.tooltip, action: write },
       };
     }));
     return { title: isMobileLayout() ? `Notes DW ${agenda.date}` : `Notes Deep Work - ${agenda.date}`, slots: setRows(slots, rows) };   // téléphone : titre court (date visible)
