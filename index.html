@@ -1012,18 +1012,19 @@ function reviewDay(agenda) {
       },
     },
     noLabel: 'Retour', yesLabel: '§aValider', onYes: ask,
-    editLabel: '§bNoter les DW', onEdit: () => openDwNotes(agenda),   // 3e bouton : notes des blocs Deep Work du jour
+    editLabel: '§bNoter les DW', onEdit: () => openDwNotes(agenda, true),   // 3e bouton : notes des blocs Deep Work du jour
   });
 }
 // « Noter les DW » : page avec un bloc-notes par bloc « Deep Work » du Timeblock de la journée (titre et horaires) ;
 // un clic ouvre un livre pour écrire ce qui a été fait pendant ce bloc (enregistré dans le bloc : block.note).
 // Retour (flèche) : la liste des objectifs de la journée.
-function openDwNotes(agenda) {
-  const back = () => { location.hash = 'agenda'; setTimeout(() => reviewDay(agenda), 80); };   // après le changement de page
+function openDwNotes(agenda, fromReview = false) {
+  // flèche : la liste des objectifs (si on vient du bilan de la journée), sinon l'agenda
+  const back = () => { location.hash = 'agenda'; if (fromReview) setTimeout(() => reviewDay(agenda), 80); };   // après le changement de page
   const build = () => {
     const blocks = (timeblocks[agenda.date] || []).filter(b => b.deepWork).sort((x, y) => x.debut - y.debut);
     const slots = {
-      '5,3': { item: 'arrow', tooltip: ['§aRetour', '§7Vers les objectifs de la journée'], action: back },
+      '5,3': { item: 'arrow', tooltip: ['§aRetour', fromReview ? '§7Vers les objectifs de la journée' : "§7Vers l'agenda"], action: back },
       '5,4': { item: 'barrier', tooltip: ['§cFermer', '', "§eClique pour revenir à l'agenda !"], open: 'agenda' },
     };
     if (!blocks.length) slots['2,4'] = { item: 'paper', tooltip: ['§7Aucun bloc Deep Work', `§8Timeblock du ${agenda.date}`, '', '§7Coche « Deep Work ? » sur un bloc', '§7pour pouvoir le noter ici.'] };
@@ -1062,7 +1063,9 @@ function agendaGrid(list, slots, numbered) {
       return {
         icons: [[0, cell], [1, bilanSlot(a, n)]], data: a, refresh: refreshAgenda,
         span: {
-          inset: 2, label: a.ghost ? 'Journée Fantôme' : 'Agenda ' + a.date, color: BILAN_COLORS[a.bilan && a.bilan.note] || (a.ghost ? '#3A3A3A' : '#616161'),
+          inset: 2, label: a.ghost ? 'Journée Fantôme' : 'Agenda ' + a.date,
+          color: BILAN_COLORS[a.bilan && a.bilan.note] || (a.ghost ? '#3A3A3A' : '#616161'),
+          descButton: a.ghost ? null : { label: 'Noter les Deep Work', action: () => openDwNotes(a) },   // toujours dépliable
           desc: a.ghost ? a.date : lines[0] || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
           descFull: () => a.ghost ? [a.date, '§7Aucun agenda écrit ce jour-là.'] : [...(boxes.length ? boxes.map(c => (c.checked ? '§a☑ ' : '☐ ') + c.text) : ['Aucun objectif.']),
             ...(a.bilan && BILANS[a.bilan.note] ? ['', BILANS[a.bilan.note].label, ...(a.bilan.texte ? a.bilan.texte.split('\n').map(l => '§7' + l) : [])] : [])],
@@ -1952,10 +1955,10 @@ function placeLines(slots, start, entries) {
     }
     return r;
   }
-  entries.forEach((e, i) => {
+  entries.forEach((e, i) => {   // ordinateur : deux par ligne ; description dépliable comme sur téléphone
     const c = i % 2 ? 6 : 0, r = start + 2 * Math.floor(i / 2);
     for (const [dc, cell] of e.icons) slots[`v${r},${c + dc}`] = cell;
-    slots[`v${r},${c + 2}`] = { ...e.span, span: 3 };
+    placeAdvancement(slots, r, { ...e.span, span: 3 }, e.data, e.refresh || (() => renderGui()), c);
   });
   return start + 2 * Math.ceil(entries.length / 2);
 }
@@ -2520,6 +2523,7 @@ function setGuiSize(L) {
 let lastReserve = 0;
 function renderGui() {
   if (updateDa2Home()) { renderMiniTree(); return; }   // D.A 2 sur téléphone : page d'accueil à part (HTML)
+  state.descButtons = [];   // boutons des descriptions dépliées, refaits à chaque dessin
   // panneau de l'arbre en cours (Profil, ordinateur) affiché ou retiré : le coffre se redimensionne pour la place restante
   if (miniReserve() + 10000 * miniReserveTop() !== lastReserve) { lastReserve = miniReserve() + 10000 * miniReserveTop(); sizeGui(); }
   const S = state.S * guiRatio();
@@ -2808,6 +2812,16 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
     const foldable = slot.data && slot.descFull && descExpandable(slot);
     if (foldable) drawDescTriangle(ctx, right - 5, y + 20.5, descAngle(slot), S, '#55FF55');   // triangle à droite
     if (open) open.lines.forEach((l, i) => text(fitText(l, (right - ix - (foldable ? 12 : 6)) * k), ix + 2, y + 18 + i * 9 / k, '#55FF55'));
+    if (open && slot.descButton) {   // bouton façon Minecraft sous le texte
+      const by = y + 14 + dh - 15, bx = ix + 2, bw = right - ix - 14, label = slot.descButton.label;
+      const hov = state.descHover === slot.descButton;
+      fr(bx, by, bw, 12, '#000000');
+      fr(bx + 1, by + 1, bw - 2, 10, hov ? '#8C8CC8' : '#6F6F6F');
+      fr(bx + 1, by + 1, bw - 2, 1, hov ? '#B4B4E6' : '#A0A0A0');
+      fr(bx + 1, by + 10, bw - 2, 1, '#3F3F3F');
+      text(label, bx + bw / 2 - textWidth(font, label) / k / 2, by + 3.5, hov ? '#FFFFA0' : '#FFFFFF');
+      (state.descButtons ||= []).push({ r: [bx * S, by * S, bw * S, 12 * S], btn: slot.descButton });
+    }
     else short.forEach((l, i) => text(foldable ? fitText(l, (right - ix - 12) * k) : l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
   }
   if (slot.progress) {   // fine barre de progression sous le texte (verte, comme le chargement du monde)
@@ -2874,20 +2888,21 @@ function advDesc(slot, S = state.S * guiRatio()) {
   if (!full || !full.length || !font) return null;
   const k = S / Math.max(1, Math.round(S * 0.6)), width = (36 + slot.span * 18 - 2 - 12) * k;   // place du triangle à droite
   const lines = wrapTipLines(full, width);
-  return { lines, h: 13 + (lines.length - 1) * 9 / k + (slot.progress ? 4 : 0) };
+  // slot.descButton = { label, action } : bouton sous le texte déplié (ex. « Noter les Deep Work »)
+  return { lines, h: 13 + (lines.length - 1) * 9 / k + (slot.progress ? 4 : 0) + (slot.descButton ? 15 : 0) };
 }
 // Place un bloc « succès » en rangée r (le bloc span en colonne 2, l'item déjà placé en colonne 0) et, sous lui,
 // une zone invisible qui déplie / replie la description quand on la touche. Renvoie le nombre de rangées occupées.
-function placeAdvancement(slots, r, span, data, refresh) {
+function placeAdvancement(slots, r, span, data, refresh, c = 0) {   // c : colonne de l'item (ordinateur : 0 ou 6)
   span.expanded = openedDesc.has(data);
   span.data = data;
-  slots[`v${r},2`] = span;
+  slots[`v${r},${c + 2}`] = span;
   const open = span.expanded && advDesc(span);
   const rows = 2;
   if (open) {   // les blocs suivants descendent exactement de la hauteur ajoutée par la description dépliée
     const more = Math.max(0, Math.ceil(span.compact ? open.h - 4 : open.h - 13));
     if (!slots.extra) Object.defineProperty(slots, 'extra', { value: {}, enumerable: false });
-    slots.extra[r + 2] = (slots.extra[r + 2] || 0) + more;
+    slots.extra[r + 2] = Math.max(slots.extra[r + 2] || 0, more);   // deux blocs sur la ligne (ordinateur) : le plus haut
   }
   if (span.descFull) {
     const toggle = () => {
@@ -2899,12 +2914,13 @@ function placeAdvancement(slots, r, span, data, refresh) {
       animateDesc();
     };
     // la zone ne réagit que si la description a plus à montrer qu'une ligne (sinon : rien, et pas de triangle)
-    for (let rr = r + 1; rr < r + rows; rr++) slots[`v${rr},0`] = { span: 5, hidden: true, action: toggle, enabled: () => descExpandable(span) };
+    for (let rr = r + 1; rr < r + rows; rr++) slots[`v${rr},${c}`] = { span: 5, hidden: true, action: toggle, enabled: () => descExpandable(span) };
   }
   return rows;
 }
 // Description dépliable : son texte complet tient sur plus d'une ligne.
 function descExpandable(span) {
+  if (span.descButton) return true;   // toujours dépliable : le bouton est dans la partie dépliée
   const d = advDesc({ ...span, expanded: true });
   return !!d && d.lines.length > 1;
 }
@@ -3089,6 +3105,9 @@ function onMove(ev) {
     if (hover !== headMenu.hover) { headMenu.hover = hover; renderGui(); }
     return;
   }
+  const db = descButtonAt(ev);   // survol du bouton d'une description dépliée
+  if (db !== (state.descHover || null)) { state.descHover = db; canvas.style.cursor = db ? 'pointer' : ''; renderGui(); }
+  if (db) return;
   const key = slotAt(ev);
   const slot = itemAt(key);
   const hovered = slot ? key : null;
@@ -3261,10 +3280,18 @@ function playSound(sound) {
 }
 const playClick = () => {};   // plus de son au clic sur les boutons (clickSound gardé si on veut le remettre)
 
+// Bouton d'une description dépliée sous le pointeur (coordonnées du canvas)
+function descButtonAt(ev) {
+  const R = canvas.getBoundingClientRect(), x = (ev.clientX - R.left) * canvas.width / R.width, y = (ev.clientY - R.top) * canvas.height / R.height;
+  const hit = (state.descButtons || []).find(({ r }) => x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3]);
+  return hit ? hit.btn : null;
+}
 function onClick(ev) {
   if (press.long || Date.now() < press.blockUntil) return;   // téléphone : lâcher d'un appui long
   if (headMenuClick(ev)) return;   // D.A test (téléphone) : tête et son menu
   if (tabClick(ev)) return;   // D.A test (téléphone) : onglets du bas
+  const db = descButtonAt(ev);
+  if (db) { playClick(); db.action(); return; }
   const slot = itemAt(slotAt(ev));
   if (!slot) return;
   playClick();
