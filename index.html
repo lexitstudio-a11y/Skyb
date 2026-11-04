@@ -1041,7 +1041,7 @@ function openDwNotes(agenda, fromReview = false) {
       };
       return {
         icons: [[0, cell]], data: b, refresh: () => { PAGES['dw-notes'] = build(); renderGui(); },
-        span: { label: `${b.titre} - ${hours}`, color: TB_DW_COLOR, desc: () => first || 'Clique pour écrire tes notes', descFull: () => b.note ? b.note.split('\n') : [], tooltip: cell.tooltip, action: write },
+        span: { label: `${b.titre} - ${hours}`, color: TB_DW_COLOR, desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? b.note.split('\n') : [], tooltip: cell.tooltip, action: write },
       };
     }));
     return { title: isMobileLayout() ? `Notes DW ${agenda.date}` : `Notes Deep Work - ${agenda.date}`, slots: setRows(slots, rows) };   // téléphone : titre court (date visible)
@@ -2822,7 +2822,11 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
       text(label, bx + bw / 2 - textWidth(font, label) / k / 2, by + 3.5, hov ? '#FFFFA0' : '#FFFFFF');
       (state.descButtons ||= []).push({ r: [bx * S, by * S, bw * S, 12 * S], btn: slot.descButton });
     }
-    else short.forEach((l, i) => text(foldable ? fitText(l, (right - ix - 12) * k) : l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
+    else {
+      if (slot.descDim && slot.descDim()) ctx.globalAlpha = 0.35;   // texte d'invitation (rien d'écrit) : estompé
+      short.forEach((l, i) => text(foldable ? fitText(l, (right - ix - 12) * k) : l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
+      ctx.globalAlpha = 1;
+    }
   }
   if (slot.progress) {   // fine barre de progression sous le texte (verte, comme le chargement du monde)
     const pct = Math.max(0, Math.min(100, slot.progress())), bw = right - ix - 6;
