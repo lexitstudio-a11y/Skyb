@@ -1061,8 +1061,8 @@ function openDwNotes(agenda, fromReview = false) {
       };
       return {
         icons: [[0, cell]], data: b, refresh: () => { PAGES['dw-notes'] = build(); renderGui(); },
-        // bandeau : vert si réussi, rouge sombre si échoué, rouge Deep Work tant que ce n'est pas noté
-        span: { label: `${b.titre} - ${hours}`, color: b.dwResult === 'ok' ? '#3E8E2E' : b.dwResult === 'ko' ? '#6E1F18' : TB_DW_COLOR, desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? b.note.split('\n') : [], tooltip: cell.tooltip, action: write },
+        // bandeau : vert si réussi, rouge si échoué, gris tant que ce n'est pas noté
+        span: { label: `${b.titre} - ${hours}`, color: b.dwResult === 'ok' ? '#3E8E2E' : b.dwResult === 'ko' ? TB_DW_COLOR : '#616161', desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? b.note.split('\n') : [], tooltip: cell.tooltip, action: write },
       };
     }));
     return { title: isMobileLayout() ? `Notes DW ${agenda.date}` : `Notes Deep Work - ${agenda.date}`, slots: setRows(slots, rows) };   // téléphone : titre court (date visible)
