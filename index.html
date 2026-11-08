@@ -2880,6 +2880,11 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
     if (desc || open) fr(ix, y + 14, right - ix, dh, 'rgba(0, 0, 0, 0.5)');
   }
   if (hovered) fr(left, y + 1, w, 14, 'rgba(255, 255, 255, 0.25)');
+  // journée ouverte depuis le calendrier : son bloc est mis en avant un instant (contour jaune)
+  if (state.flash && slot.data && slot.data.date === state.flash.date && Date.now() < state.flash.until) {
+    const h = 14 + ((desc || open) ? dh : 0), x0 = ix - 2, y0 = y, ww = right - ix + 3;
+    fr(x0, y0, ww, 1, '#FFFF55'); fr(x0, y0 + h, ww, 1, '#FFFF55'); fr(x0, y0, 1, h, '#FFFF55'); fr(x0 + ww - 1, y0, 1, h + 1, '#FFFF55');
+  }
 }
 // Bloc « succès » compact (liste des arbres) : barre de titre de la hauteur de la case de l'item, et juste en
 // dessous, collée, la fine barre de progression qui termine le bloc. Description dépliée (toucher) sous la barre.
@@ -5872,7 +5877,7 @@ function renderBilanGraph() {
     fr(bx, by, tw, th, 'rgba(16, 0, 16, 0.92)');
     lines.forEach((l, k) => drawText(ctx, font, l, bx + 4, by + 3 + k * 10, '#FFFFFF', S, true));
   }
-  stats.layout = { S, ranges, back, g, n, legend, cell: { ox, oy, c, gap, lead } };
+  stats.layout = { S, ranges, back, g, n, legend, cell: { ox, oy, c, gap, lead }, from };
 }
 function statsHit(ev) {
   const L = stats.layout;
@@ -5894,7 +5899,8 @@ statsCanvas.addEventListener('pointermove', ev => {
   statsCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== stats.hover || day !== stats.day) { stats.hover = hover; stats.day = day; renderBilanGraph(); }
 });
-statsCanvas.addEventListener('pointerleave', () => { if (stats.day != null || stats.hover) { stats.day = null; stats.hover = null; renderBilanGraph(); } });
+statsCanvas.addEventListener('pointerleave', ev => { if (ev.pointerType === 'touch') return;   // téléphone : le jour touché reste choisi
+  if (stats.day != null || stats.hover) { stats.day = null; stats.hover = null; renderBilanGraph(); } });
 statsCanvas.addEventListener('click', ev => {
   const h = statsHit(ev);
   if (h.key === 'back') { playClick(); closeBilanGraph(); return; }
@@ -5914,8 +5920,45 @@ statsCanvas.addEventListener('click', ev => {
     return;
   }
   if (h.key) { playClick(); stats.range = h.key; stats.day = null; renderBilanGraph(); return; }
-  if (h.day != null) { stats.day = h.day; renderBilanGraph(); }   // téléphone : un appui montre le jour
+  if (h.day != null) {
+    // souris : le clic ouvre la journée ; téléphone : un 1er appui montre le jour, un 2e appui sur le même l'ouvre
+    const touch = stats.pointer === 'touch' || stats.pointer === 'pen';
+    if (touch && stats.day !== h.day) { stats.day = h.day; renderBilanGraph(); return; }
+    const f = stats.layout.from, date = formatDate(new Date(f.getFullYear(), f.getMonth(), f.getDate() + h.day));
+    if (openAgendaDay(date)) playClick();
+    else { stats.day = h.day; renderBilanGraph(); }
+  }
 });
+statsCanvas.addEventListener('pointerdown', ev => { stats.pointer = ev.pointerType; });
+// Ouvre la page de l'agenda de cette date (« Agenda de la journée » ou la bonne page « Autres Journées ») et fait
+// défiler la liste jusqu'à lui ; false si la date n'a ni agenda ni journée fantôme.
+function openAgendaDay(date) {
+  const { recent, older } = splitAgendas();
+  let pageId = recent.some(a => a.date === date) ? 'agenda' : null;
+  if (!pageId) {
+    const i = older.findIndex(a => a.date === date);
+    if (i < 0) return false;
+    pageId = olderAgendaPageId(Math.floor(i / agendasPerPage()) + 1);
+  }
+  statsScreen.hidden = true;
+  canvas.hidden = false;
+  const scrollTo = () => {
+    const page = PAGES[pageId];
+    if (!page || state.page !== pageId) return;
+    const key = Object.keys(page.slots).find(k => { const sl = page.slots[k]; return sl && sl.data && sl.data.date === date && sl.label; });
+    const info = scrollInfo();
+    if (key && info) {
+      const r = +key.slice(1).split(',')[0];
+      scrolls[pageId] = Math.max(0, info.top(r) - 18);   // une rangée au-dessus : le bloc bien visible
+      state.flash = { date, until: Date.now() + 1500 };   // le bloc de cette journée clignote un instant
+      renderGui();
+      setTimeout(() => renderGui(), 1600);
+    }
+  };
+  if (location.hash === '#' + pageId) { showPageFromHash(); scrollTo(); }
+  else { location.hash = pageId; setTimeout(scrollTo, 60); }
+  return true;
+}
 addEventListener('keydown', ev => { if (ev.key === 'Escape' && !statsScreen.hidden && !sign.cfg) { ev.preventDefault(); closeBilanGraph(); } });
 addEventListener('resize', () => { if (!statsScreen.hidden) renderBilanGraph(); });
 
