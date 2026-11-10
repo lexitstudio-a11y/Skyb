@@ -4898,7 +4898,7 @@ function etapeDoneLine(e) {
 }
 // Étape validée : à la main (bloc vert de sa page), ou, si elle est liée à un arbre, quand l'arbre est terminé (100 %)
 const etapeDone = e => { const a = blockArbre(e); return a ? arbreProgress(a) >= 100 : !!e.valide; };
-// Places des « + » : la racine tant que l'arbre est vide, sinon autour de l'étape sélectionnée (dessous, gauche, droite)
+// Places des « + » : la racine tant que l'arbre est vide, sinon sous l'étape sélectionnée (plus sur les côtés)
 // Un seul arbre à la fois : « Terminer l'arbre » le range dans prog.archives ({ id, fin, etapes }, le plus récent en
 // premier) et libère la place pour un nouveau. pg.view : arbre terminé affiché (lecture seule), sinon l'arbre en cours.
 prog.archives ||= [];
@@ -4972,9 +4972,8 @@ function progSpots() {
   if (!prog.etapes.length) return [{ x: 0, y: 0, niveau: 1, parent: null }];
   const s = prog.etapes.find(e => e.id === pg.selected);
   if (!s) return [];
-  return [[0, 1, 1], [-1, 0, 0], [1, 0, 0]]
-    .map(([dx, dy, dn]) => ({ x: s.x + dx, y: s.y + dy, niveau: s.niveau + dn, parent: s.id }))
-    .filter(p => !progAt(p.x, p.y));
+  const p = { x: s.x, y: s.y + 1, niveau: s.niveau + 1, parent: s.id };   // plus de racines sur les côtés : seulement dessous
+  return progAt(p.x, p.y) ? [] : [p];
 }
 
 function renderProg(st = pg) {
