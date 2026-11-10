@@ -5167,7 +5167,7 @@ function openProg() {
   pg.view = view;
   // arbre en cours : cadrage sur la prochaine étape à faire, en haut de la zone (centrée en largeur)
   const next = !view && nextEtape();
-  if (next) pg.pan = { x: -next.x * PROG_PITCH, y: -next.y * PROG_PITCH };
+  if (next) pg.pan = { x: 0, y: -next.y * PROG_PITCH };   // axe X figé : on ne fait que monter / descendre
   pg.open = true;
   hideTooltip();
   canvas.hidden = true;
@@ -5450,7 +5450,7 @@ function renderMiniTree() {
   Object.assign(miniCanvas.style, { width: miniTree.w + 'px', height: miniTree.h + 'px', left: horizontal ? '8px' : '', right: horizontal ? '' : '8px' });
   if (!miniTree.framed) {   // à l'affichage : cadrage sur la prochaine étape à faire, en haut (à gauche sur téléphone)
     const next = nextEtape();
-    miniTree.pan = !next ? { x: 0, y: 0 } : horizontal ? { x: -next.y * PROG_PITCH, y: -next.x * PROG_PITCH } : { x: -next.x * PROG_PITCH, y: -next.y * PROG_PITCH };
+    miniTree.pan = !next ? { x: 0, y: 0 } : horizontal ? { x: -next.y * PROG_PITCH, y: -next.x * PROG_PITCH } : { x: 0, y: -next.y * PROG_PITCH };
     miniTree.framed = true;
   }
   clampMiniPan();
@@ -5458,8 +5458,11 @@ function renderMiniTree() {
 }
 // Bande horizontale (téléphone) : on ne fait pas défiler au-delà de la première / dernière étape
 // (première étape au bord gauche au plus, dernière au bord droit au moins).
+// Axe en travers de l'arbre figé : on ne fait défiler que le long des étapes (haut / bas, ou gauche / droite en bande).
 function clampMiniPan() {
-  if (!miniTree.horizontal || !prog.etapes.length) return;
+  if (!miniTree.horizontal) { miniTree.pan.x = 0; return; }
+  miniTree.pan.y = 0;
+  if (!prog.etapes.length) return;
   const ys = prog.etapes.map(e => e.y), areaW = Math.floor(miniTree.w / miniTree.S) - 10;
   const max = -Math.min(...ys) * PROG_PITCH, min = Math.min(max, areaW - 52 - Math.max(...ys) * PROG_PITCH);
   miniTree.pan.x = Math.max(min, Math.min(max, miniTree.pan.x));
@@ -5555,7 +5558,7 @@ progCanvas.addEventListener('pointermove', ev => {
         d.drop = progDropAt(ev, d.node);
         pg.hover = null;
         progCanvas.style.cursor = 'grabbing';
-      } else pg.pan = { x: d.pan0.x + Math.round(dx / S), y: d.pan0.y + Math.round(dy / S) };
+      } else pg.pan = { x: 0, y: d.pan0.y + Math.round(dy / S) };   // seulement vertical
       progTip(null, ev);
       renderProg();
     }
@@ -5595,7 +5598,7 @@ progCanvas.addEventListener('pointerleave', ev => {
 });
 progCanvas.addEventListener('wheel', ev => {
   ev.preventDefault();
-  pg.pan = { x: pg.pan.x - Math.round(ev.deltaX / pg.layout.S / 2), y: pg.pan.y - Math.round(ev.deltaY / pg.layout.S / 2) };
+  pg.pan = { x: 0, y: pg.pan.y - Math.round(ev.deltaY / pg.layout.S / 2) };
   renderProg();
 }, { passive: false });
 addEventListener('keydown', ev => {
