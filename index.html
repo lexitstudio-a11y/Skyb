@@ -1026,6 +1026,7 @@ function reviewDay(agenda) {
 // « Noter les DW » : page avec un bloc-notes par bloc « Deep Work » du Timeblock de la journée (titre et horaires) ;
 // un clic ouvre un livre pour écrire ce qui a été fait pendant ce bloc (enregistré dans le bloc : block.note).
 // Retour (flèche) : la liste des objectifs de la journée.
+const DW_QUESTIONS = { ok: 'Quels ont été les points positifs du Deep Work ? :)', ko: 'Pourquoi le Deep Work a échoué ?' };
 function openDwNotes(agenda, fromReview = false) {
   // flèche : la liste des objectifs (si on vient du bilan de la journée), sinon l'agenda
   const back = () => { location.hash = 'agenda'; if (fromReview) setTimeout(() => reviewDay(agenda), 80); };   // après le changement de page
@@ -1038,26 +1039,34 @@ function openDwNotes(agenda, fromReview = false) {
     if (!blocks.length) slots['2,4'] = { item: 'paper', tooltip: ['§7Aucun bloc Deep Work', `§8Timeblock du ${agenda.date}`, '', '§7Coche « Deep Work ? » sur un bloc', '§7pour pouvoir le noter ici.'] };
     const rows = placeLines(slots, isMobileLayout() ? 1 : 0, blocks.map(b => {
       const hours = `${fmtMin(b.debut)} - ${fmtMin(b.fin)}`, first = (b.note || '').split('\n')[0].trim();
+      const refresh = () => { PAGES['dw-notes'] = build(); renderGui(); };
+      const saveNote = t => { const note = cleanDesc(t); if (note) b.note = note; else delete b.note; saveTimeblocks(); refresh(); };
+      // « Noter Les Deep Works » : réussi / échoué, puis un livre avec la question qui va avec (block.dwReview)
+      const rate = () => {
+        const set = r => {
+          b.dwResult = r; saveTimeblocks(); refresh();
+          const q = DW_QUESTIONS[r];
+          openSign({
+            book: true, noBullets: true, title: q, lines: bookLinesFor(q), width: BOOK_TEXT_W, fixed: [],
+            initial: b.dwResult === b.dwReviewFor ? b.dwReview || '' : '',
+            onDone: t => { const v = cleanDesc(t); if (v) Object.assign(b, { dwReview: v, dwReviewFor: r }); else { delete b.dwReview; delete b.dwReviewFor; } saveTimeblocks(); refresh(); },
+          });
+        };
+        openConfirm({
+          question: 'Comment s\'est passé ce Deep Work ?', detail: [`${b.titre} (${hours})`],
+          choices: [{ label: '§aDeep Work réussi', action: () => set('ok') }, { label: '§cDeep Work échoué', action: () => set('ko') }],
+        });
+      };
+      // « Terminé » enregistre et ferme simplement le livre
       const write = () => openSign({
         book: true, noBullets: true, title: `${b.titre} (${hours})`,
         lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: b.note || '',
-        onDone: t => {
-          const note = cleanDesc(t);
-          if (note) b.note = note; else delete b.note;
-          saveTimeblocks();
-          PAGES['dw-notes'] = build();
-          renderGui();
-          // puis : le Deep Work est-il réussi ? (Échap : on ne change rien)
-          const set = r => { b.dwResult = r; saveTimeblocks(); PAGES['dw-notes'] = build(); renderGui(); };
-          openConfirm({
-            question: 'Comment s\'est passé ce Deep Work ?', detail: [`${b.titre} (${hours})`],
-            choices: [{ label: '§aDeep Work réussi', action: () => set('ok') }, { label: '§cDeep Work échoué', action: () => set('ko') }],
-          });
-        },
+        onDone: saveNote,
+        extraLabel: 'Noter Les Deep Works', onExtra: t => { saveNote(t); rate(); },
       });
       const cell = {
         item: 'writable_book', action: write,
-        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.dwResult ? [b.dwResult === 'ok' ? '§aDeep Work réussi' : '§cDeep Work échoué'] : []), ...(b.note ? ['', ...wrapText(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
+        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.dwResult ? [b.dwResult === 'ok' ? '§aDeep Work réussi' : '§cDeep Work échoué'] : []), ...(b.dwReview ? wrapText(b.dwReview, 180).map(l => '§7' + l) : []), ...(b.note ? ['', ...wrapText(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
       };
       return {
         icons: [[0, cell]], data: b, refresh: () => { PAGES['dw-notes'] = build(); renderGui(); },
@@ -3553,14 +3562,16 @@ function renderBook() {
 
   // « Terminé » ; avec cfg.onExtra, un 2e bouton « Timeblock » à droite ; avec cfg.onExtra2, un 3e bouton
   // (cfg.extra2Label, ex. « Lier à un arbre ») encore à droite, ou en dessous si la largeur manque (téléphone).
+  // cfg.extraLabel : autre nom pour le 2e bouton (sa largeur suit le texte)
   const btnW = 64, gap = 4, w3 = cfg.onExtra2 ? textWidth(font, cfg.extra2Label) + 14 : 0;
-  const oneRow = !cfg.onExtra2 || 2 * btnW + w3 + 2 * gap <= W - 8;
+  const extraLabel = cfg.extraLabel || 'Timeblock', w2 = Math.max(btnW, textWidth(font, extraLabel) + 14);
+  const oneRow = !cfg.onExtra2 || btnW + w2 + w3 + 2 * gap <= W - 8;
   const btnY = Math.min(H - (oneRow ? 22 : 46), top + 196);
-  const rowW = cfg.onExtra ? 2 * btnW + gap + (cfg.onExtra2 && oneRow ? w3 + gap : 0) : btnW;
+  const rowW = cfg.onExtra ? btnW + w2 + gap + (cfg.onExtra2 && oneRow ? w3 + gap : 0) : btnW;
   const btnX = Math.floor(W / 2 - rowW / 2), btn2X = btnX + btnW + gap;
-  const b3 = cfg.onExtra2 ? (oneRow ? [btn2X + btnW + gap, btnY, w3, 20] : [Math.floor(W / 2 - w3 / 2), btnY + 24, w3, 20]) : null;
+  const b3 = cfg.onExtra2 ? (oneRow ? [btn2X + w2 + gap, btnY, w3, 20] : [Math.floor(W / 2 - w3 / 2), btnY + 24, w3, 20]) : null;
   drawButton(ctx, btnX, btnY, btnW, 'Terminé', sign.hoverDone, S);
-  if (cfg.onExtra) drawButton(ctx, btn2X, btnY, btnW, 'Timeblock', sign.hoverExtra, S);
+  if (cfg.onExtra) drawButton(ctx, btn2X, btnY, w2, extraLabel, sign.hoverExtra, S);
   if (b3) drawButton(ctx, b3[0], b3[1], b3[2], cfg.extra2Label, sign.hoverExtra2, S);
   // cfg.topCheck = { label, checked(), onToggle() } : case à cocher en haut à gauche de l'écran (ex. « Journée de Repos »)
   let topCheck = null;
@@ -3573,7 +3584,7 @@ function renderBook() {
     drawCheckbox(ctx, x, y, cfg.topCheck.checked(), sign.hoverTop, S);
     drawText(ctx, font, label, x + 15, y + 2, sign.hoverTop ? '#FFFFA0' : '#FFFFFF', S, true);
   }
-  sign.layout = { S, board: [left + 36, textTop - 2, 118, cfg.lines * 9], button: [btnX, btnY, btnW, 20], button2: cfg.onExtra ? [btn2X, btnY, btnW, 20] : null, button3: b3, topCheck };
+  sign.layout = { S, board: [left + 36, textTop - 2, 118, cfg.lines * 9], button: [btnX, btnY, btnW, 20], button2: cfg.onExtra ? [btn2X, btnY, w2, 20] : null, button3: b3, topCheck };
   Object.assign(signInput.style, { left: (left + 36) * S + 'px', top: (textTop - 2) * S + 'px', width: 118 * S + 'px', height: cfg.lines * 9 * S + 'px' });
 }
 
