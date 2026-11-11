@@ -947,6 +947,7 @@ function agendaSlot(agenda, n, image) {
 // puis rouge / verte / jaune selon la journée) ; agenda.bilan = { note, texte }.
 const BILANS = {
   mauvaise: { label: '§cMauvaise journée', image: 'journee/rouge', question: 'Pourquoi la journée a été mauvaise ?' },
+  // « Journée Bof » retirée des choix et des stats ; gardée ici pour les anciennes journées déjà notées ainsi
   moyenne: { label: '§6Journée Bof', image: 'journee/orange', question: "Qu'est-ce qui a manqué pour une bonne journée ?" },
   bonne: { label: '§aBonne journée', image: 'journee/verte', question: "Décris ce qui a marché aujourd'hui et ce que tu aurais pu mieux faire" },
   tres_bonne: { label: '§eTrès bonne journée', image: 'journee/jaune', question: "Les résultats d'une journée idéale" },
@@ -998,7 +999,7 @@ function reviewDay(agenda) {
     detail: ['Agenda ' + agenda.date],
     buttonWidth: 110,
     // de la meilleure à la pire ; « Très bonne journée » en dégradé jaune → doré
-    choices: ['tres_bonne', 'bonne', 'moyenne', 'mauvaise'].map(note => note === 'tres_bonne'
+    choices: ['tres_bonne', 'bonne', 'mauvaise'].map(note => note === 'tres_bonne'
       ? { label: BILANS[note].label.slice(2), gradient: ['#FFFF55', '#E8A317'], action: () => pick(note) }
       : { label: BILANS[note].label, action: () => pick(note) }),
     corner: { label: BILANS.repos.label, action: () => pick('repos') },   // 4e choix, en haut à gauche de l'écran
@@ -1133,14 +1134,15 @@ function agendaSlots() {
 function bilanStats() {
   // journées fantômes (sans agenda, entre deux journées écrites) comptées avec les journées notées
   const { recent, older } = splitAgendas(), ghosts = [...recent, ...older].filter(a => a.ghost).length;
-  const notes = agendas.map(a => a.bilan && a.bilan.note).filter(n => BILANS[n]), total = notes.length + ghosts;
+  const notes = agendas.map(a => a.bilan && a.bilan.note).filter(n => BILANS[n] && n !== 'moyenne'), total = notes.length + ghosts;
   const pct = n => total ? Math.round(n / total * 100) : 0;
-  const rows = [['mauvaise', 'MJ'], ['moyenne', 'JB'], ['bonne', 'BJ'], ['tres_bonne', 'TBJ'], ['repos', 'JR']].map(([note, short]) => {
+  const rows = [['mauvaise', 'MJ'], ['bonne', 'BJ'], ['tres_bonne', 'TBJ'], ['repos', 'JR']].map(([note, short]) => {
     const n = notes.filter(x => x === note).length;
-    return `${BILANS[note].label} §7: §f${pct(n)}% §8(${n} ${short})`;
+    return { n, text: `${BILANS[note].label} §7: §f${pct(n)}% §8(${n} ${short})` };
   });
-  rows.push(`§7Journée Fantôme : §f${pct(ghosts)}% §8(${ghosts} JF)`);
-  return ['§bBilan des journées', ...rows, '', `§7${total} journée${total > 1 ? 's' : ''} comptée${total > 1 ? 's' : ''}`, '', "§eClique pour voir l'évolution !"];
+  rows.push({ n: ghosts, text: `§7Journée Fantôme : §f${pct(ghosts)}% §8(${ghosts} JF)` });
+  rows.sort((a, b) => b.n - a.n);   // le plus gros pourcentage en haut (à égalité : l'ordre ci-dessus)
+  return ['§bBilan des journées', ...rows.map(r => r.text), '', `§7${total} journée${total > 1 ? 's' : ''} comptée${total > 1 ? 's' : ''}`, '', "§eClique pour voir l'évolution !"];
 }
 const agendaToWrite = () => { const today = formatDate(new Date()); return agendas.some(a => a.date === today) ? tomorrow() : today; };
 // « Autres Journées » : tous les anciens agendas (aucun n'est supprimé), 14 par page (15 sur téléphone) ; flèche en bas à droite
@@ -5746,7 +5748,7 @@ OTHER_SCREENS.forEach(el => el && da2Watch.observe(el, { attributes: true, attri
 // cumulé jour après jour sur la période choisie (Depuis le début / 1 Mois / 1 Semaine / Custom : dates de début et de fin).
 const statsScreen = document.getElementById('statsScreen'), statsCanvas = document.getElementById('statsCanvas');
 const STATS_TYPES = [
-  { key: 'mauvaise', short: 'MJ', color: '#FF5555' }, { key: 'moyenne', short: 'JB', color: '#FFAA00' }, { key: 'bonne', short: 'BJ', color: '#55FF55' },
+  { key: 'mauvaise', short: 'MJ', color: '#FF5555' }, { key: 'bonne', short: 'BJ', color: '#55FF55' },
   { key: 'tres_bonne', short: 'TBJ', color: '#FFFF55' }, { key: 'repos', short: 'JR', color: '#FF55FF' },
   { key: 'ghost', short: 'JF', color: '#AAAAAA' },
 ];
