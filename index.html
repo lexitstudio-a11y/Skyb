@@ -1086,7 +1086,7 @@ function agendaGrid(list, slots, numbered) {
         span: {
           inset: 2, label: a.ghost ? 'Journée Fantôme' : 'Agenda ' + a.date,
           color: BILAN_COLORS[a.bilan && a.bilan.note] || (a.ghost ? '#3A3A3A' : '#616161'),
-          descButton: a.ghost ? null : { label: 'Noter les Deep Work', action: () => openDwNotes(a) },   // toujours dépliable
+          descButton: a.ghost ? null : { label: 'Page des Deep Works', action: () => openDwNotes(a) },   // toujours dépliable
           desc: a.ghost ? a.date : lines[0] || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
           descFull: () => a.ghost ? [a.date, '§7Aucun agenda écrit ce jour-là.'] : [...(boxes.length ? boxes.map(c => (c.checked ? '§a☑ ' : '☐ ') + c.text) : ['Aucun objectif.']),
             ...(a.bilan && BILANS[a.bilan.note] ? ['', BILANS[a.bilan.note].label, ...(a.bilan.texte ? a.bilan.texte.split('\n').map(l => '§7' + l) : [])] : [])],
@@ -2921,7 +2921,7 @@ function advDesc(slot, S = state.S * guiRatio()) {
   if (!full || !full.length || !font) return null;
   const k = S / Math.max(1, Math.round(S * 0.6)), width = (36 + slot.span * 18 - 2 - 12) * k;   // place du triangle à droite
   const lines = wrapTipLines(full, width);
-  // slot.descButton = { label, action } : bouton sous le texte déplié (ex. « Noter les Deep Work »)
+  // slot.descButton = { label, action } : bouton sous le texte déplié (ex. « Page des Deep Works »)
   return { lines, h: 13 + (lines.length - 1) * 9 / k + (slot.progress ? 4 : 0) + (slot.descButton ? 15 : 0) };
 }
 // Place un bloc « succès » en rangée r (le bloc span en colonne 2, l'item déjà placé en colonne 0) et, sous lui,
