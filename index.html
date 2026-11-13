@@ -1027,6 +1027,13 @@ function reviewDay(agenda) {
 // « Noter les DW » : page avec un bloc-notes par bloc « Deep Work » du Timeblock de la journée (titre et horaires) ;
 // un clic ouvre un livre pour écrire ce qui a été fait pendant ce bloc (enregistré dans le bloc : block.note).
 // Retour (flèche) : la liste des objectifs de la journée.
+// Texte d'un livre en liste : « • » devant chaque ligne, sauf s'il n'y en a qu'une (affichée telle quelle).
+// Avec w : lignes coupées à cette largeur (infobulle) ; sans : une ligne par ligne écrite.
+function dwList(text, w) {
+  const lines = text.split('\n'), many = lines.filter(l => l.trim()).length > 1;   // lignes vides gardées
+  const list = many ? lines.map(l => l.trim() ? '• ' + l : '') : lines;
+  return w ? list.flatMap(l => wrapText(l, w)) : list;
+}
 const DW_QUESTIONS = { ok: 'Quels ont été les points positifs du Deep Work ? :)', ko: 'Pourquoi le Deep Work a échoué ?' };
 function openDwNotes(agenda, fromReview = false) {
   // flèche : la liste des objectifs (si on vient du bilan de la journée), sinon l'agenda
@@ -1061,7 +1068,7 @@ function openDwNotes(agenda, fromReview = false) {
       };
       // « Terminé » enregistre et ferme simplement le livre
       const write = () => openSign({
-        book: true, noBullets: true, title: `${b.titre} (${hours})`,
+        book: true, title: `${b.titre} (${hours})`,   // gros point devant chaque ligne (format liste)
         lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: b.note || '',
         onDone: saveNote,
         extraLabel: 'Noter Les Deep Works', onExtra: t => { saveNote(t); rate(); },
@@ -1069,13 +1076,13 @@ function openDwNotes(agenda, fromReview = false) {
       const cell = {
         item: 'writable_book', action: write,
         // objectif (la note) d'abord, puis réussi / échoué et, après un petit espace, ce qui en a été dit
-        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.note ? ['', ...wrapText(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']),
-          ...(b.dwResult ? ['', b.dwResult === 'ok' ? '§aDeep Work réussi' : '§cDeep Work échoué'] : []), ...(b.dwReview ? [TIP_GAP, ...wrapText(b.dwReview, 180).map(l => '§7' + l)] : []), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
+        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.note ? ['', ...dwList(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']),
+          ...(b.dwResult ? ['', b.dwResult === 'ok' ? '§aDeep Work réussi' : '§cDeep Work échoué'] : []), ...(b.dwReview ? [TIP_GAP, ...dwList(b.dwReview, 180).map(l => '§7' + l)] : []), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
       };
       return {
         icons: [[0, cell]], data: b, refresh: () => { PAGES['dw-notes'] = build(); renderGui(); },
         // bandeau : vert si réussi, rouge si échoué, gris tant que ce n'est pas noté
-        span: { label: `${b.titre} - ${hours}`, color: b.dwResult === 'ok' ? '#3E8E2E' : b.dwResult === 'ko' ? TB_DW_COLOR : '#616161', desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? b.note.split('\n') : [], tooltip: cell.tooltip, action: write },
+        span: { label: `${b.titre} - ${hours}`, color: b.dwResult === 'ok' ? '#3E8E2E' : b.dwResult === 'ko' ? TB_DW_COLOR : '#616161', desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? dwList(b.note) : [], tooltip: cell.tooltip, action: write },
       };
     }));
     return { title: isMobileLayout() ? `Notes DW ${agenda.date}` : `Notes Deep Work - ${agenda.date}`, slots: setRows(slots, rows) };   // téléphone : titre court (date visible)
