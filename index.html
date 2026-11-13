@@ -1048,7 +1048,8 @@ function openDwNotes(agenda, fromReview = false) {
           b.dwResult = r; saveTimeblocks(); refresh();
           const q = DW_QUESTIONS[r];
           openSign({
-            book: true, noBullets: true, title: q, lines: bookLinesFor(q), width: BOOK_TEXT_W, fixed: [],
+            book: true, title: q,   // avec un gros point devant chaque ligne (format liste)
+            lines: bookLinesFor(q), width: BOOK_TEXT_W, fixed: [],
             initial: b.dwResult === b.dwReviewFor ? b.dwReview || '' : '',
             onDone: t => { const v = cleanDesc(t); if (v) Object.assign(b, { dwReview: v, dwReviewFor: r }); else { delete b.dwReview; delete b.dwReviewFor; } saveTimeblocks(); refresh(); },
           });
