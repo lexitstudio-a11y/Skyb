@@ -1067,7 +1067,9 @@ function openDwNotes(agenda, fromReview = false) {
       });
       const cell = {
         item: 'writable_book', action: write,
-        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.dwResult ? [b.dwResult === 'ok' ? '§aDeep Work réussi' : '§cDeep Work échoué'] : []), ...(b.dwReview ? wrapText(b.dwReview, 180).map(l => '§7' + l) : []), ...(b.note ? ['', ...wrapText(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
+        // objectif (la note) d'abord, puis réussi / échoué et, après un petit espace, ce qui en a été dit
+        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.note ? ['', ...wrapText(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']),
+          ...(b.dwResult ? ['', b.dwResult === 'ok' ? '§aDeep Work réussi' : '§cDeep Work échoué'] : []), ...(b.dwReview ? [TIP_GAP, ...wrapText(b.dwReview, 180).map(l => '§7' + l)] : []), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
       };
       return {
         icons: [[0, cell]], data: b, refresh: () => { PAGES['dw-notes'] = build(); renderGui(); },
@@ -2364,9 +2366,12 @@ const TOOLTIP_PADDING = 4;   // marge entre la bordure et le texte (pixels GUI)
 // Échelle du texte de l'overlay : plus petite que celle de l'interface.
 const tooltipScale = S => Math.max(2, Math.round(S * 0.65));
 
+// TIP_GAP : ligne d'infobulle qui ne fait qu'un petit espace (4 px au lieu d'une ligne vide de 10)
+const TIP_GAP = '\u0001';
 function renderTooltip(tipCanvas, font, lines, S) {
-  const w = Math.max(...lines.map(l => textWidth(font, l)));
-  const h = 8 + (lines.length - 1) * 10 + (lines.length > 1 ? 2 : 0);
+  const w = Math.max(...lines.map(l => l === TIP_GAP ? 0 : textWidth(font, l)));
+  const gaps = lines.filter(l => l === TIP_GAP).length;
+  const h = 8 + (lines.length - 1) * 10 + (lines.length > 1 ? 2 : 0) - gaps * 6;
   const edge = 2 + TOOLTIP_PADDING;           // fond (1 px) + bordure (1 px) + marge intérieure
   const W = w + 1 + 2 * edge, H = h + 1 + 2 * edge;   // +1 : ombre du texte
   const x0 = edge, y0 = edge;
@@ -2390,6 +2395,7 @@ function renderTooltip(tipCanvas, font, lines, S) {
 
   let y = y0;
   lines.forEach((line, i) => {
+    if (line === TIP_GAP) { y += 4; return; }
     drawText(ctx, font, line, x0, y, '#FFFFFF', S, true);
     y += 10 + (i === 0 ? 2 : 0);
   });
