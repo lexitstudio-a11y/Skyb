@@ -1274,7 +1274,7 @@ const PAGES = {
     slots: {
       '1,4': { head: 'profile', tooltip: profileTooltip, action: editProfile },
       '2,1': { image: 'arbre_logo', tooltip: ['§aArbre de progression', ...LORE], open: 'progression' },
-      '3,1': { image: 'arbres_progression', tooltip: () => ['§aRacines', LORE[0], '', ...arbresOverview(), '', LORE[2]], open: 'arbres' },   // + avancement des arbres   // sous Arbre de progression
+      '3,1': { image: 'arbres_progression', tooltip: () => ['§aRacines', LORE[0], '', ...arbresOverview(arbreLists()[0].trees), '', LORE[2]], open: 'arbres' },   // + avancement des arbres en cours (pas les terminés), sous Arbre de progression
       '2,4': { item: 'book', tooltip: ['§aLes Pilliers Temporels', ...LORE], open: 'serments' },
       '2,5': {
         item: 'paper', open: 'todo',
