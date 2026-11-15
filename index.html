@@ -4175,8 +4175,12 @@ function renderTimeblock() {
   const { ctx, W, H } = prepareScreen(timeblockCanvas, S);
   const TB_TOP = 28;   // hauteur du bandeau de titre au-dessus de la journée
   const tray = tb.arbre ? TB_TRAY : 0;   // colonne du bloc spécial à droite de la journée
-  const pw = Math.min(220 + tray, W - 6), ph = Math.min(H - 8, TB_TOP + TB_CONTENT + 36);
-  const px = Math.floor((W - pw) / 2), py = Math.max(4, Math.floor((H - ph) / 2));
+  // Boutons des templates de journée : en haut à gauche de l'écran ; s'il n'y a pas la place à côté du panneau
+  // (téléphone), au-dessus de lui, qui descend d'autant
+  const tplW = Math.max(...TPL_BTN.map(t => textWidth(font, t))) + 14, pw = Math.min(220 + tray, W - 6);
+  const side = Math.floor((W - pw) / 2) >= tplW + 8, top = side ? 0 : 48;
+  const ph = Math.min(H - 8 - top, TB_TOP + TB_CONTENT + 36);
+  const px = Math.floor((W - pw) / 2), py = top + Math.max(4, Math.floor((H - top - ph) / 2));
   const grid = { x: px + 38, y: py + TB_TOP, w: pw - 38 - 8 - tray, h: ph - TB_TOP - 34 };
   const maxScroll = Math.max(0, TB_CONTENT - grid.h);
   if (tb.scroll == null) {   // premier affichage : on se place sur le premier bloc (ou 8h)
@@ -4194,9 +4198,13 @@ function renderTimeblock() {
   if (dwMin) {
     const dw = `Deep Work : ${Math.floor(dwMin / 60)}h${dwMin % 60 ? String(dwMin % 60).padStart(2, '0') : ''}`;
     const tw = textWidth(font, dw);
-    if (px >= tw + 8) drawText(ctx, font, dw, 4, 4, '#8C8C8C', S, true);
+    if (px >= tw + 8) drawText(ctx, font, dw, 4, side ? 4 : 50, '#8C8C8C', S, true);   // sous les boutons des templates
     else drawText(ctx, font, dw, px + 8, py + 16, '#707070', S);
   }
+  const tplY = side ? (dwMin ? 16 : 4) : 2, tplX = 4;
+  const tplNew = [tplX, tplY, tplW, 20], tplFind = [tplX, tplY + 24, tplW, 20];
+  drawButton(ctx, ...tplNew.slice(0, 3), TPL_BTN[0], tb.hoverTpl === 'new', S);
+  drawButton(ctx, ...tplFind.slice(0, 3), TPL_BTN[1], tb.hoverTpl === 'find', S);
   // Zone de la journée, creusée comme une case d'inventaire
   const fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
   fr(grid.x - 1, grid.y - 1, grid.w + 2, grid.h + 2, '#FFFFFF');
@@ -4280,7 +4288,7 @@ function renderTimeblock() {
       ctx.drawImage(T.orbe_xp, (bx + 3) * S, (by + 7) * S, 14 * S, 14 * S);
     }
   }
-  tb.layout = { S, grid, btn, photo, cal, yOf, tray: trayRect, orbs };
+  tb.layout = { S, grid, btn, photo, cal, yOf, tray: trayRect, orbs, tplNew, tplFind };
 }
 
 // --- « Photo » : image 1179 x 2556 (format d'écran d'iPhone) des blocs de la journée, pour un fond d'écran ---
@@ -4591,6 +4599,70 @@ function tbBlockAt(p) {
   return [...tbBlocks()].reverse().find(b => p.y >= yOf(b.debut) && p.y < yOf(b.fin));
 }
 // Titre d'un bloc (nouveau ou existant) sur un panneau ; retour ensuite au Timeblock.
+// --- Templates de journée : copie des blocs d'un Timeblock (nom donné sur un panneau), à réappliquer à une autre
+// journée depuis « Chercher un template de journée » (remplace les blocs de la journée affichée).
+const TPL_BTN = ['Créer un template de journée', 'Chercher un template de journée'];
+const TPL_KEY = 'timeblock-templates';
+const dayTemplates = (() => { try { return JSON.parse(localStorage.getItem(TPL_KEY)) || []; } catch { return []; } })();
+function saveDayTemplates() {
+  try { localStorage.setItem(TPL_KEY, JSON.stringify(dayTemplates)); } catch {}
+  cloudChanged();
+}
+// ce qu'on garde d'un bloc (pas les notes ni le résultat des Deep Work, propres à une journée)
+const tplBlock = b => Object.fromEntries(['debut', 'fin', 'titre', 'couleur', 'deepWork', 'arbre', 'prog'].filter(k => b[k] != null).map(k => [k, b[k]]));
+function createDayTemplate() {
+  const blocks = tbBlocks();
+  if (!blocks.length) { showToast({ title: 'Timeblock vide', text: 'Ajoute des blocs avant de créer un template.' }); return; }
+  hideTimeblock();
+  openSign({
+    title: 'Nom du template', lines: 2, fixed: ['', '', '^^^^^^^^^^^^', `${blocks.length} bloc${blocks.length > 1 ? 's' : ''}`],
+    initial: '',
+    onDone: text => {
+      const nom = text.split('\n').map(l => l.trim()).filter(Boolean).join(' ') || `Journée du ${tb.date}`;
+      dayTemplates.push({ id: newId(), nom, blocs: [...blocks].sort((x, y) => x.debut - y.debut).map(tplBlock) });
+      saveDayTemplates();
+      showTimeblock();
+      showToast({ title: 'Template créé', text: nom });
+    },
+    onCancel: showTimeblock,
+  });
+}
+function findDayTemplate() {
+  hideTimeblock();
+  if (!dayTemplates.length) {
+    openConfirm({ question: 'Templates de journée', detail: ['Aucun template pour l\'instant.', `Crée-en un avec « ${TPL_BTN[0]} ».`], choices: [{ label: 'Retour', action: showTimeblock }], onCancel: showTimeblock });
+    return;
+  }
+  const hours = t => `${fmtMin(Math.min(...t.blocs.map(b => b.debut)))} - ${fmtMin(Math.max(...t.blocs.map(b => b.fin)))}`;
+  openConfirm({
+    question: 'Templates de journée', detail: [`Timeblock ${tb.date}`],
+    buttonWidth: 110,
+    choices: [...dayTemplates.map(t => ({ label: fitText(`${t.nom} (${t.blocs.length})`, 200), action: () => templateMenu(t, hours(t)) })),
+      { label: '§7Retour', action: showTimeblock }],
+    onCancel: showTimeblock,
+  });
+}
+function templateMenu(t, hours) {
+  const n = tbBlocks().length;
+  openConfirm({
+    question: t.nom,
+    detail: [`${t.blocs.length} bloc${t.blocs.length > 1 ? 's' : ''}, ${hours}`, ...t.blocs.slice(0, 6).map(b => `${fmtMin(b.debut)} ${b.titre}`), ...(t.blocs.length > 6 ? ['...'] : []),
+      '', n ? `§cRemplace les ${n} bloc${n > 1 ? 's' : ''} du ${tb.date}.` : `Pour le ${tb.date}.`],
+    noLabel: 'Retour', yesLabel: '§aAppliquer',
+    onNo: findDayTemplate, onCancel: findDayTemplate,
+    onYes: () => {
+      timeblocks[tb.date] = t.blocs.map(b => ({ ...b }));
+      saveTimeblocks();
+      tb.scroll = null;
+      showTimeblock();
+    },
+    onDelete: () => openConfirm({
+      question: `Supprimer « ${t.nom} » ?`, noLabel: 'Retour', yesLabel: '§cSupprimer',
+      onNo: () => templateMenu(t, hours), onCancel: () => templateMenu(t, hours),
+      onYes: () => { dayTemplates.splice(dayTemplates.indexOf(t), 1); saveDayTemplates(); findDayTemplate(); },
+    }),
+  });
+}
 function editBlockTitle(block, isNew) {
   hideTimeblock();
   openSign({
@@ -4847,6 +4919,9 @@ timeblockCanvas.addEventListener('pointerdown', ev => {
   if (inRect(ev, tb.layout.btn, tb.layout.S)) { playClick(); closeTimeblock(); return; }
   if (inRect(ev, tb.layout.photo, tb.layout.S)) { playClick(); timeblockPhoto(); return; }
   if (inRect(ev, tb.layout.cal, tb.layout.S)) { playClick(); exportTimeblockIcs(); return; }
+  // preventDefault : sinon le clic reprend le focus au panneau qui vient de s'ouvrir (lettres tapées perdues)
+  if (inRect(ev, tb.layout.tplNew, tb.layout.S)) { ev.preventDefault(); playClick(); tb.hoverTpl = null; createDayTemplate(); return; }
+  if (inRect(ev, tb.layout.tplFind, tb.layout.S)) { playClick(); tb.hoverTpl = null; findDayTemplate(); return; }
   const orb = tbOrbAt(ev);
   if (orb && orb.prog) {   // pousse : écran de l'Arbre de progression relié (en cours ou terminé)
     const t = treeById(orb.block.prog);
@@ -4884,9 +4959,11 @@ timeblockCanvas.addEventListener('pointermove', ev => {
     const onBtn = inRect(ev, tb.layout.btn, tb.layout.S), onPhoto = inRect(ev, tb.layout.photo, tb.layout.S), onCal = inRect(ev, tb.layout.cal, tb.layout.S);
     if (onPhoto !== !!tb.hoverPhoto) { tb.hoverPhoto = onPhoto; renderTimeblock(); }
     if (onCal !== !!tb.hoverCal) { tb.hoverCal = onCal; renderTimeblock(); }
+    const onTpl = inRect(ev, tb.layout.tplNew, tb.layout.S) ? 'new' : inRect(ev, tb.layout.tplFind, tb.layout.S) ? 'find' : null;
+    if (onTpl !== (tb.hoverTpl || null)) { tb.hoverTpl = onTpl; renderTimeblock(); }
     const onTray = tb.layout.tray && inRect(ev, tb.layout.tray, tb.layout.S), orb = tbOrbAt(ev);
     tbOrbTip(orb, ev);
-    timeblockCanvas.style.cursor = orb ? 'pointer' : onTray ? 'grab' : onBtn || onPhoto || onCal ? 'pointer' : block ? (p.y > tb.layout.yOf(block.fin) - 4 ? 'ns-resize' : 'move') : tbInGrid(p) ? 'crosshair' : '';
+    timeblockCanvas.style.cursor = orb ? 'pointer' : onTray ? 'grab' : onBtn || onPhoto || onCal || onTpl ? 'pointer' : block ? (p.y > tb.layout.yOf(block.fin) - 4 ? 'ns-resize' : 'move') : tbInGrid(p) ? 'crosshair' : '';
     if (onBtn !== tb.hoverDone) { tb.hoverDone = onBtn; renderTimeblock(); }
     return;
   }
@@ -6075,7 +6152,7 @@ function openAgendaDay(date) {
 addEventListener('keydown', ev => { if (ev.key === 'Escape' && !statsScreen.hidden && !sign.cfg) { ev.preventDefault(); closeBilanGraph(); } });
 addEventListener('resize', () => { if (!statsScreen.hidden) renderBilanGraph(); });
 
-const SYNC_KEYS = [PROG_KEY, DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, HABIT_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY];
+const SYNC_KEYS = [PROG_KEY, DATES_KEY, PROFILE_KEY, SERMENTS_KEY, TODO_KEY, TODO_STATS_KEY, HABIT_KEY, ARBRES_KEY, AGENDA_KEY, RESULT_KEY, ACTION_KEY, IDENTITY_KEY, TB_KEY, TPL_KEY];
 let markAppReady;
 const appReady = new Promise(res => { markAppReady = res; });   // textures et police chargées
 
