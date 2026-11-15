@@ -4178,7 +4178,11 @@ function renderTimeblock() {
   // Boutons des templates de journée : en haut à gauche de l'écran ; s'il n'y a pas la place à côté du panneau
   // (téléphone), au-dessus de lui, qui descend d'autant
   const tplW = Math.max(...TPL_BTN.map(t => textWidth(font, t))) + 14, pw = Math.min(220 + tray, W - 6);
-  const side = Math.floor((W - pw) / 2) >= tplW + 8, top = side ? 0 : 48;
+  // boutons plus petits que le reste (échelle bs < S) : à côté du panneau s'ils y tiennent, sinon (téléphone)
+  // au-dessus de lui, qui descend juste de leur hauteur
+  const roomPx = Math.floor((W - pw) / 2) * S - 8;
+  const fitBs = Math.min(S - 1, Math.floor(roomPx / tplW)), side = fitBs >= 1;
+  const bs = side ? fitBs : Math.max(1, S - 1), top = side ? 0 : Math.ceil(46 * bs / S) + 2;
   const ph = Math.min(H - 8 - top, TB_TOP + TB_CONTENT + 36);
   const px = Math.floor((W - pw) / 2), py = top + Math.max(4, Math.floor((H - top - ph) / 2));
   const grid = { x: px + 38, y: py + TB_TOP, w: pw - 38 - 8 - tray, h: ph - TB_TOP - 34 };
@@ -4198,13 +4202,14 @@ function renderTimeblock() {
   if (dwMin) {
     const dw = `Deep Work : ${Math.floor(dwMin / 60)}h${dwMin % 60 ? String(dwMin % 60).padStart(2, '0') : ''}`;
     const tw = textWidth(font, dw);
-    if (px >= tw + 8) drawText(ctx, font, dw, 4, side ? 4 : 50, '#8C8C8C', S, true);   // sous les boutons des templates
+    if (side && px >= tw + 8) drawText(ctx, font, dw, 4, Math.ceil(50 * bs / S) + 2, '#8C8C8C', S, true);   // sous les boutons des templates
     else drawText(ctx, font, dw, px + 8, py + 16, '#707070', S);
   }
-  const tplY = side ? (dwMin ? 16 : 4) : 2, tplX = 4;
-  const tplNew = [tplX, tplY, tplW, 20], tplFind = [tplX, tplY + 24, tplW, 20];
-  drawButton(ctx, ...tplNew.slice(0, 3), TPL_BTN[0], tb.hoverTpl === 'new', S);
-  drawButton(ctx, ...tplFind.slice(0, 3), TPL_BTN[1], tb.hoverTpl === 'find', S);
+  // dessinés à l'échelle bs ; rectangles de clic convertis à l'échelle S du reste
+  const tx0 = Math.round(4 * S / bs), ty0 = Math.round(2 * S / bs), k = bs / S;
+  drawButton(ctx, tx0, ty0, tplW, TPL_BTN[0], tb.hoverTpl === 'new', bs);
+  drawButton(ctx, tx0, ty0 + 24, tplW, TPL_BTN[1], tb.hoverTpl === 'find', bs);
+  const tplNew = [tx0 * k, ty0 * k, tplW * k, 20 * k], tplFind = [tx0 * k, (ty0 + 24) * k, tplW * k, 20 * k];
   // Zone de la journée, creusée comme une case d'inventaire
   const fr = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * S, y * S, w * S, h * S); };
   fr(grid.x - 1, grid.y - 1, grid.w + 2, grid.h + 2, '#FFFFFF');
