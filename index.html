@@ -5981,7 +5981,9 @@ function renderBilanGraph() {
   if (stats.day != null && stats.day < n) {
     const date = new Date(from.getFullYear(), from.getMonth(), from.getDate() + stats.day), type = typeOf.get(stats.day);
     const name = type ? (BILANS[type] ? BILANS[type].label : '§7Journée Fantôme') : '§8Aucun bilan';
-    const lines = [`§f${formatDate(date)}`, name];
+    // note de la journée (jauge 0-10), sous le type, dans la couleur de sa zone
+    const ag = agendas.find(a => a.date === formatDate(date)), score = ag && ag.bilan && ag.bilan.score;
+    const lines = [`§f${formatDate(date)}`, name, ...(score != null && type !== 'repos' ? [`§7Note : ${'§' + (score <= 4 ? 'c' : score <= 7 ? 'a' : 'e')}${score}§7/10`] : [])];
     const tw = Math.max(...lines.map(l => textWidth(font, l.replace(/§./g, '')))) + 8, th = lines.length * 10 + 4;
     const [x, y] = cellAt(stats.day);
     const bx = Math.min(Math.max(g.x, x + c + 3), g.x + g.w - tw), by = Math.max(g.y + 1, Math.min(y - 2, g.y + g.h - th - 1));
