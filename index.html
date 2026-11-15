@@ -972,18 +972,22 @@ function bilanSlot(agenda, n) {
     image: b ? b.image : 'journee/blanche', count: n,
     tooltip: () => [
       '§aDécris ta journée', '§7Agenda ' + agenda.date,
-      ...(b ? ['', b.label, ...(agenda.bilan.texte ? wrapText(agenda.bilan.texte, 180).map(l => '§7' + l) : [])] : []),
+      ...(b ? ['', b.label + (agenda.bilan.score != null ? ` §7(${agenda.bilan.score}/10)` : ''), ...(agenda.bilan.texte ? wrapText(agenda.bilan.texte, 180).map(l => '§7' + l) : [])] : []),
       ...dwScoreLines(agenda.date),
       '', b ? '§eClique pour modifier !' : '§eClique pour décrire !',
     ],
     action: () => reviewDay(agenda),
   };
 }
-// « Comment s'est passé ta journée ? » -> choix -> livre avec la question correspondante.
+// Note de la journée (0 à 10) -> type de journée et couleurs de la jauge
+const dayZone = v => v <= 4 ? { note: 'mauvaise', color: '#FF5555', dark: '#8E1F16' }
+  : v <= 7 ? { note: 'bonne', color: '#55FF55', dark: '#2E6B1E' }
+  : { note: 'tres_bonne', color: ['#FFFF55', '#FFD83D', '#F0B22A'][Math.min(2, v - 8)], dark: '#7A5A10', gold: true };   // jaune -> doré
+// « Comment s'est passé ta journée ? » -> note sur la jauge -> livre avec la question correspondante.
 function reviewDay(agenda) {
-  const pick = note => {
+  const pick = (note, score) => {
     const previous = agenda.bilan || {};
-    agenda.bilan = { note, texte: previous.texte || '' };   // la couleur change tout de suite
+    agenda.bilan = { note, ...(score != null ? { score } : {}), texte: previous.texte || '' };   // la couleur change tout de suite
     saveAgendas();
     refreshAgenda();
     const q = BILANS[note].question;
@@ -994,16 +998,21 @@ function reviewDay(agenda) {
       onDone: text => { agenda.bilan.texte = text.trim(); saveAgendas(); refreshAgenda(); },
     });
   };
-  const ask = () => openConfirm({
-    question: "Comment s'est passé ta journée ?",
-    detail: ['Agenda ' + agenda.date],
-    buttonWidth: 110,
-    // de la meilleure à la pire ; « Très bonne journée » en dégradé jaune → doré
-    choices: ['tres_bonne', 'bonne', 'mauvaise'].map(note => note === 'tres_bonne'
-      ? { label: BILANS[note].label.slice(2), gradient: ['#FFFF55', '#E8A317'], action: () => pick(note) }
-      : { label: BILANS[note].label, action: () => pick(note) }),
-    corner: { label: BILANS.repos.label, action: () => pick('repos') },   // 4e choix, en haut à gauche de l'écran
-  });
+  // Jauge de 0 à 10 (curseur à glisser) : 0-4 mauvaise, 5-7 bonne, 8-10 très bonne journée ; « Valider » enregistre.
+  // « Retour » : la liste des objectifs (s'il y en a). Journée de Repos : bouton discret en bas, à part.
+  const ask = () => {
+    const prev = agenda.bilan || {};
+    const slider = { min: 0, max: 10, value: prev.score != null ? prev.score : prev.note === 'mauvaise' ? 2 : prev.note === 'tres_bonne' ? 9 : prev.note === 'bonne' ? 6 : 5, zone: dayZone };
+    openConfirm({
+      question: "Comment s'est passé ta journée ?",
+      detail: ['Agenda ' + agenda.date],
+      slider,
+      noLabel: 'Retour', yesLabel: '§aValider',
+      onNo: () => { if (boxes().length) reviewDay(agenda); },
+      onYes: () => pick(dayZone(slider.value).note, slider.value),
+      corner: { label: BILANS.repos.label, action: () => pick('repos') },
+    });
+  };
   // Agenda avec des cases à cocher ([] en début de ligne) : d'abord les cocher, « Valider » mène aux 3 boutons
   const lines = () => agenda.texte.split('\n');
   const boxes = () => lines().map((l, i) => ({ c: checkLine(l) || { checked: false, text: l }, i })).filter(x => x.c.text.trim());
@@ -3829,7 +3838,7 @@ function renderConfirm() {
   // Hauteur totale (question, détails, nuancier, boutons) pour centrer le tout verticalement
   const total = 6 + question.length * 10 + lines.length * 10 + (dialog.cfg.colors ? 36 : 0) + 14 + 20
     + (dialog.cfg.choices ? dialog.cfg.choices.length * 24 - 24 : 0)
-    + (dialog.cfg.check ? 19 : 0) + (dialog.cfg.checks ? 6 + dialog.cfg.checks.items().length * 14 : 0) + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
+    + (dialog.cfg.slider ? 59 : 0) + (dialog.cfg.check ? 19 : 0) + (dialog.cfg.checks ? 6 + dialog.cfg.checks.items().length * 14 : 0) + (dialog.cfg.onEdit ? 24 : 0) + (dialog.cfg.onPriority ? 24 : 0) + (dialog.cfg.onDelete ? 24 : 0);
   const bw0 = Math.min(dialog.cfg.buttonWidth || 90, Math.floor((W - 20) / 2));
   // libellés trop larges pour deux boutons côte à côte (téléphone) : Non puis Oui, l'un sous l'autre
   const stacked = !dialog.cfg.choicesFirst && Math.max(textWidth(font, dialog.cfg.noLabel || 'Non'), textWidth(font, dialog.cfg.yesLabel || 'Oui')) > bw0 - 6;
@@ -3894,6 +3903,40 @@ function renderConfirm() {
     });
     y += items.length * 14;
   }
+  // Jauge (cfg.slider = { min, max, value, zone(v) -> { color, dark, gold?, note } }) : grande note au-dessus,
+  // une case par valeur (allumées jusqu'à la valeur), curseur de bouton Minecraft à glisser, chiffres dessous.
+  let slider = null;
+  if (dialog.cfg.slider) {
+    const fillRect = (c, x, yy, w, h, col) => { c.fillStyle = col; c.fillRect(x * S, yy * S, w * S, h * S); };
+    const sl = dialog.cfg.slider, n = sl.max - sl.min + 1, z = sl.zone(sl.value);
+    const cell = Math.max(6, Math.min(16, Math.floor((W - 24 - (n - 1)) / n))), tw = n * cell + (n - 1);
+    const tx = Math.floor(W / 2 - tw / 2), ty = y + 37;
+    // grande note + type de journée
+    const big = `${sl.value}/${sl.max}`, S2 = S * 2;
+    drawText(ctx, font, big, Math.floor(W / 4 - textWidth(font, big) / 2), Math.floor((y + 4) / 2), z.color, S2, true);
+    const lab = BILANS[z.note].label.replace(/^§./, '');
+    drawText(ctx, font, lab, Math.floor(W / 2 - textWidth(font, lab) / 2), y + 23 - 1, z.color, S, true);
+    // cadre noir puis cases
+    fillRect(ctx, tx - 1, ty - 1, tw + 2, 12, '#000000', S);
+    for (let i = 0; i < n; i++) {
+      const v = sl.min + i, zi = sl.zone(v), x = tx + i * (cell + 1), on = v <= sl.value;
+      fillRect(ctx, x, ty, cell, 10, on ? zi.color : zi.dark, S);
+      if (on) {
+        fillRect(ctx, x, ty, cell, 1, 'rgba(255,255,255,0.45)', S);
+        fillRect(ctx, x, ty + 9, cell, 1, 'rgba(0,0,0,0.25)', S);
+        if (zi.gold) {   // reflet doré en pixel art, comme les cases du calendrier
+          for (let j = 2; j < 8; j++) { const k = j - 2; if (k < cell - 1) fillRect(ctx, x + cell - 2 - k, ty + j, 1, 1, '#FFFFE0', S); }
+        }
+      } else fillRect(ctx, x, ty, cell, 1, 'rgba(255,255,255,0.12)', S);
+      const num = String(v), cur = v === sl.value;
+      drawText(ctx, font, num, x + Math.floor((cell - textWidth(font, num)) / 2) + 1, ty + 18, cur ? zi.color : '#8B8B8B', S, true);
+    }
+    // curseur : petit bouton (8 x 20) centré sur la case de la valeur
+    const hx = tx + (sl.value - sl.min) * (cell + 1) + Math.floor(cell / 2) - 4;
+    drawButton(ctx, hx, ty - 5, 8, '', dialog.hover === 'slider' || dialog.drag, S);
+    slider = { r: [tx - 4, ty - 8, tw + 8, 26], tx, cell, n };
+    y += 59;
+  }
   // cfg.corner = { label, action } : bouton discret à part (ex. « Journée de Repos »)
   // (en bas au centre de l'écran)
   const cw = dialog.cfg.corner ? textWidth(font, dialog.cfg.corner.label) + 20 : 0;
@@ -3937,7 +3980,7 @@ function renderConfirm() {
     if (r.prio) drawButton(ctx, ...r.prio.slice(0, 3), dialog.cfg.priorityLabel, dialog.hover === 'prio', S);
     if (r.del) drawButton(ctx, ...r.del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
     drawButton(ctx, ...no.slice(0, 3), dialog.cfg.noLabel || 'Non', dialog.hover === 'no', S);
-    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb, tree, check, checkRows, corner };
+    dialog.layout = { S, no, yes: null, edit: r.edit || null, prio: r.prio || null, del: r.del || null, swatches, orb, tree, check, checkRows, corner, slider };
     return;
   }
   if (stacked) {
@@ -3961,7 +4004,7 @@ function renderConfirm() {
   if (edit) drawButton(ctx, ...edit.slice(0, 3), dialog.cfg.editLabel || 'Modifier le titre', dialog.hover === 'edit', S);
   if (prio) drawButton(ctx, ...prio.slice(0, 3), dialog.cfg.priorityLabel || 'Priorité', dialog.hover === 'prio', S);
   if (dialog.cfg.onDelete) drawButton(ctx, ...del.slice(0, 3), dialog.cfg.deleteLabel || '§cSupprimer', dialog.hover === 'del', S);
-  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb, tree, check, checkRows, corner };
+  dialog.layout = { S, no, yes, edit, prio, del: dialog.cfg.onDelete ? del : null, swatches, orb, tree, check, checkRows, corner, slider };
 }
 function openConfirm(cfg) {
   dialog.cfg = cfg;
@@ -3977,12 +4020,32 @@ function closeConfirm() {
   dialog.cfg = null;
   renderGui();
 }
+// Jauge : appui puis glisser (souris ou doigt) pour changer la valeur
+dialogCanvas.style.touchAction = 'none';
+function sliderSet(ev) {
+  const { S, slider } = dialog.layout, sl = dialog.cfg.slider;
+  const gx = evX(ev) / S - slider.tx;
+  const v = sl.min + Math.max(0, Math.min(slider.n - 1, Math.floor(gx / (slider.cell + 1))));
+  if (v !== sl.value) { sl.value = v; renderConfirm(); }
+}
+dialogCanvas.addEventListener('pointerdown', ev => {
+  const L = dialog.layout;
+  if (!dialog.cfg || !dialog.cfg.slider || !L || !L.slider || !inRect(ev, L.slider.r, L.S)) return;
+  dialog.drag = true;
+  try { dialogCanvas.setPointerCapture(ev.pointerId); } catch {}
+  sliderSet(ev);
+  renderConfirm();
+});
+dialogCanvas.addEventListener('pointermove', ev => { if (dialog.drag && dialog.cfg) sliderSet(ev); });
+const sliderEnd = () => { if (dialog.drag) { dialog.drag = false; if (dialog.cfg) renderConfirm(); } };
+dialogCanvas.addEventListener('pointerup', sliderEnd);
+dialogCanvas.addEventListener('pointercancel', sliderEnd);
 dialogCanvas.addEventListener('mousemove', ev => {
   const { S, no, yes, edit, prio, del, swatches, orb, tree, check, checkRows, corner, choices } = dialog.layout;
   const sw = swatches ? swatches.findIndex(r => inRect(ev, r, S)) : -1;
   const cl = checkRows ? checkRows.findIndex(r => inRect(ev, r, S)) : -1;
   const ch = choices ? choices.findIndex(r => inRect(ev, r, S)) : -1;
-  const hover = ch >= 0 ? 'ch' + ch : corner && inRect(ev, corner, S) ? 'corner' : cl >= 0 ? 'cl' + cl : check && inRect(ev, check, S) ? 'check' : orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
+  const hover = dialog.layout.slider && inRect(ev, dialog.layout.slider.r, S) ? 'slider' : ch >= 0 ? 'ch' + ch : corner && inRect(ev, corner, S) ? 'corner' : cl >= 0 ? 'cl' + cl : check && inRect(ev, check, S) ? 'check' : orb && inRect(ev, orb, S) ? 'orb' : tree && inRect(ev, tree, S) ? 'tree' : sw >= 0 ? 'color' + sw : inRect(ev, no, S) ? 'no' : yes && inRect(ev, yes, S) ? 'yes' : edit && inRect(ev, edit, S) ? 'edit'
     : prio && inRect(ev, prio, S) ? 'prio' : del && inRect(ev, del, S) ? 'del' : null;
   dialogCanvas.style.cursor = hover ? 'pointer' : '';
   if (hover !== dialog.hover) { dialog.hover = hover; renderConfirm(); }
@@ -4007,6 +4070,12 @@ dialogCanvas.addEventListener('click', ev => {
   else if (del && inRect(ev, del, S)) { playClick(); closeConfirm(); cfg.onDelete(); }
 });
 addEventListener('keydown', ev => {
+  // jauge : flèches gauche / droite pour changer la note
+  if (dialog.cfg && dialog.cfg.slider && (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight')) {
+    const sl = dialog.cfg.slider;
+    sl.value = Math.max(sl.min, Math.min(sl.max, sl.value + (ev.key === 'ArrowRight' ? 1 : -1)));
+    ev.preventDefault(); renderConfirm(); return;
+  }
   if (ev.key !== 'Escape' || !dialog.cfg) return;
   ev.preventDefault();
   const cfg = dialog.cfg;
