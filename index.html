@@ -1055,9 +1055,20 @@ function openDwNotes(agenda, fromReview = false) {
     };
     if (!blocks.length) slots['2,4'] = { item: 'paper', tooltip: ['§7Aucun bloc Deep Work', `§8Timeblock du ${agenda.date}`, '', '§7Coche « Deep Work ? » sur un bloc', '§7pour pouvoir le noter ici.'] };
     const rows = placeLines(slots, isMobileLayout() ? 1 : 0, blocks.map(b => {
-      const hours = `${fmtMin(b.debut)} - ${fmtMin(b.fin)}`, first = (b.note || '').split('\n')[0].trim();
+      // objectifs du Deep Work : une case à cocher par ligne, comme l'agenda (« [] texte » / « [x] texte »)
+      const goals = () => (b.note || '').split('\n').filter(l => l.trim()).map(l => checkLine(l) || { checked: false, text: l });
+      const hours = `${fmtMin(b.debut)} - ${fmtMin(b.fin)}`, first = (goals()[0] || { text: '' }).text.trim();
       const refresh = () => { PAGES['dw-notes'] = build(); renderGui(); };
-      const saveNote = t => { const note = cleanDesc(t); if (note) b.note = note; else delete b.note; saveTimeblocks(); refresh(); };
+      const saveNote = t => {
+        const checked = new Set(goals().filter(c => c.checked).map(c => c.text.trim()));
+        const note = t.split('\n').filter(l => l.trim()).map(l => {
+          const c = checkLine(l) || { checked: false, text: l };
+          return (c.checked || checked.has(c.text.trim()) ? '[x] ' : '[] ') + c.text;
+        }).join('\n');
+        if (note) b.note = note; else delete b.note;
+        saveTimeblocks(); refresh();
+      };
+      const goalLines = w => goals().flatMap(c => (w ? wrapText(c.text, w - 12) : [c.text]).map((t, i) => (i ? '  ' : c.checked ? '§a☑ ' : '§f☐ ') + (c.checked ? '§a' : '§f') + t));
       // « Noter Les Deep Works » : réussi / échoué, puis un livre avec la question qui va avec (block.dwReview)
       const rate = () => {
         const set = r => {
@@ -1075,23 +1086,38 @@ function openDwNotes(agenda, fromReview = false) {
           choices: [{ label: '§aDeep Work réussi', action: () => set('ok') }, { label: '§cDeep Work échoué', action: () => set('ko') }],
         });
       };
-      // « Terminé » enregistre et ferme simplement le livre
+      // « Valider le deep work » : cocher les objectifs atteints, puis « Noter le deep work » (réussi / échoué)
+      const validate = () => openConfirm({
+        question: 'Objectifs du Deep Work', detail: [`${b.titre} (${hours})`],
+        checks: {
+          items: () => goals().map(c => ({ label: c.text, checked: c.checked })),
+          onToggle: k => {
+            const list = goals();
+            list[k].checked = !list[k].checked;
+            b.note = list.map(c => (c.checked ? '[x] ' : '[] ') + c.text).join('\n');
+            saveTimeblocks(); refresh();
+          },
+        },
+        noLabel: 'Retour', yesLabel: '§aNoter le deep work',
+        onNo: write, onCancel: refresh, onYes: rate,
+      });
+      // livre : une case à cocher devant chaque objectif ; « Terminé » enregistre et ferme simplement le livre
       const write = () => openSign({
-        book: true, title: `${b.titre} (${hours})`,   // gros point devant chaque ligne (format liste)
-        lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: b.note || '',
+        book: true, title: `${b.titre} (${hours})`, checkboxes: new Set(goals().filter(c => c.checked).map(c => c.text.trim())),
+        lines: BOOK_LINES, width: BOOK_TEXT_W, fixed: [], initial: goals().map(c => c.text).join('\n'),
         onDone: saveNote,
-        extraLabel: 'Noter Les Deep Works', onExtra: t => { saveNote(t); rate(); },
+        extraLabel: 'Valider le deep work', onExtra: t => { saveNote(t); if (goals().length) validate(); else rate(); },
       });
       const cell = {
         item: 'writable_book', action: write,
         // objectif (la note) d'abord, puis réussi / échoué et, après un petit espace, ce qui en a été dit
-        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.note ? ['', ...dwList(b.note, 180).map(l => '§f' + l)] : ['', '§8Pas encore de note.']),
+        tooltip: () => [`§a${b.titre}`, `§7${hours}`, ...(b.note ? ['', ...goalLines(180)] : ['', '§8Pas encore de note.']),
           ...(b.dwResult ? ['', b.dwResult === 'ok' ? '§aDeep Work réussi' : '§cDeep Work échoué'] : []), ...(b.dwReview ? [TIP_GAP, ...dwList(b.dwReview, 180).map(l => '§7' + l)] : []), '', b.note ? '§eClique pour modifier !' : '§eClique pour écrire !'],
       };
       return {
         icons: [[0, cell]], data: b, refresh: () => { PAGES['dw-notes'] = build(); renderGui(); },
         // bandeau : vert si réussi, rouge si échoué, gris tant que ce n'est pas noté
-        span: { label: `${b.titre} - ${hours}`, color: b.dwResult === 'ok' ? '#3E8E2E' : b.dwResult === 'ko' ? TB_DW_COLOR : '#616161', desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? dwList(b.note) : [], tooltip: cell.tooltip, action: write },
+        span: { label: `${b.titre} - ${hours}`, color: b.dwResult === 'ok' ? '#3E8E2E' : b.dwResult === 'ko' ? TB_DW_COLOR : '#616161', desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? goalLines() : [], tooltip: cell.tooltip, action: write },
       };
     }));
     return { title: isMobileLayout() ? `Notes DW ${agenda.date}` : `Notes Deep Work - ${agenda.date}`, slots: setRows(slots, rows) };   // téléphone : titre court (date visible)
