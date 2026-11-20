@@ -1098,8 +1098,9 @@ function openDwNotes(agenda, fromReview = false) {
             saveTimeblocks(); refresh();
           },
         },
-        noLabel: 'Retour', yesLabel: '§aNoter le deep work',
-        onNo: write, onCancel: refresh, onYes: rate,
+        // « Noter le deep work » en premier (en haut), « Retour » en dessous
+        noLabel: '§aNoter le deep work', yesLabel: 'Retour',
+        onNo: rate, onCancel: refresh, onYes: write,
       });
       // livre : une case à cocher devant chaque objectif ; « Terminé » enregistre et ferme simplement le livre
       const write = () => openSign({
