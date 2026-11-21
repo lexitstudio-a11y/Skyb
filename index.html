@@ -2913,7 +2913,7 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
       text(label, bx + bw / 2 - textWidth(font, label) / k / 2, by + 3.5, hov ? '#FFFFA0' : '#FFFFFF');
       (state.descButtons ||= []).push({ r: [bx * S, by * S, bw * S, 12 * S], btn: slot.descButton });
     }
-    else {
+    else if (!open) {   // repliée seulement (dépliée sans bouton : le texte court se superposait au texte complet)
       if (slot.descDim && slot.descDim()) ctx.globalAlpha = 0.35;   // texte d'invitation (rien d'écrit) : estompé
       short.forEach((l, i) => text(foldable ? fitText(l, (right - ix - 12) * k) : l, ix + 2, y + 18 + i * 9 / k, '#55FF55'));
       ctx.globalAlpha = 1;
