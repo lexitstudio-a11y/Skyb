@@ -2412,11 +2412,12 @@ const tooltipScale = S => Math.max(2, Math.round(S * 0.65));
 
 // TIP_GAP : ligne d'infobulle qui ne fait qu'un petit espace (4 px au lieu d'une ligne vide de 10)
 const TIP_GAP = '\u0001';
+const TIP_MAX = 4 / 9;   // largeur max des overlays sur ordinateur : 1/3 de la fenêtre + 33 %
 function renderTooltip(tipCanvas, font, lines, S) {
-  // ordinateur : overlay large au plus d'1/3 de la fenêtre ; les lignes plus longues passent à la ligne
+  // ordinateur : overlay large au plus de TIP_MAX de la fenêtre ; les lignes plus longues passent à la ligne
   // (sauf les lignes à barre de progression « ||||| », qui ne se coupent pas)
   if (!isMobileLayout()) {
-    const maxW = viewW() / 3 * guiRatio() / S - 2 * (3 + TOOLTIP_PADDING);
+    const maxW = TIP_MAX * viewW() * guiRatio() / S - 2 * (3 + TOOLTIP_PADDING);
     lines = lines.flatMap(l => l === TIP_GAP || l.includes('||||') ? [l] : wrapTipLines([l], maxW));
   }
   const w = Math.max(...lines.map(l => l === TIP_GAP ? 0 : textWidth(font, l)));
@@ -3226,12 +3227,12 @@ function onMove(ev) {
         tip.style.width = tip.width / R + 'px';
         tip.style.height = tip.height / R + 'px';
       }
-      // ordinateur : taille de texte fixe ; lignes coupées (retour à la ligne) au tiers de la largeur de la fenêtre ;
+      // ordinateur : taille de texte fixe ; lignes coupées (retour à la ligne) à TIP_MAX de la largeur de la fenêtre ;
       // si l'overlay dépasse la hauteur de l'écran, les dernières lignes avant la fin (« Clique pour… ») sont retirées
       // et un seul « ... » termine la dernière ligne gardée
       else {
         const ts = tooltipScale(state.S);
-        let out = wrapTipLines(lines, viewW() / 3 * R / ts - 2 * (3 + TOOLTIP_PADDING));
+        let out = wrapTipLines(lines, TIP_MAX * viewW() * R / ts - 2 * (3 + TOOLTIP_PADDING));
         const draw = () => {
           renderTooltip(tip, font, out, ts);
           tip.style.width = tip.width / R + 'px';
