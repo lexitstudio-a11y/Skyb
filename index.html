@@ -1118,7 +1118,7 @@ function openDwNotes(agenda, fromReview = false) {
       return {
         icons: [[0, cell]], data: b, refresh: () => { PAGES['dw-notes'] = build(); renderGui(); },
         // bandeau : vert si réussi, rouge si échoué, gris tant que ce n'est pas noté
-        span: { label: `${b.titre} - ${hours}`, color: b.dwResult === 'ok' ? '#3E8E2E' : b.dwResult === 'ko' ? TB_DW_COLOR : '#616161', desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? goalLines() : [], tooltip: cell.tooltip, action: write },
+        span: { label: `${b.titre} - ${hours}`, color: b.dwResult === 'ok' ? '#3E8E2E' : b.dwResult === 'ko' ? TB_DW_COLOR : '#616161', desc: () => first || 'Clique pour écrire tes notes', descDim: () => !b.note, descFull: () => b.note ? goalLines().flatMap((l, i) => i && /[☑☐]/.test(l) ? [TIP_GAP, l] : [l]) : [], tooltip: cell.tooltip, action: write },
       };
     }));
     return { title: isMobileLayout() ? `Notes DW ${agenda.date}` : `Notes Deep Work - ${agenda.date}`, slots: setRows(slots, rows) };   // téléphone : titre court (date visible)
@@ -1144,7 +1144,7 @@ function agendaGrid(list, slots, numbered) {
           color: BILAN_COLORS[a.bilan && a.bilan.note] || (a.ghost ? '#3A3A3A' : '#616161'),
           descButton: a.ghost ? null : { label: 'Page des Deep Works', action: () => openDwNotes(a) },   // toujours dépliable
           desc: a.ghost ? a.date : lines[0] || 'Aucun objectif.', tooltip: cell.tooltip, action: cell.action,
-          descFull: () => a.ghost ? [a.date, '§7Aucun agenda écrit ce jour-là.'] : [...(boxes.length ? boxes.map(c => (c.checked ? '§a☑ ' : '☐ ') + c.text) : ['Aucun objectif.']),
+          descFull: () => a.ghost ? [a.date, '§7Aucun agenda écrit ce jour-là.'] : [...(boxes.length ? boxes.flatMap((c, i) => [...(i ? [TIP_GAP] : []), (c.checked ? '§a☑ ' : '☐ ') + c.text]) : ['Aucun objectif.']),
             ...(a.bilan && BILANS[a.bilan.note] ? ['', BILANS[a.bilan.note].label, ...(a.bilan.texte ? a.bilan.texte.split('\n').map(l => '§7' + l) : [])] : [])],
         },
       };
@@ -2903,7 +2903,7 @@ function drawAdvancement(ctx, slot, x, y, S, hovered) {
     fr(ix, y + 15, right - ix - 1, dh - 2, '#212121');
     const foldable = slot.data && slot.descFull && descExpandable(slot);
     if (foldable) drawDescTriangle(ctx, right - 5, y + 20.5, descAngle(slot), S, '#55FF55');   // triangle à droite
-    if (open) open.lines.forEach((l, i) => text(fitText(l, (right - ix - (foldable ? 12 : 6)) * k), ix + 2, y + 18 + i * 9 / k, '#55FF55'));
+    if (open) open.lines.forEach((l, i) => text(fitText(l, (right - ix - (foldable ? 12 : 6)) * k), ix + 2, y + 18 + open.ys[i], '#55FF55'));
     if (open && slot.descButton) {   // bouton façon Minecraft sous le texte
       const by = y + 14 + dh - 15, bx = ix + 2, bw = right - ix - 14, label = slot.descButton.label;
       const hov = state.descHover === slot.descButton;
@@ -2963,7 +2963,7 @@ function drawCompactAdvancement(ctx, slot, ix, left, right, y, S, k, text, hover
   if (open) {   // description dépliée : sous la barre de progression
     fr(ix - 1, y + 21, right - ix + 1, open.h - 4, '#000000');
     fr(ix, y + 21, right - ix - 1, open.h - 5, '#212121');
-    open.lines.forEach((l, i) => text(l, ix + 2, y + 24 + i * 9 / k, '#55FF55'));
+    open.lines.forEach((l, i) => text(l, ix + 2, y + 24 + open.ys[i], '#55FF55'));
   }
   // barre de progression (verte, comme le chargement du monde) avec son contour noir
   const bx = ix - 1, pct = slot.progress ? Math.max(0, Math.min(100, slot.progress())) : 0, bw = right - bx - 2;   // bx : bord de la case
@@ -2988,9 +2988,15 @@ function advDesc(slot, S = state.S * guiRatio()) {
   const full = slot.descFull && slot.descFull();
   if (!full || !full.length || !font) return null;
   const k = S / Math.max(1, Math.round(S * 0.6)), width = (36 + slot.span * 18 - 2 - 12) * k;   // place du triangle à droite
-  const lines = wrapTipLines(full, width);
+  // TIP_GAP dans descFull : petit espace (3 px) au lieu d'une ligne (ex. entre deux objectifs à cocher)
+  const lines = [], ys = [];
+  let y = 0;
+  for (const l of full) {
+    if (l === TIP_GAP) { if (lines.length) y += 3; continue; }
+    for (const part of wrapTipLines([l], width)) { lines.push(part); ys.push(y); y += 9 / k; }
+  }
   // slot.descButton = { label, action } : bouton sous le texte déplié (ex. « Page des Deep Works »)
-  return { lines, h: 13 + (lines.length - 1) * 9 / k + (slot.progress ? 4 : 0) + (slot.descButton ? 15 : 0) };
+  return { lines, ys, h: 13 + (y - 9 / k) + (slot.progress ? 4 : 0) + (slot.descButton ? 15 : 0) };
 }
 // Place un bloc « succès » en rangée r (le bloc span en colonne 2, l'item déjà placé en colonne 0) et, sous lui,
 // une zone invisible qui déplie / replie la description quand on la touche. Renvoie le nombre de rangées occupées.
